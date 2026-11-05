@@ -72,8 +72,8 @@ go tool mygo i18n check             # 检查两种语言的键与参数是否对
 推送 `v<版本>` 标签（例如 `v0.3.0`）会运行
 [`.github/workflows/release.yml`](./.github/workflows/release.yml)：校验 tag 与版本一致，从
 CHANGELOG 取说明，创建 **draft** Release，然后用 `MYGO_UPDATER_PRIVATE_KEY` 签名并执行
-`go tool mygo build -platform windows/amd64 -upload`，把 exe、安装包、更新包、增量包和
-`update-windows-amd64.json` 一起上传。检查附件后手动发布 draft，并勾选
+`go tool mygo build -platform windows/amd64 -upload`，把安装包、应用归档、`SHA256SUMS`、
+更新包/增量包和 `update-windows-amd64.json` 一起上传。检查附件后手动发布 draft，并勾选
 **Set as the latest release**，安装后的应用才会更新过去。
 
 更新签名私钥在 MyGo 的用户配置目录（`mygo keygen` 的默认位置），并应保存为 GitHub secret

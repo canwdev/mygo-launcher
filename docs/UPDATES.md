@@ -47,7 +47,7 @@ MyGo Music 相同：MyGo 的 updater 插件负责检查、展示和安装，`myg
    - 在仓库旁检出固定提交的 MyGo，用
      `MYGO_UPDATER_PRIVATE_KEY` 和 `GH_TOKEN` 执行
      `go tool mygo build -platform windows/amd64 -upload`；
-   - 把 exe、安装包、更新包、增量包和 `update-windows-amd64.json` 上传到 draft。
+   - 把安装包、应用归档、`SHA256SUMS`、更新包和 `update-windows-amd64.json` 上传到 draft。
 4. 在 GitHub 上检查 draft 的附件，然后手动发布，并确保勾选 **Set as the latest
    release**。安装后的应用通过 `releases/latest/download/` 读取清单。
 
