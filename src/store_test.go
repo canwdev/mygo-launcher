@@ -32,6 +32,20 @@ func newTestApp(t *testing.T) *App {
 
 func ptrString(s string) *string { return &s }
 
+// TestStoreDefaultsBackgroundOnClose 验证旧数据文件没有该键时默认开启后台运行，
+// 文件里写了 false 时保持关闭。
+func TestStoreDefaultsBackgroundOnClose(t *testing.T) {
+	data := []byte(`{"apps":{},"categories":[{"name":"T","slots":[]}],"settings":{"auto_time":true}}`)
+	store, ok := parseStore(data)
+	if !ok || !store.Settings.BackgroundOnClose {
+		t.Fatalf("a missing key must default to on, got %+v (ok=%v)", store.Settings, ok)
+	}
+	data = []byte(`{"apps":{},"categories":[{"name":"T","slots":[]}],"settings":{"background_on_close":false}}`)
+	if store, ok = parseStore(data); !ok || store.Settings.BackgroundOnClose {
+		t.Fatalf("an explicit false must stay off, got %+v (ok=%v)", store.Settings, ok)
+	}
+}
+
 // TestStorePersistsRunAsAdmin 验证 item 编辑弹窗里的“Run as administrator”勾选：
 // 写入 store 文件、写出的 JSON 键名可被前端/后端读回，未勾选的条目保持不写该键。
 func TestStorePersistsRunAsAdmin(t *testing.T) {

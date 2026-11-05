@@ -33,7 +33,7 @@ func (v *view) gridBody(c *ui.Context, tab *CategoryNode) {
 				return item.Name
 			}
 		}
-		return "Empty"
+		return v.msgs().EmptyCell()
 	}
 	ui.GridView(c, &v.grid, len(slots), gridCellWidth, gridCellHeight, func(i int) {
 		v.gridCell(c, tab, i, slots[i])
@@ -83,7 +83,7 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		// A click runs the item; a running one asks before it stops.
 		if st.Running {
 			name := item.Name
-			v.ask("Stop \""+name+"\"?", func() { v.stopItem(item.GUID) })
+			v.ask(v.msgs().StopConfirm(name), func() { v.stopItem(item.GUID) })
 		} else {
 			v.runItem(item.GUID)
 		}
@@ -114,11 +114,12 @@ func (v *view) emptyCell(c *ui.Context, index int) {
 	if dragged, ok := ui.Drop[dragItem](box); ok {
 		v.later(func() { v.reorderSlots(dragged.slot, index, false) })
 	}
-	box.PopoverMenu(func(m *ui.Menu) {
-		if m.Item("Insert empty").Chosen() {
+	box.PopoverMenu(func(menu *ui.Menu) {
+		m := v.msgs()
+		if menu.Item(m.InsertEmpty()).Chosen() {
 			v.later(func() { v.insertEmptyAt(index) })
 		}
-		if m.Item("Delete empty").Chosen() {
+		if menu.Item(m.RemoveEmpty()).Chosen() {
 			v.later(func() { v.deleteSlotAt(index) })
 		}
 	})

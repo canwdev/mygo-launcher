@@ -3,5 +3,13 @@
   "identifier": "com.canwdev.golauncher",
   "version": "0.2.0",
   "main": "./src",
-  "out": "build"
+  "out": "build",
+  "i18n": {
+    "dir": "locales",
+    "source": "en"
+  },
+  "updates": {
+    "publicKey": "6aVuljxvLRX4mgFO0afS4z+sgLNl0vz16C49/VdoHyc=",
+    "github": "canwdev/mygo-launcher"
+  }
 }

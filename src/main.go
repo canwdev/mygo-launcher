@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"go-launcher/locales"
 )
 
 // Window geometry of the first launch, before any state was kept: wide enough
@@ -28,6 +29,7 @@ func main() {
 	defer releaseSingleton()
 
 	app := NewApp()
+	app.useUpdater()
 
 	mygo.App.SetName("MyGo Launcher")
 	mygo.App.SetVersion(appVersion)
@@ -38,6 +40,18 @@ func main() {
 	mygo.App.WhenReady(func() {
 		v := newView(app)
 		v.applyTheme()
+		v.applyLanguage()
+		mygo.App.OnLocaleChanged(func(locale string) {
+			if app.settingsWin != nil {
+				app.settingsWin.SetTitle(locales.In(locale).Settings())
+			}
+			v.syncTray() // the tray's menu says its items in the new language
+			app.refresh()
+		})
+		// A quit, from the tray or the system, closes the window instead of
+		// hiding it in the tray; the tray goes with the app.
+		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { app.quitting = true })
+		mygo.App.OnQuit(v.destroyTray)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     instanceTitle(installDir()),
 			Width:     defaultWindowWidth,
@@ -56,9 +70,11 @@ func main() {
 		// turn, so both hold the window by then.
 		app.win, v.win = win, win
 
+		win.OnClose(func(e *mygo.CloseEvent) { v.handleClose(e) })
 		win.OnFileDrop(func(e *mygo.FileDropEvent) {
 			app.addPaths(e.Paths, v.prefs.ActiveTab)
 		})
+		v.syncTray()
 
 		app.startClock()
 		app.startStoreWatcher()

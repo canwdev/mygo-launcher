@@ -11,16 +11,18 @@ import (
 // kept them in the page's localStorage. They live in ui-state.json beside the
 // store.
 type uiPrefs struct {
-	Theme     string `json:"theme"`            // auto, light or dark
-	ViewMode  string `json:"view_mode"`        // list or grid
-	ActiveTab string `json:"active_tab"`       // guid of the tab shown
-	Accent    string `json:"accent,omitempty"` // preset id or #rrggbb; empty is blue
+	Theme     string `json:"theme"`              // auto, light or dark
+	ViewMode  string `json:"view_mode"`          // list or grid
+	ActiveTab string `json:"active_tab"`         // guid of the tab shown
+	Accent    string `json:"accent,omitempty"`   // preset id or #rrggbb; empty is blue
+	Language  string `json:"language,omitempty"` // auto, en or zh-Hans
 }
 
 func defaultPrefs() uiPrefs {
 	return uiPrefs{
 		Theme:    "auto",
 		ViewMode: "list",
+		Language: "auto",
 	}
 }
 
@@ -43,6 +45,11 @@ func loadPrefs() uiPrefs {
 	}
 	if !validAccent(p.Accent) {
 		p.Accent = ""
+	}
+	switch p.Language {
+	case "en", "zh-Hans":
+	default:
+		p.Language = "auto"
 	}
 	return p
 }

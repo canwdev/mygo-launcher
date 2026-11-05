@@ -79,6 +79,7 @@ func (v *view) search(c *ui.Context) {
 		return
 	}
 	p := v.pal
+	m := v.msgs()
 	hits := v.searchHits()
 	if v.searchChosen >= len(hits) {
 		v.searchChosen = max(0, len(hits)-1)
@@ -90,7 +91,7 @@ func (v *view) search(c *ui.Context) {
 			field.Children(func() {
 				ui.Icon(c, iconSearch).Size(16, 16).TextColor(p.muted)
 				ui.TextInput(c, &v.searchQuery).Bind(&v.searchInput).AutoFocus().
-					Placeholder("Search programs…").FontSize(14).Grow(1).
+					Placeholder(m.SearchPrograms()).FontSize(14).Grow(1).
 					OnTextKey(func(k ui.TextKey) bool {
 						switch k.Key {
 						case ui.KeyDown:
@@ -125,14 +126,14 @@ func (v *view) search(c *ui.Context) {
 			ui.List(c, &v.searchList, len(hits), func(i int) {
 				v.searchRow(c, hits[i], i)
 			}).Height(height).Children(func() {
-				msg := "No results"
+				msg := m.NoResults()
 				if strings.TrimSpace(v.searchQuery) == "" {
-					msg = "Type to search…"
+					msg = m.TypeToSearch()
 				}
 				ui.Text(c, msg).FontSize(12).TextColor(p.muted).Padding(12)
 			})
 
-			ui.Text(c, "↑↓ navigate · Enter launch · ⤢ locate · Esc close").
+			ui.Text(c, m.SearchHelp()).
 				FontSize(11).TextColor(p.faint)
 		})
 	})
@@ -164,8 +165,9 @@ func (v *view) searchRow(c *ui.Context, hit searchHit, index int) {
 			where = hit.tabName
 		}
 		ui.Text(c, where).SingleLine().FontSize(11).TextColor(muted).MaxWidthPercent(35)
-		locate := iconButton(c, iconCross, 13, textColor, "Locate in tab")
-		locate.Tooltip("Locate in " + hit.tabName)
+		m := v.msgs()
+		locate := iconButton(c, iconCross, 13, textColor, m.LocateInTab())
+		locate.Tooltip(m.LocateIn(hit.tabName))
 		locate.OnClick(func() { v.locateItem(hit.guid, hit.tabGUID) })
 		locate.Hidden(!chosen && !row.Hovered())
 	})

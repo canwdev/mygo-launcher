@@ -51,7 +51,7 @@ func (v *view) setActiveTab(guid string) {
 // === Tabs ===
 
 func (v *view) addTab() {
-	cat := CategoryNode{GUID: uuid.NewString(), Name: "New Tab", Slots: []*string{}}
+	cat := CategoryNode{GUID: uuid.NewString(), Name: v.msgs().NewTabName(), Slots: []*string{}}
 	v.app.store.Categories = append(v.app.store.Categories, cat)
 	v.prefs.ActiveTab = cat.GUID
 	v.savePrefs()
@@ -102,7 +102,7 @@ func (v *view) duplicateTab(guid string) {
 		}
 		copyTab := CategoryNode{
 			GUID:  uuid.NewString(),
-			Name:  src.Name + " (copy)",
+			Name:  v.msgs().CopyName(src.Name),
 			Slots: append([]*string{}, src.Slots...),
 		}
 		v.app.store.Categories = append(v.app.store.Categories, copyTab)
@@ -166,7 +166,7 @@ func (v *view) createItem(fields itemFields) {
 	v.app.runtimeStats[guid] = 0
 	tab.Slots = append(tab.Slots, &guid)
 	v.app.save()
-	v.app.notify("Item created")
+	v.app.notify(v.msgs().ItemCreated())
 }
 
 func (v *view) updateItem(guid string, fields itemFields) {
@@ -181,7 +181,7 @@ func (v *view) updateItem(guid string, fields itemFields) {
 	item.Icon = fields.Icon
 	item.RunAsAdmin = fields.RunAsAdmin
 	v.app.save()
-	v.app.notify("Item updated")
+	v.app.notify(v.msgs().ItemUpdated())
 }
 
 func (v *view) removeItem(guid string) {
@@ -208,7 +208,7 @@ func (v *view) duplicateItem(guid string, tabGUID string, slot int) {
 	}
 	copyItem := *item
 	copyItem.GUID = uuid.NewString()
-	copyItem.Name = item.Name + " (copy)"
+	copyItem.Name = v.msgs().CopyName(item.Name)
 	copyItem.RuntimeMs = 0
 	v.app.store.Apps[copyItem.GUID] = &copyItem
 	v.app.runtimeStats[copyItem.GUID] = 0
@@ -265,7 +265,7 @@ func (v *view) reorderSlots(from, to int, copyItem bool) {
 		}
 		copyItem := *item
 		copyItem.GUID = uuid.NewString()
-		copyItem.Name = item.Name + " (copy)"
+		copyItem.Name = v.msgs().CopyName(item.Name)
 		copyItem.RuntimeMs = 0
 		v.app.store.Apps[copyItem.GUID] = &copyItem
 		v.app.runtimeStats[copyItem.GUID] = 0

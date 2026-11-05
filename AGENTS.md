@@ -39,6 +39,8 @@ go tool mygo build -skip-installer   # 不生成安装包，快速验证打包
 go build -o build ./src          # 只编译，产物在已忽略的 build/
 go test ./...                    # 测试，含无头界面测试
 go vet ./...
+go tool mygo generate            # 改了 locales/*.json 后重新生成文案访问函数
+go tool mygo i18n check          # 检查各语言的键与参数是否对齐
 GOOS=linux go build -o build/launcher-linux ./src   # _other.go 桩必须能编译
 ```
 
@@ -96,12 +98,39 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   `dragTab`（标签重排）——不要把两种类型放在同一个元素上。
 - 值按类型匹配：条目是 `dragItem`，标签是 `dragTab`（`src/items.go`）。标签内槽位重排走
   `reorderSlots`，以槽位索引为准，包含空格子。
+- **从资源管理器拖入文件**：`src/view.go` 里的整页 `page` 是放置目标，每帧调用
+  `page.DroppedFiles()` 消费拖入的路径，交给 `App.addPaths`；拖到标签胶囊上时由 `tabChip` 的
+  `DroppedFiles()` 接收，加入该标签而不是当前标签。调用 `DroppedFiles()` / `FileDragOver()`
+  才会把元素注册为放置目标；拖入期间 `dropOverlay` 画整窗虚线遮罩。没有元素接收的文件仍由
+  `main.go` 的 `OnFileDrop` 兜底。
 
 ### 图标
 
 `mygo.Shell.FileIcon(path, px)` 把 PNG 写进图标缓存，`ui.DecodeImage` 再读成
 `ui.ImageSource`；没有手工提取图标的路径。图标指向 `mygo-launcher-data/cached-icons/` 的条目
 视为自动生成（`isAutoIcon`），「更新图标」和批量更新据此生效。
+
+### 多语言
+
+- 界面文案都在 `locales/en.json`（源语言）和 `locales/zh-Hans.json`；`mygo.json` 的 `i18n`
+  指向这个目录。改完 JSON 运行 `go tool mygo generate`，它写出 `locales/catalog_gen.go`
+  （**不要手改**，每个键一个类型化函数），并让 `locales` 包在初始化时注册语言、同时引入
+  MyGo 自己的中文翻译。`src` 通过 import `go-launcher/locales` 引用这些函数。
+- **帧内文案走 `v.msgs()`**：`view()` 和 `settingsView()` 每帧把 `v.lang` 设为
+  `c.Locale()`，`v.msgs()` 返回该语言的 `locales.Messages`。不要直接调用包级的
+  `locales.X()`——那读的是应用语言；无头 `ui.Tester` 的语言是 `""`（源语言英语），测试才能
+  稳定断言英文，需要中文时用 `tt.SetLocale("zh-Hans")`。
+- 应用层的提示、系统对话框标题和错误文字（不在帧内）用包级函数 `locales.X()`，它们跟随
+  `mygo.App.Locale()`。新增错误信息若会显示成 toast，也要进文案。
+- 语言偏好是 `ui-state.json` 的 `language`（`auto` / `en` / `zh-Hans`，默认 `auto`）。
+  `applyLanguage` 在启动时调用一次 `mygo.App.SetLocale`，`auto` 传 `""` 跟随系统语言，所以
+  首次启动按 Windows 的显示语言选中；`MYGO_LOCALE`（`mygo dev -lang`）设置时跳过，让它优先。
+  设置里的语言是 `ui.Select` 下拉框，只列简体中文和 English（没有「跟随系统」项）：`auto`
+  时显示系统选定的语言，选择后走 `changeLanguage`，和主题一样在帧外执行 `SetLocale`。设置窗口
+  标题在 `OnLocaleChanged` 里跟着更新。
+- 运行时长单位也走文案（`durationDay` 等），`formatRuntime(lang, ms)` 需要语言参数。
+- 新增一条文案：两个 JSON 都加键（源语言的复数等元数据写在 `en.json`），运行 generate，再用
+  `v.msgs().KeyName()` 或 `locales.KeyName()` 取用。
 
 ## 设置窗口
 
@@ -111,16 +140,54 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - `app.win` 为 nil 时 `openSettings` 直接返回，所以测试用
   `ui.NewTester(v.settingsView, 560, 720)` 单独驱动设置内容。
 - `App.refresh` 同时刷新主窗口和设置窗口；设置里的改动立刻反映到启动器。
-- 设置分组：外观（主题分段控件、强调色色板 + 自定义取色器）、行为（自动计时、自动隐藏、始终
-  置顶）、路径（新条目绝对路径、批量转换）、数据（刷新、打开数据目录、更新图标）、关于（版本、
-  GitHub）。列表/网格切换在顶栏，不在设置里。
+- 设置分组：外观（语言下拉框、主题分段控件、强调色色板 + 自定义取色器，色板下的
+  `MyGo!!!!!` 是字面文字、不进文案、关闭后在后台运行）、行为（自动计时、自动隐藏、始终
+  置顶）、路径（新条目绝对路径、批量转换）、数据（刷新、打开数据目录、更新图标）、关于
+  （版本、GitHub、更新）。列表/网格切换在顶栏，不在设置里。
+
+## 自动更新
+
+- `src/updates.go`：`useUpdater` 在 `App.Run` 之前调用
+  `mygo.Use(native.New(updater.Options{}))`，启用后台检查和原生更新窗口，并把 `app.updates`
+  设为 true。`updater.OnChange` 调用 `app.refresh()`，让设置窗口随检查和用户选择重画。
+- 更新窗口跟随 `mygo.App.Locale()`。启动约 10 秒后检查一次，之后每天一次；自动检查、自动
+  下载、上次检查时间和跳过的版本由插件保存在 `updater.json`（MyGo 用户数据目录），不在
+  便携数据文件夹里。
+- 设置 → 关于 只在 `app.updates` 为真时显示更新项：自动检查开关
+  （`updateChecks` / `setUpdateChecks`）、自动下载开关（`updateDownloads` /
+  `setUpdateDownloads`，自动检查关闭时禁用）、手动检查按钮（`checkForUpdates`）和状态
+  （`availableUpdate` / `lastUpdateCheck`）。
+- 这些函数在 `src/updates.go` 里是包级变量，测试用 `fakeUpdater` 替换；没有启用插件时直接
+  调用会 panic，所以界面也用 `app.updates` 判断。
+- 发布方案与 MyGo Music 相同：`mygo.json` 的 `updates.publicKey` + `github`
+  （`canwdev/mygo-launcher`）；推送 `v<version>` 标签触发 draft Release，CI 用 secret
+  `MYGO_UPDATER_PRIVATE_KEY` 执行 `go tool mygo build -platform windows/amd64 -upload`。
+  `CHANGELOG.md` 必须有 `## <version>` 小节，发布 draft 时勾选 latest。细节见
+  `docs/UPDATES.md`。
+
+## 托盘与后台运行
+
+- 开关是 store `Settings` 的 `background_on_close`，默认开启；关掉后不创建托盘，关闭窗口
+  就是退出。
+- `src/tray.go`：`syncTray` 在开关打开时创建 `mygo.NewTray`（稳定 ID `main`，图标把
+  `resources/icon.png` 缩放到 64px，`resources.go` 用 `go:embed` 带进二进制），关闭时
+  `Destroy`；语言变化或开关变化时重设菜单。托盘只在开关打开时存在，且一直显示。
+- 托盘左键恢复主窗口，右键菜单为「打开」（`showMain`）、「设置」（`openSettings`）和
+  「退出」（`App.Quit`）。
+- 主窗口的 `OnClose` 交给 `view.handleClose`：开关打开且不在退出流程（`App.quitting`）时
+  `PreventDefault` 并 `Hide`；否则照常关闭。`OnBeforeQuit` 在退出开始时置位 `quitting`，
+  所以托盘的「退出」不会被拦下；`OnQuit` 销毁托盘。
+- 关掉开关时若主窗口正隐藏，先 `Show` 再移除托盘，否则窗口没有入口。
+- 测试里 `syncTray` 因为没有窗口（`app.win == nil`）直接返回：`mygo.NewTray` 要求应用
+  就绪；测试覆盖设置持久化和 `handleClose` 的判定。
 
 ## 数据
 
 - 所有数据都在工作目录旁的 `mygo-launcher-data/`：
   - `go-launcher-data.json` — store：`apps`、`categories`（标签，`slots` 存条目 guid，`null`
-    表示空格子）和 `settings`（`auto_time` / `auto_hide` / `always_on_top` / `absolute_paths`）
-  - `ui-state.json` — 窗口自身偏好：主题、强调色、列表/网格、当前标签
+    表示空格子）和 `settings`（`auto_time` / `auto_hide` / `always_on_top` /
+    `absolute_paths` / `background_on_close`）
+  - `ui-state.json` — 窗口自身偏好：语言、主题、强调色、列表/网格、当前标签
   - `window-state.json` — 两个窗口的几何信息，通过 MyGo 的 `WindowStateStore`
   - `cached-icons/` — 从条目指向的文件提取的图标
 - store 只通过 `App.save` → `writeStoreAtomic` 写入，并记录文件指纹（mtime、大小、内容哈希），
@@ -146,7 +213,12 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - **设置窗口单独测试**：`newTestSettings` 构造 `ui.NewTester(v.settingsView, 560, 720)`。开关
   使用独立的 `Toggle …` 标签以便点击；不要在测试里点主题，`SetSource` 会阻塞。强调色预设可以
   通过色板的 `Tomori` / `Anon` 等成员名标签点击。
+- **更新插件在测试里要替换**：`fakeUpdater` 换掉 `src/updates.go` 的 `checkForUpdates`、
+  `updateChecks` 等包级函数，并把 `app.updates` 设为 true 才会显示「关于」里的更新项。
 - 测试不能碰真实数据目录：`newTestApp` 把 `absBase` 指向临时目录。
+- **测试默认是英语**：`ui.Tester` 的语言起初是 `""`，`v.msgs()` 因此返回源语言。要验证另一种
+  语言，用 `tt.SetLocale("zh-Hans")`（它会立即重画一帧），不要点设置里的语言控件——那会调用
+  `SetLocale` 并落盘。
 
 ## 变更日志
 
@@ -185,11 +257,14 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/view_search.go` | 搜索浮层：过滤、键盘操作、在标签中定位 |
 | `src/items.go` / `src/commands.go` | 标签与条目操作；菜单和按钮实际执行的动作 |
 | `src/icons.go` / `src/icons_svg.go` | 条目图标与窗口绘制的 SVG |
+| `src/tray.go` | 托盘图标、菜单，以及关闭窗口时隐藏到托盘的拦截 |
 | `src/ui_state.go` / `src/window_state_store.go` | `ui-state.json` 偏好；`window-state.json` |
 | `src/launch_*.go` / `src/lnk_*.go` / `src/singleton_*.go` | 进程启动与提权、`.lnk` 解析（COM）、按安装目录的单实例 |
 | `src/utils.go` | `formatRuntime`、路径规范化、`splitArgs`、`isExecutable` |
 | `src/version.go` | `appVersion`，与 `mygo.json` 保持同步 |
-| `docs/` | `ICON.md`（图标）、`UI-REDO.md`（界面重做交接）、`TODO.md`（待办）、`generate-icon.ps1` |
-| `resources/` | 应用图标等打包资源 |
+| `src/updates.go` | updater 插件、更新偏好函数与测试替换点 |
+| `locales/` | 界面文案 `en.json` / `zh-Hans.json` 与生成的 `catalog_gen.go` |
+| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`TODO.md`（待办）、`generate-icon.ps1` |
+| `resources/` | 应用图标等打包资源；`resources.go` 把图标嵌入二进制，供托盘使用 |
 
 没有前端。新增一个操作意味着在 `view` 或 `App` 上添加方法，并从需要它的菜单或按钮调用。

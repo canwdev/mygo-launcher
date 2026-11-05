@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"go-launcher/locales"
 	"golang.org/x/sys/windows"
 )
 
@@ -108,7 +109,7 @@ func startProcess(path string, args []string, workDir string, elevated bool) (wi
 		if err != nil {
 			// 1223 = ERROR_CANCELLED：用户在 UAC 弹窗点了“否”
 			if errors.Is(err, syscall.Errno(1223)) {
-				return 0, errors.New("elevation was cancelled")
+				return 0, errors.New(locales.ElevationCancelled())
 			}
 			return 0, err
 		}

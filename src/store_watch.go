@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"go-launcher/locales"
 )
 
 // The store file is watched so edits made by hand apply to the running app: a
@@ -137,9 +138,9 @@ func (a *App) applyStoreLocked(store AppStore) {
 func (a *App) handleStoreFileEvent() {
 	switch a.reloadStoreIfChanged() {
 	case storeReloadApplied:
-		a.notify("Reloaded from go-launcher-data.json")
+		a.notify(locales.ReloadedStore())
 	case storeReloadInvalid:
-		a.notify("go-launcher-data.json is not valid JSON; change ignored")
+		a.notify(locales.StoreInvalid())
 	}
 	a.refresh()
 }

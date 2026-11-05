@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"go-launcher/locales"
 )
 
 // The launcher keeps its data next to the executable's working directory, in a
@@ -60,6 +61,9 @@ type Settings struct {
 	// AlwaysOnTop keeps the window above the others (the app menu's "Always on
 	// top"), restored at startup and applied as it is toggled.
 	AlwaysOnTop bool `json:"always_on_top"`
+	// BackgroundOnClose hides the window in the tray instead of quitting when
+	// it is closed, and keeps the tray icon shown.
+	BackgroundOnClose bool `json:"background_on_close"`
 }
 
 type AppStore struct {
@@ -102,9 +106,9 @@ func defaultStore() AppStore {
 	return AppStore{
 		Apps: map[string]*AppItem{},
 		Categories: []CategoryNode{
-			{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}},
+			{GUID: uuid.NewString(), Name: locales.DefaultTabName(), Slots: []*string{}},
 		},
-		Settings: Settings{AbsolutePaths: true, AutoTime: true, AutoHide: true, AlwaysOnTop: false},
+		Settings: Settings{AbsolutePaths: true, AutoTime: true, AutoHide: true, AlwaysOnTop: false, BackgroundOnClose: true},
 	}
 }
 
@@ -140,6 +144,9 @@ func parseStore(data []byte) (AppStore, bool) {
 	if settingsMissingKey(data, "auto_hide") {
 		store.Settings.AutoHide = true
 	}
+	if settingsMissingKey(data, "background_on_close") {
+		store.Settings.BackgroundOnClose = true
+	}
 	if store.Apps == nil {
 		store.Apps = map[string]*AppItem{}
 	}
@@ -159,7 +166,7 @@ func parseStore(data []byte) (AppStore, bool) {
 		}
 	}
 	if len(store.Categories) == 0 {
-		store.Categories = []CategoryNode{{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}}}
+		store.Categories = []CategoryNode{{GUID: uuid.NewString(), Name: locales.DefaultTabName(), Slots: []*string{}}}
 	}
 	for i := range store.Categories {
 		cat := &store.Categories[i]
@@ -167,7 +174,7 @@ func parseStore(data []byte) (AppStore, bool) {
 			cat.GUID = uuid.NewString()
 		}
 		if cat.Name == "" {
-			cat.Name = "Category"
+			cat.Name = locales.UntitledTabName()
 		}
 		if cat.Slots == nil {
 			cat.Slots = []*string{}

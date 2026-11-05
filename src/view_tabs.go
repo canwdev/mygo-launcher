@@ -24,19 +24,29 @@ func (v *view) tabChip(c *ui.Context, index int) {
 	slot.Children(func() {
 		b := ui.ButtonBase(c.Key(guid)).Height(30).PaddingX(12).Gap(5).Radius(8).
 			AlignItems(ui.Center).FocusRing(false).Label(name)
+
+		// Files from Explorer dropped on a tab are added to it, rather than
+		// to the active tab.
+		if files := b.DroppedFiles(); len(files) > 0 {
+			v.app.addPaths(files, guid)
+		}
+		filesOver := b.FileDragOver()
+
 		switch {
+		case filesOver:
+			b.Background(p.accent.Alpha(0.12)).Border(2, p.accent)
 		case selected:
 			b.Background(p.press)
 		case b.Hovered():
 			b.Background(p.hover)
 		}
-		if overTab {
+		if overTab && !filesOver {
 			b.Border(1, p.accent)
 		}
 
 		// An item dragged over the tab: dropping moves it there, Cmd/Ctrl
 		// copies.
-		if _, over := ui.DragOver[dragItem](b); over {
+		if _, over := ui.DragOver[dragItem](b); over && !filesOver {
 			b.Border(2, p.accent)
 		}
 		if dragged, ok := ui.Drop[dragItem](b); ok {
@@ -78,15 +88,16 @@ func tabItemCount(tab *CategoryNode) int {
 
 // tabMenu is a tab's menu, shared by a right click and the ⋯ of the chip.
 func (v *view) tabMenu(guid, name string) func(m *ui.Menu) {
+	msgs := v.msgs()
 	return func(m *ui.Menu) {
-		if m.Item("Rename").Chosen() {
+		if m.Item(msgs.Rename()).Chosen() {
 			v.later(func() { v.openTabRename(guid, name) })
 		}
-		if m.Item("Duplicate").Chosen() {
+		if m.Item(msgs.Duplicate()).Chosen() {
 			v.later(func() { v.duplicateTab(guid) })
 		}
 		m.Separator()
-		if m.Item("Delete").Chosen() {
+		if m.Item(msgs.Remove()).Chosen() {
 			v.later(func() { v.requestDeleteTab(guid, name) })
 		}
 	}
@@ -95,7 +106,7 @@ func (v *view) tabMenu(guid, name string) func(m *ui.Menu) {
 // openTabRename asks for a tab's new name.
 func (v *view) openTabRename(guid, name string) {
 	v.renameOpen = true
-	v.renameTitle = "Rename Tab"
+	v.renameTitle = v.msgs().RenameTab()
 	v.renameName = name
 	v.renameGUID = ""
 	v.renameTabGUID = guid
@@ -111,7 +122,7 @@ func (v *view) requestDeleteTab(guid, name string) {
 		v.removeTab(guid)
 		return
 	}
-	v.ask("Delete tab \""+name+"\"?", func() { v.removeTab(guid) })
+	v.ask(v.msgs().RemoveTabConfirm(name), func() { v.removeTab(guid) })
 }
 
 // ask opens the confirmation alert, which runs action when it is accepted.

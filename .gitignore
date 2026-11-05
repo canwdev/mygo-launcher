@@ -9,3 +9,4 @@ mygo_windows_*.syso
 *.log
 .gocache
 /.workbuddy/
+.mygo

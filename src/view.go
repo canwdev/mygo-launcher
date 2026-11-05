@@ -5,6 +5,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"go-launcher/locales"
 )
 
 // view is the window's interface: a function of the app's state, rebuilt for
@@ -13,10 +14,17 @@ type view struct {
 	app *App
 	win *mygo.Window
 
+	// tray is the notification area icon, while the app keeps running in the
+	// background.
+	tray *mygo.Tray
+
 	prefs uiPrefs
 
 	// pal is the palette the frame draws with, from the theme's appearance.
 	pal palette
+
+	// lang is the language the window shows, which its texts are said in.
+	lang string
 
 	// ctx is the frame's context, kept to ask for another frame from an
 	// action that runs between frames.
@@ -123,6 +131,7 @@ func (v *view) drain() bool {
 
 func (v *view) view(c *ui.Context) {
 	v.ctx = c
+	v.lang = c.Locale()
 	deferred := v.drain()
 	v.states = v.app.state()
 	v.showMessages(c)
@@ -140,9 +149,12 @@ func (v *view) view(c *ui.Context) {
 	c.Root().Background(p.bg)
 
 	page := ui.Column(c).Fill()
-	if page.FileDragOver() {
-		page.Background(p.accent.Alpha(0.06))
+	// The whole window takes files dragged from Explorer: those over a tab
+	// chip go to that tab (see tabChip), the rest to the active one.
+	if files := page.DroppedFiles(); len(files) > 0 {
+		v.app.addPaths(files, v.tabGUID())
 	}
+	dropOver := page.FileDragOver()
 	page.Children(func() {
 		v.header(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Background(p.bg).Children(func() {
@@ -150,6 +162,9 @@ func (v *view) view(c *ui.Context) {
 			v.busyLine(c)
 			v.addFab(c)
 		})
+		if dropOver {
+			v.dropOverlay(c)
+		}
 	})
 	v.dialogs(c)
 	v.search(c)
@@ -203,9 +218,10 @@ func (v *view) busyLine(c *ui.Context) {
 // add menu, files from disk or an item made by hand.
 func (v *view) addFab(c *ui.Context) {
 	p := v.pal
+	m := v.msgs()
 	b := ui.ButtonBase(c).Absolute().Bottom(24).Right(24).Size(52, 52).Radius(999).Center().
-		Background(p.accent).TextColor(p.onAccent).Label("Add").
-		Tooltip("Add files or create an item").FocusRing(false).
+		Background(p.accent).TextColor(p.onAccent).Label(m.AddButton()).
+		Tooltip(m.AddButtonHint()).FocusRing(false).
 		Shadow(0, 8, 22, -6, ui.RGBA(0, 0, 0, 0.35))
 	fill := p.accent
 	if b.Hovered() {
@@ -221,11 +237,34 @@ func (v *view) addFab(c *ui.Context) {
 	b.PopoverMenuButton(v.addMenu)
 }
 
+// dropOverlay covers the window while files dragged from Explorer are over it,
+// saying where they will go: the alpha fill lets the page show through.
+func (v *view) dropOverlay(c *ui.Context) {
+	p := v.pal
+	msgs := v.msgs()
+	tab := msgs.ThisTab()
+	if t := v.tab(); t != nil {
+		tab = t.Name
+	}
+	ui.Box(c).Absolute().Top(8).Left(8).Right(8).Bottom(8).Radius(14).
+		Background(p.accent.Alpha(0.10)).Border(2, p.accent).BorderStyle(ui.BorderDashed).
+		Center().Children(func() {
+		ui.Column(c).Gap(10).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(48, 48).Radius(14).Background(p.accent).Center().Children(func() {
+				ui.Icon(c, iconBox).Size(22, 22).TextColor(p.onAccent)
+			})
+			ui.Text(c, msgs.DropFiles()).FontSize(15).FontWeight(600).TextColor(p.text)
+			ui.Text(c, msgs.DropInto(tab)).FontSize(12).TextColor(p.muted).SingleLine()
+		})
+	})
+}
+
 func (v *view) addMenu(m *ui.Menu) {
-	if m.Item("Pick files…").Chosen() {
+	msgs := v.msgs()
+	if m.Item(msgs.PickFiles()).Chosen() {
 		v.later(func() { v.app.addFiles(v.tabGUID()) })
 	}
-	if m.Item("Create…").Chosen() {
+	if m.Item(msgs.Create()).Chosen() {
 		v.later(v.openCreate)
 	}
 }
@@ -274,18 +313,22 @@ func (v *view) runningCount() int {
 // emptyState says how to fill a tab without items.
 func (v *view) emptyState(c *ui.Context, tab *CategoryNode) {
 	p := v.pal
+	m := v.msgs()
 	ui.Column(c).Grow(1).Padding(40).Gap(8).Center().Children(func() {
 		ui.Box(c).Size(48, 48).Radius(14).Background(p.hover).Center().Children(func() {
 			ui.Icon(c, iconBox).Size(22, 22).TextColor(p.faint)
 		})
-		ui.Text(c, "No files added yet.").FontSize(14).FontWeight(500).TextColor(p.text)
-		ui.Text(c, "Click Add to pick files or create an item, or drop files here.").
+		ui.Text(c, m.NoFilesTitle()).FontSize(14).FontWeight(500).TextColor(p.text)
+		ui.Text(c, m.NoFilesHint()).
 			FontSize(12).TextColor(p.muted)
 		if tab != nil {
 			ui.Text(c, tab.Name).FontSize(11).TextColor(p.faint)
 		}
 	})
 }
+
+// msgs says the app's texts in the language the window shows.
+func (v *view) msgs() locales.Messages { return locales.In(v.lang) }
 
 // savePrefs writes the view's own settings.
 func (v *view) savePrefs() {

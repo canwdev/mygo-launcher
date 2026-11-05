@@ -1,21 +1,19 @@
 name: Release
 
-# 每次 push 到 master 自动构建并发 Release（附件 exe 与安装包）。
-# 只构建 windows/amd64：原生 UI 打包只面向 Windows。
+# 推送 v<version> 标签时，构建 Windows 版本、签名更新包，并上传到该版本的
+# draft Release；检查过附件后手动发布，安装后的应用再更新过去。
 on:
   push:
-    branches:
-      - master
-  # 也可以在 Actions 页面手动 Run workflow 重新发一版
-  workflow_dispatch:
+    tags:
+      - "v*"
 
-# 创建 tag / release 需要写权限，默认的 GITHUB_TOKEN 足够
+# 创建 tag / draft release 与上传附件需要写权限
 permissions:
   contents: write
 
-# 串行执行，避免两次 push 抢同一个 release；不取消已开始的发布会话
+# 同一个 tag 只跑一次；不取消已开始的发布会话
 concurrency:
-  group: release-master
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -25,7 +23,7 @@ env:
 
 jobs:
   release:
-    name: Build MyGo Launcher and publish release
+    name: Build MyGo Launcher and upload the update
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -41,18 +39,6 @@ jobs:
           git -C $dest checkout --quiet $env:MYGO_COMMIT
           "checked out MyGo at $env:MYGO_COMMIT -> $dest"
 
-      - name: Read version from mygo.json
-        id: version
-        shell: pwsh
-        run: |
-          $version = (Get-Content 'mygo.json' -Raw | ConvertFrom-Json).version
-          if ([string]::IsNullOrWhiteSpace($version)) { throw 'mygo.json has no version field' }
-          # tag = v<mygo.json version>-<GitHub run number>，例如 v0.2.0-42
-          $tag = 'v{0}-{1}' -f $version, '${{ github.run_number }}'
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "release tag: $tag"
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -60,64 +46,80 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # tag 必须与 mygo.json 的版本一致；mygo build 的更新包按这个版本命名，
+      # 并上传到这个 tag 的 release。
+      - name: Check the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content 'mygo.json' -Raw | ConvertFrom-Json).version
+          if ([string]::IsNullOrWhiteSpace($version)) { throw 'mygo.json has no version field' }
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "tag $env:GITHUB_REF_NAME does not match mygo.json version $version"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "release tag: $env:GITHUB_REF_NAME"
+
+      # 更新窗口和 Release notes 都用 CHANGELOG 里该版本的小节；没有这一节
+      # mygo build 会失败。
+      - name: Take the notes from the changelog
+        shell: pwsh
+        run: |
+          $version = (Get-Content 'mygo.json' -Raw | ConvertFrom-Json).version
+          $inside = $false
+          $notes = foreach ($line in Get-Content CHANGELOG.md) {
+            if ($line -match '^##\s') {
+              $inside = $line.Trim() -eq "## $version"
+              continue
+            }
+            if ($inside) { $line }
+          }
+          $text = ($notes -join "`n").Trim()
+          if ([string]::IsNullOrWhiteSpace($text)) { throw "CHANGELOG.md has no section for $version" }
+          $text | Out-File -FilePath "$env:RUNNER_TEMP/notes.md" -Encoding utf8
+          $text
+
+      # mygo build -upload 把附件放进已存在的 draft release。
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY `
+              --draft --verify-tag --title $env:GITHUB_REF_NAME `
+              --notes-file "$env:RUNNER_TEMP/notes.md"
+          }
+
+      # 私钥来自 GitHub secret：丢失后已安装的旧版本无法再接受新更新，
+      # 泄露则可以被用来推送任意代码。
       - name: Test
         run: go test ./...
 
-      - name: Build
-        # go tool mygo 来自 go.mod 的 tool 指令：打包会生成 exe 与 NSIS 安装包
-        run: go tool mygo build
+      - name: Build and upload the signed update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: go tool mygo build -platform windows/amd64 -upload
 
-      - name: Check the built files
-        id: artifact
+      - name: List the built files
         shell: pwsh
-        run: |
-          $dir = 'build/windows-amd64'
-          $exe = Join-Path $dir 'MyGo Launcher.exe'
-          if (-not (Test-Path $exe)) { throw "build produced no $exe" }
-          $item = Get-Item $exe
-          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
-          "size   = $($item.Length) bytes"
-          "sha256 = $hash"
-          "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Get-ChildItem $dir | Select-Object Name, Length
+        run: Get-ChildItem build/windows-amd64 | Select-Object Name, Length
 
-      # 即使 Release 步骤失败，产物也留在 Actions 里可下载
-      - name: Upload build artifact
+      - name: Upload the build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: go-launcher-${{ steps.version.outputs.tag }}
+          name: mygo-launcher-${{ steps.version.outputs.version }}
           path: build/windows-amd64/
           if-no-files-found: error
           retention-days: 14
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: go-launcher ${{ steps.version.outputs.tag }}
-          # 让 tag 指向本次 push 的 commit
-          target_commitish: ${{ github.sha }}
-          make_latest: true
-          draft: false
-          prerelease: false
-          # 附件：单文件 exe 与安装包
-          files: |
-            build/windows-amd64/MyGo Launcher.exe
-            build/windows-amd64/mygo-launcher-setup-*.exe
-          fail_on_unmatched_files: true
-          # 自动附带由 commit 生成的 changelog
-          generate_release_notes: true
-          body: |
-            `master` 的自动构建 —— `${{ github.sha }}`（[运行记录](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})）
-
-            - **产物**：`MyGo Launcher.exe`（单文件，无需运行时，界面由 Go 绘制）与 NSIS 安装包
-            - **版本**：`${{ steps.version.outputs.version }}`（来自 `mygo.json`）+ 构建号 ${{ github.run_number }}
-            - **SHA256**：`${{ steps.artifact.outputs.sha256 }}`
-            - **构建所用 MyGo**：`${{ env.MYGO_COMMIT }}`
-
+# 发布：在 GitHub 上检查 draft 的附件，确认后发布，并勾选
+# "Set as the latest release"，安装后的应用才会读到新的 update 清单。
+#
 # 备注：
-# - 版本号取自 mygo.json 的 version（发版前手动往上抬，同时改 version.go 的
-#   appVersion），tag 形如 v0.2.0-42，其中 42 是 GitHub 的 run number。
-# - 每次 push 都会新建一个 release（每个 tag 一次）；只想在打 tag 时发布的话，
-#   把 on.push 换成 on.push.tags: ['v*']。
+# - 版本号取自 mygo.json 的 version（发版前手动往上抬，同时改 src/version.go 的
+#   appVersion），tag 必须形如 v0.3.0。
+# - 私钥在仓库 secret MYGO_UPDATER_PRIVATE_KEY；mygo.json 的
+#   updates.publicKey 是它的公钥，不要更换。

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -26,6 +29,7 @@ func seedItems(t *testing.T, app *App) {
 	t.Helper()
 	app.store.Apps["a"] = &AppItem{GUID: "a", Name: "Alpha", Path: "C:/tools/alpha.exe", RuntimeMs: 3_600_000}
 	app.store.Apps["b"] = &AppItem{GUID: "b", Name: "Beta", Path: "C:/tools/beta.exe"}
+	app.store.Categories[0].Name = "Default" // the store names it in the system's language
 	app.store.Categories[0].Slots = []*string{ptrString("a"), ptrString("b")}
 	app.runtimeStats["a"] = 3_600_000
 	app.runtimeStats["b"] = 0
@@ -184,6 +188,90 @@ func TestViewTabsAddRename(t *testing.T) {
 	}
 }
 
+// TestViewSettingsChoosesLanguage 验证语言下拉框把选择写进 ui-state.json；
+// 无头环境没有应用语言可改，所以只检查偏好。
+func TestViewSettingsChoosesLanguage(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	settings := newTestSettings(t, v)
+
+	if err := settings.Click("English"); err != nil {
+		t.Fatalf("open the language dropdown: %v", err)
+	}
+	if err := settings.Click("简体中文"); err != nil {
+		t.Fatalf("choose 简体中文: %v", err)
+	}
+	if v.prefs.Language != "zh-Hans" {
+		t.Fatalf("the language must be remembered, got %q", v.prefs.Language)
+	}
+	if got := loadPrefs().Language; got != "zh-Hans" {
+		t.Fatalf("the language must be saved, got %q", got)
+	}
+
+	settings.Frame()
+	if err := settings.Click("简体中文"); err != nil {
+		t.Fatalf("open the language dropdown again: %v", err)
+	}
+	if err := settings.Click("English"); err != nil {
+		t.Fatalf("choose English: %v", err)
+	}
+	if v.prefs.Language != "en" {
+		t.Fatalf("the language must change, got %q", v.prefs.Language)
+	}
+}
+
+// TestViewSettingsTogglesBackgroundOnClose 验证「关闭后在后台运行」默认开启，开关
+// 写回 store。
+func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
+	if !app.store.Settings.BackgroundOnClose {
+		t.Fatal("running in the background must be on by default")
+	}
+	settings := newTestSettings(t, v)
+
+	if err := settings.Click("Toggle run in background"); err != nil {
+		t.Fatalf("run in background: %v", err)
+	}
+	if app.store.Settings.BackgroundOnClose {
+		t.Fatal("the toggle must turn running in the background off")
+	}
+	if loadStore().Settings.BackgroundOnClose {
+		t.Fatal("the setting must be saved")
+	}
+	if err := settings.Click("Toggle run in background"); err != nil {
+		t.Fatalf("run in background again: %v", err)
+	}
+	if !app.store.Settings.BackgroundOnClose {
+		t.Fatal("the toggle must turn running in the background back on")
+	}
+}
+
+// TestViewCloseHidesWhenRunningInBackground 验证关闭窗口时按设置隐藏到托盘，
+// 退出应用时照常关闭。
+func TestViewCloseHidesWhenRunningInBackground(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
+
+	e := &mygo.CloseEvent{}
+	v.handleClose(e)
+	if !e.DefaultPrevented() {
+		t.Fatal("closing the window must hide it while the app runs in the background")
+	}
+
+	app.store.Settings.BackgroundOnClose = false
+	e = &mygo.CloseEvent{}
+	v.handleClose(e)
+	if e.DefaultPrevented() {
+		t.Fatal("with running in the background off the window must close")
+	}
+
+	app.store.Settings.BackgroundOnClose = true
+	app.quitting = true
+	e = &mygo.CloseEvent{}
+	v.handleClose(e)
+	if e.DefaultPrevented() {
+		t.Fatal("a quit must close the window, not hide it")
+	}
+}
+
 // TestViewSettingsTogglesAutoHide 验证设置窗口里的开关写回 store。
 func TestViewSettingsTogglesAutoHide(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
@@ -274,7 +362,8 @@ func TestViewSettingsShowsItsChoices(t *testing.T) {
 
 	settings := newTestSettings(t, v)
 	for _, text := range []string{
-		"Settings", "Theme", "Accent color", "Auto timing", "Auto-hide the launcher",
+		"Settings", "Language", "Theme", "Accent color", "Run in background",
+		"Auto timing", "Auto-hide the launcher",
 		"Always on top", "Absolute paths for new items", "Data directory",
 		"Version " + appVersion,
 	} {
@@ -308,6 +397,80 @@ func TestViewSettingsChoosesAccent(t *testing.T) {
 	}
 	if got, want := accentColor(v.prefs.Accent, false), accentColor("bang-2", false); got != want {
 		t.Fatalf("the chosen accent must apply, got %v want %v", got, want)
+	}
+}
+
+// fakeUpdater swaps the updater plugin's preferences for ones in memory, until
+// the returned function puts them back: the plugin panics without useUpdater.
+func fakeUpdater(checks, downloads *bool, checked *int, last *time.Time, available *string) func() {
+	check, getChecks, setChecks := checkForUpdates, updateChecks, setUpdateChecks
+	getDownloads, setDownloads := updateDownloads, setUpdateDownloads
+	lastFn, availableFn := lastUpdateCheck, availableUpdate
+	checkForUpdates = func() { *checked++ }
+	updateChecks = func() bool { return *checks }
+	setUpdateChecks = func(on bool) { *checks = on }
+	updateDownloads = func() bool { return *downloads }
+	setUpdateDownloads = func(on bool) { *downloads = on }
+	lastUpdateCheck = func() time.Time { return *last }
+	availableUpdate = func() string { return *available }
+	return func() {
+		checkForUpdates, updateChecks, setUpdateChecks = check, getChecks, setChecks
+		updateDownloads, setUpdateDownloads = getDownloads, setDownloads
+		lastUpdateCheck, availableUpdate = lastFn, availableFn
+	}
+}
+
+// TestSettingsUpdates 验证关于分组里的更新开关、手动检查和状态文字。
+func TestSettingsUpdates(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
+	app.updates = true
+	checks, downloads, checked := true, false, 0
+	var last time.Time
+	available := ""
+	defer fakeUpdater(&checks, &downloads, &checked, &last, &available)()
+
+	tt := ui.NewTester(v.settingsView, 560, 1600)
+	tt.SetFocused(true)
+	tt.Frame()
+	if !tt.HasText("Not checked yet") {
+		t.Fatalf("the about section must say no check ran, texts %q", tt.Texts())
+	}
+	if err := tt.Click("Check for updates"); err != nil {
+		t.Fatalf("check for updates: %v", err)
+	}
+	if checked != 1 {
+		t.Fatalf("the button must check once, got %d", checked)
+	}
+
+	if err := tt.Click("Toggle automatic update checks"); err != nil {
+		t.Fatalf("turn checks off: %v", err)
+	}
+	if checks {
+		t.Fatal("automatic checks must be off")
+	}
+	if err := tt.Click("Toggle automatic update checks"); err != nil {
+		t.Fatalf("turn checks on: %v", err)
+	}
+	if !checks {
+		t.Fatal("automatic checks must be on")
+	}
+	if err := tt.Click("Toggle automatic update downloads"); err != nil {
+		t.Fatalf("turn downloads on: %v", err)
+	}
+	if !downloads {
+		t.Fatal("automatic downloads must be on")
+	}
+
+	available = "0.3.0"
+	tt.Frame()
+	if !tt.HasText("Version 0.3.0 is available") {
+		t.Fatalf("the about section must show the new version, texts %q", tt.Texts())
+	}
+	available = ""
+	last = time.Now()
+	tt.Frame()
+	if !tt.HasText("Last checked") {
+		t.Fatalf("the about section must show the last check, texts %q", tt.Texts())
 	}
 }
 
@@ -350,18 +513,18 @@ func TestFinishProcessRespectsAutoTiming(t *testing.T) {
 	}
 }
 
-// TestViewConfirmsDelete 验证删除条目要先确认，确认后从 store 与 tab 里都去掉。
-func TestViewConfirmsDelete(t *testing.T) {
+// TestViewConfirmsRemove 验证移除条目要先确认，确认后从 store 与 tab 里都去掉。
+func TestViewConfirmsRemove(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 460)
 
 	if err := tt.RightClick("Alpha"); err != nil {
 		t.Fatalf("right click on the row: %v", err)
 	}
-	if err := tt.Click("Delete"); err != nil {
-		t.Fatalf("choose Delete: %v", err)
+	if err := tt.Click("Remove"); err != nil {
+		t.Fatalf("choose Remove: %v", err)
 	}
 	if !tt.HasText("Confirm") {
-		t.Fatalf("deleting must ask first, texts %q", tt.Texts())
+		t.Fatalf("removing must ask first, texts %q", tt.Texts())
 	}
 	if app.store.Apps["a"] == nil {
 		t.Fatal("the item must stay until the dialog is accepted")
@@ -370,11 +533,33 @@ func TestViewConfirmsDelete(t *testing.T) {
 		t.Fatalf("accept: %v", err)
 	}
 	if app.store.Apps["a"] != nil {
-		t.Fatal("accepting must delete the item")
+		t.Fatal("accepting must remove the item")
 	}
 	for _, slot := range app.store.Categories[0].Slots {
 		if slot != nil && *slot == "a" {
-			t.Fatal("the deleted item must leave the tab's slots")
+			t.Fatal("the removed item must leave the tab's slots")
+		}
+	}
+}
+
+// TestViewShowsChineseTexts 验证窗口按语言画出中文文案：MyGo 的原生测试器把语言
+// 设成 zh-Hans 后，按钮和标题都跟着换。
+func TestViewShowsChineseTexts(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+	tt.SetLocale("zh-Hans")
+
+	if !tt.HasText("运行") || !tt.HasText("设置") || !tt.HasText("搜索") {
+		t.Fatalf("the window must say its texts in Chinese, texts %q", tt.Texts())
+	}
+	if tt.HasText("Run") {
+		t.Fatalf("the English texts must be gone, texts %q", tt.Texts())
+	}
+
+	settings := newTestSettings(t, v)
+	settings.SetLocale("zh-Hans")
+	for _, text := range []string{"设置", "外观", "语言", "行为", "路径", "数据", "关于"} {
+		if !settings.HasText(text) {
+			t.Fatalf("the settings must say %q in Chinese, texts %q", text, settings.Texts())
 		}
 	}
 }
@@ -472,6 +657,58 @@ func TestViewDragsItemToTab(t *testing.T) {
 	}
 	if got := tabSlots(app, 1); len(got) != 1 || got[0] != "a" {
 		t.Fatalf("the second tab = %v, want the dragged item", got)
+	}
+}
+
+// TestViewDropsFiles 验证把文件从资源管理器拖到窗口，条目加入当前标签。
+func TestViewDropsFiles(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 460)
+	path := filepath.Join(t.TempDir(), "gamma.txt")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !tt.DropFiles(360, 300, path) {
+		t.Fatal("the window must take dropped files")
+	}
+	if got := tabSlots(app, 0); len(got) != 3 {
+		t.Fatalf("slots = %v, want the dropped file appended", got)
+	}
+	item := app.store.Apps[*app.store.Categories[0].Slots[2]]
+	if item == nil || item.Name != "gamma" {
+		t.Fatalf("dropped item = %+v", item)
+	}
+}
+
+// TestViewDropsFilesOnTab 验证拖到某个标签上的文件加入该标签。
+func TestViewDropsFilesOnTab(t *testing.T) {
+	app, _, tt := newTestView(t, 900, 520)
+	if err := tt.Click("Add tab"); err != nil {
+		t.Fatalf("add a tab: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	tt.Frame()
+	chip, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second tab")
+	}
+
+	path := filepath.Join(t.TempDir(), "delta.txt")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.DropFiles(chip.X+chip.W/2, chip.Y+chip.H/2, path) {
+		t.Fatal("the tab must take dropped files")
+	}
+	if got := tabSlots(app, 1); len(got) != 1 {
+		t.Fatalf("second tab = %v, want the dropped file", got)
+	}
+	if got := tabSlots(app, 0); len(got) != 2 {
+		t.Fatalf("first tab = %v, want it unchanged", got)
+	}
+	item := app.store.Apps[*app.store.Categories[1].Slots[0]]
+	if item == nil || item.Name != "delta" {
+		t.Fatalf("dropped item = %+v", item)
 	}
 }
 

@@ -7,6 +7,7 @@ import "github.com/egoist/mygo/ui"
 // as a toolbar.
 func (v *view) header(c *ui.Context) {
 	p := v.pal
+	m := v.msgs()
 	ui.Row(c).Height(56).Padding(0, 16).Gap(10).AlignItems(ui.Center).
 		Background(p.sidebar).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).
 		DragWindow().Children(func() {
@@ -15,16 +16,16 @@ func (v *view) header(c *ui.Context) {
 				for i := range v.app.store.Categories {
 					v.tabChip(c, i)
 				}
-				if iconButton(c, iconPlus, 13, p.faint, "Add tab").Size(26, 26).Radius(7).Clicked() {
+				if iconButton(c, iconPlus, 13, p.faint, m.AddTab()).Size(26, 26).Radius(7).Clicked() {
 					v.later(v.addTab)
 				}
 			})
 		})
-		if iconButton(c, iconSearch, 16, p.muted, "Search").Clicked() {
+		if iconButton(c, iconSearch, 16, p.muted, m.Search()).Clicked() {
 			v.openSearch()
 		}
 		v.viewModeButton(c)
-		if iconButton(c, iconGear, 18, p.muted, "Settings").Clicked() {
+		if iconButton(c, iconGear, 18, p.muted, m.Settings()).Clicked() {
 			v.openSettings()
 		}
 	})
@@ -33,13 +34,14 @@ func (v *view) header(c *ui.Context) {
 // viewModeButton switches between the list and the grid, just before Settings.
 func (v *view) viewModeButton(c *ui.Context) {
 	p := v.pal
+	m := v.msgs()
 	if v.prefs.ViewMode == "grid" {
-		if iconButton(c, iconList, 17, p.muted, "Switch to list view").Clicked() {
+		if iconButton(c, iconList, 17, p.muted, m.SwitchToList()).Clicked() {
 			v.setViewMode("list")
 		}
 		return
 	}
-	if iconButton(c, iconGrid, 17, p.muted, "Switch to grid view").Clicked() {
+	if iconButton(c, iconGrid, 17, p.muted, m.SwitchToGrid()).Clicked() {
 		v.setViewMode("grid")
 	}
 }

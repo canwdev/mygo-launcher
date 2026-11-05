@@ -12,6 +12,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/google/uuid"
+	"go-launcher/locales"
 )
 
 // runningProc is a process the launcher started and tracks: its runtime
@@ -41,6 +42,9 @@ type App struct {
 	// icons caches decoded icons by the path the store keeps.
 	icons map[string]ui.ImageSource
 
+	// updates reports whether the updater plugin is used.
+	updates bool
+
 	// fileMu guards the store file fingerprint, which the watch goroutine reads
 	// and writes.
 	fileMu    sync.Mutex
@@ -54,6 +58,10 @@ type App struct {
 
 	// tick tells the clock goroutine that a runtime display keeps changing.
 	tick atomic.Bool
+
+	// quitting is set when a quit starts, so the main window closes rather
+	// than hiding in the tray.
+	quitting bool
 
 	win         *mygo.Window
 	settingsWin *mygo.Window
@@ -124,7 +132,7 @@ func (a *App) save() {
 	}
 	data, err := writeStoreAtomic(a.store)
 	if err != nil {
-		a.notify("Saving failed: " + err.Error())
+		a.notify(locales.SavingFailed(err.Error()))
 		return
 	}
 	a.fileMu.Lock()
@@ -345,7 +353,7 @@ func (a *App) addFiles(tabGUID string) {
 	go func() {
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 			Parent:   a.win,
-			Title:    "Add Files",
+			Title:    locales.AddFilesTitle(),
 			Multiple: true,
 		})
 		if err != nil || len(paths) == 0 {
@@ -356,43 +364,63 @@ func (a *App) addFiles(tabGUID string) {
 }
 
 // addPaths adds files, folders and shortcuts to a tab. Icons are extracted on a
-// goroutine, since that reads the disk for every file.
+// goroutine, since that reads the disk for every file; without a window, as in
+// tests, it adds them at once.
 func (a *App) addPaths(paths []string, tabGUID string) {
 	if len(paths) == 0 {
 		return
 	}
 	absolute := a.store.Settings.AbsolutePaths
-	a.setBusy("Adding files…")
+	// Without a window, as in tests, the shell calls behind the icons would
+	// wait for a main thread that never runs: skip them.
+	withIcon := a.win != nil
+	if !withIcon {
+		a.addItems(buildItems(paths, absolute, false), tabGUID)
+		return
+	}
+	a.setBusy(locales.AddingFiles())
 	go func() {
-		items := make([]*AppItem, 0, len(paths))
-		for _, raw := range paths {
-			if item := buildItem(raw, absolute); item != nil {
-				items = append(items, item)
-			}
-		}
+		items := buildItems(paths, absolute, true)
 		a.dispatch(func() {
 			a.setBusy("")
-			if len(items) == 0 {
-				return
-			}
-			tab := a.tab(tabGUID)
-			if tab == nil {
-				return
-			}
-			for _, item := range items {
-				a.store.Apps[item.GUID] = item
-				a.runtimeStats[item.GUID] = 0
-				guid := item.GUID
-				tab.Slots = append(tab.Slots, &guid)
-			}
-			a.save()
+			a.addItems(items, tabGUID)
 		})
 	}()
 }
 
+// buildItems makes entries for paths, resolving shortcuts and caching icons. It
+// reads the disk, so it runs off the main thread outside tests.
+func buildItems(paths []string, absolute, withIcon bool) []*AppItem {
+	items := make([]*AppItem, 0, len(paths))
+	for _, raw := range paths {
+		if item := buildItem(raw, absolute, withIcon); item != nil {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+// addItems puts entries at the end of a tab and saves the store.
+func (a *App) addItems(items []*AppItem, tabGUID string) {
+	if len(items) == 0 {
+		return
+	}
+	tab := a.tab(tabGUID)
+	if tab == nil {
+		return
+	}
+	for _, item := range items {
+		a.store.Apps[item.GUID] = item
+		a.runtimeStats[item.GUID] = 0
+		guid := item.GUID
+		tab.Slots = append(tab.Slots, &guid)
+	}
+	a.save()
+}
+
 // buildItem makes an item for a path, resolving shortcuts and caching the icon.
 // It reads the disk, so it runs off the main thread.
-func buildItem(raw string, absolute bool) *AppItem {
+func buildItem(raw string, absolute, withIcon bool) *AppItem {
 	path := normalizePath(raw)
 	if path == "" {
 		return nil
@@ -408,12 +436,16 @@ func buildItem(raw string, absolute bool) *AppItem {
 			}
 		}
 	}
+	icon := ""
+	if withIcon {
+		icon = writeIcon(iconPath)
+	}
 	return &AppItem{
 		GUID:       uuid.NewString(),
 		Name:       name,
 		Path:       storedForm(target, absolute),
 		WorkingDir: storedForm(workDir, absolute),
-		Icon:       writeIcon(iconPath),
+		Icon:       icon,
 		Args:       args,
 	}
 }
@@ -432,11 +464,11 @@ func (a *App) updateIcon(guid string) error {
 		return fmt.Errorf("invalid item guid %q", guid)
 	}
 	if item.Path == "" {
-		return errors.New("item has no path to extract an icon from")
+		return errors.New(locales.NoIconPath())
 	}
 	icon := writeIcon(resolveLaunchPath(item.Path))
 	if icon == "" {
-		return errors.New("failed to regenerate icon")
+		return errors.New(locales.IconFailed())
 	}
 	a.replaceIcon(item, icon)
 	return nil
@@ -453,12 +485,12 @@ func (a *App) replaceIcon(item *AppItem, icon string) {
 }
 
 func imageFilter() []mygo.FileFilter {
-	return []mygo.FileFilter{{Name: "Images", Extensions: []string{"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"}}}
+	return []mygo.FileFilter{{Name: locales.ImagesFilter(), Extensions: []string{"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"}}}
 }
 
 // pickFile asks for a file; dir is where the dialog starts.
 func (a *App) pickFile(dir string) string {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select File", DefaultPath: dir})
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectFileTitle(), DefaultPath: dir})
 	if err != nil || len(paths) == 0 {
 		return ""
 	}
@@ -466,7 +498,7 @@ func (a *App) pickFile(dir string) string {
 }
 
 func (a *App) pickImage(dir string) string {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select Image", DefaultPath: dir, Filters: imageFilter()})
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectImageTitle(), DefaultPath: dir, Filters: imageFilter()})
 	if err != nil || len(paths) == 0 {
 		return ""
 	}
@@ -474,7 +506,7 @@ func (a *App) pickImage(dir string) string {
 }
 
 func (a *App) pickDirectory(dir string) string {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select Folder", DefaultPath: dir, Directory: true})
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectFolderTitle(), DefaultPath: dir, Directory: true})
 	if err != nil || len(paths) == 0 {
 		return ""
 	}

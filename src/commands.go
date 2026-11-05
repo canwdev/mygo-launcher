@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -19,36 +18,37 @@ func (v *view) itemMenu(item *AppItem, slot int) func(m *ui.Menu) {
 	guid, name := item.GUID, item.Name
 	tabGUID := v.prefs.ActiveTab
 	autoIcon := isAutoIcon(item.Icon)
+	msgs := v.msgs()
 	return func(m *ui.Menu) {
-		if m.Item("Edit").Chosen() {
+		if m.Item(msgs.Edit()).Chosen() {
 			v.later(func() { v.openEdit(guid) })
 		}
-		if m.Item("Duplicate").Chosen() {
+		if m.Item(msgs.Duplicate()).Chosen() {
 			v.later(func() { v.duplicateItem(guid, tabGUID, slot) })
 		}
-		if m.Item("Insert empty").Chosen() {
+		if m.Item(msgs.InsertEmpty()).Chosen() {
 			v.later(func() { v.insertEmptyAt(slot) })
 		}
-		if m.Item("Open folder…").Chosen() {
+		if m.Item(msgs.RevealInFolder()).Chosen() {
 			v.later(func() { v.app.notifyErr(v.app.reveal(guid)) })
 		}
 		m.Separator()
-		if m.Item("Rename").Chosen() {
+		if m.Item(msgs.Rename()).Chosen() {
 			v.later(func() { v.openItemRename(guid, name) })
 		}
-		if m.Item("Delete").Chosen() {
-			v.later(func() { v.ask("Delete \""+name+"\"?", func() { v.removeItem(guid) }) })
+		if m.Item(msgs.Remove()).Chosen() {
+			v.later(func() { v.ask(msgs.RemoveItemConfirm(name), func() { v.removeItem(guid) }) })
 		}
 		m.Separator()
 		if autoIcon {
-			if m.Item("Update icon").Chosen() {
+			if m.Item(msgs.UpdateIcon()).Chosen() {
 				v.later(func() { v.app.notifyErr(v.app.updateIcon(guid)) })
 			}
 		}
-		if m.Item("Convert to absolute path").Chosen() {
+		if m.Item(msgs.ConvertToAbsolute()).Chosen() {
 			v.later(func() { v.app.notifyErr(v.app.convertItemPath(guid, true)) })
 		}
-		if m.Item("Convert to relative path").Chosen() {
+		if m.Item(msgs.ConvertToRelative()).Chosen() {
 			v.later(func() { v.app.notifyErr(v.app.convertItemPath(guid, false)) })
 		}
 	}
@@ -117,9 +117,9 @@ func (v *view) liveMs(guid string) int64 {
 // runtimeText spells an item's runtime as a row shows it: "1h 2m", and what is
 // being added now as "(+ 3m)".
 func (v *view) runtimeText(guid string) string {
-	text := formatRuntime(v.baseline(guid))
+	text := formatRuntime(v.lang, v.baseline(guid))
 	if ms := v.liveMs(guid); ms > 0 {
-		text += " (+ " + formatRuntime(ms) + ")"
+		text += " (+ " + formatRuntime(v.lang, ms) + ")"
 	}
 	return text
 }
@@ -174,7 +174,7 @@ func (v *view) saveItemDialog() {
 
 func (v *view) openItemRename(guid, name string) {
 	v.renameOpen = true
-	v.renameTitle = "Rename"
+	v.renameTitle = v.msgs().Rename()
 	v.renameName = name
 	v.renameGUID = guid
 	v.renameTabGUID = ""
@@ -223,7 +223,7 @@ func (v *view) batchUpdateIcons() {
 			jobs = append(jobs, job{guid, resolveLaunchPath(item.Path)})
 		}
 	}
-	v.app.setBusy("Updating icons…")
+	v.app.setBusy(v.msgs().UpdatingIcons())
 	go func() {
 		type result struct{ guid, icon string }
 		results := make([]result, 0, len(jobs))
@@ -246,28 +246,25 @@ func (v *view) batchUpdateIcons() {
 				item.Icon = r.icon
 			}
 			v.app.save()
-			plural := "s"
-			if len(results) == 1 {
-				plural = ""
-			}
-			v.app.notify(fmt.Sprintf("Updated %d icon%s", len(results), plural))
+			v.app.notify(v.msgs().UpdatedIcons(len(results)))
 		})
 	}()
 }
 
 func (v *view) convertPaths(absolute bool) {
-	v.app.setBusy("Converting paths…")
+	m := v.msgs()
+	v.app.setBusy(m.ConvertingPaths())
 	v.app.convertPaths(absolute)
 	v.app.setBusy("")
 	if absolute {
-		v.app.notify("Converted to absolute path")
+		v.app.notify(m.ConvertedToAbsolute())
 	} else {
-		v.app.notify("Converted to relative path")
+		v.app.notify(m.ConvertedToRelative())
 	}
 }
 
 // refreshData applies an edit made by hand and says so, as "Refresh" does.
 func (v *view) refreshData() {
 	v.app.handleStoreFileEvent()
-	v.app.notify("Data refreshed")
+	v.app.notify(v.msgs().DataRefreshed())
 }

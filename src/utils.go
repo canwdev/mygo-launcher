@@ -1,11 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+
+	"go-launcher/locales"
 )
 
 func sanitizeBase(name string) string {
@@ -56,9 +58,11 @@ func defaultTitle(path string) string {
 	return base
 }
 
-// formatRuntime spells accumulated milliseconds shortly, as the rows show them:
-// "3d 2h 5m", "--" for nothing yet and "1m" for anything under a minute.
-func formatRuntime(ms int64) string {
+// formatRuntime spells accumulated milliseconds shortly, as the rows show them
+// in lang: "3d 2h 5m", "--" for nothing yet and "1m" for anything under a
+// minute.
+func formatRuntime(lang string, ms int64) string {
+	msg := locales.In(lang)
 	total := ms / 1000
 	d := total / 86400
 	h := (total % 86400) / 3600
@@ -66,19 +70,19 @@ func formatRuntime(ms int64) string {
 	s := total % 60
 	parts := make([]string, 0, 3)
 	if d > 0 {
-		parts = append(parts, fmt.Sprintf("%dd", d))
+		parts = append(parts, msg.DurationDay(strconv.FormatInt(d, 10)))
 	}
 	if h > 0 {
-		parts = append(parts, fmt.Sprintf("%dh", h))
+		parts = append(parts, msg.DurationHour(strconv.FormatInt(h, 10)))
 	}
 	if m > 0 {
-		parts = append(parts, fmt.Sprintf("%dm", m))
+		parts = append(parts, msg.DurationMinute(strconv.FormatInt(m, 10)))
 	}
 	if len(parts) == 0 {
 		if s > 0 {
-			parts = append(parts, "1m")
+			parts = append(parts, msg.DurationMinute("1"))
 		} else {
-			parts = append(parts, "--")
+			parts = append(parts, msg.DurationNone())
 		}
 	}
 	return strings.Join(parts, " ")

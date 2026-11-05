@@ -1,8 +1,11 @@
 package main
 
 import (
+	"os"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"go-launcher/locales"
 )
 
 // openSettings shows the settings window, opening it the first time. In tests
@@ -18,7 +21,7 @@ func (v *view) openSettings() {
 		return
 	}
 	w := mygo.NewWindow(mygo.WindowOptions{
-		Title:           "Settings",
+		Title:           v.msgs().Settings(),
 		Width:           560,
 		Height:          720,
 		MinWidth:        480,
@@ -38,8 +41,10 @@ func (v *view) openSettings() {
 // keeps in its store and in ui-state.json, grouped in cards as MyGo Music
 // groups its own.
 func (v *view) settingsView(c *ui.Context) {
+	v.lang = c.Locale()
 	p := applyPalette(c, v.prefs.Accent)
 	v.pal = p
+	m := v.msgs()
 	c.Root().Background(p.sidebar)
 	if w := v.app.settingsWin; w != nil {
 		c.OnShortcut(ui.Cmd, ui.KeyW, func() { w.Close() })
@@ -47,7 +52,7 @@ func (v *view) settingsView(c *ui.Context) {
 	s := &v.app.store.Settings
 
 	ui.Scroll(c).Fill().Padding(24, 28, 32, 28).Gap(8).Children(func() {
-		ui.Text(c, "Settings").FontSize(22).FontWeight(700).LetterSpacing(-0.3).Margin(0, 0, 10, 0)
+		ui.Text(c, m.Settings()).FontSize(22).FontWeight(700).LetterSpacing(-0.3).Margin(0, 0, 10, 0)
 
 		group := func(title string, rows func()) {
 			ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(p.muted).Margin(14, 4, 4, 4)
@@ -66,8 +71,24 @@ func (v *view) settingsView(c *ui.Context) {
 			})
 		}
 
-		group("Appearance", func() {
-			row("Theme", "Auto follows the system's light or dark appearance", func() {
+		group(m.Appearance(), func() {
+			row(m.Language(), "", func() {
+				chinese, english := m.SimplifiedChinese(), m.English()
+				// The stored choice is what the dropdown shows; with none,
+				// it shows the language the system chose.
+				choice := english
+				if v.prefs.Language == "zh-Hans" || v.prefs.Language == "auto" && v.lang == "zh-Hans" {
+					choice = chinese
+				}
+				if ui.Select(c, &choice, []string{chinese, english}).Label(m.Language()).Changed() {
+					lang := "en"
+					if choice == chinese {
+						lang = "zh-Hans"
+					}
+					v.changeLanguage(lang)
+				}
+			})
+			row(m.Theme(), "", func() {
 				modes := []string{"auto", "light", "dark"}
 				i := 0
 				for k, mode := range modes {
@@ -75,11 +96,11 @@ func (v *view) settingsView(c *ui.Context) {
 						i = k
 					}
 				}
-				if segmented(c.Key("theme"), &i, "System", "Light", "Dark") {
+				if segmented(c.Key("theme"), &i, m.System(), m.Light(), m.Dark()) {
 					v.changeTheme(modes[i])
 				}
 			})
-			row("Accent color", "Buttons, selections and highlights follow it", func() {
+			row(m.AccentColor(), "MyGo!!!!!", func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					for _, a := range accentPresets {
 						color := a.light
@@ -101,75 +122,100 @@ func (v *view) settingsView(c *ui.Context) {
 						}
 					}
 					custom := accentColor(v.prefs.Accent, p.dark)
-					well := ui.ColorWell(c, &custom).Label("Custom accent color")
+					well := ui.ColorWell(c, &custom).Label(m.CustomAccent())
 					if well.Changed() {
 						v.prefs.Accent = hexColor(custom)
 						v.changedSettings()
 					}
 				})
 			})
+			row(m.BackgroundOnClose(), m.BackgroundOnCloseHint(), func() {
+				if ui.Switch(c, &s.BackgroundOnClose).Label(m.ToggleBackgroundOnClose()).Changed() {
+					v.setBackgroundOnClose(s.BackgroundOnClose)
+				}
+			})
 		})
 
-		group("Behavior", func() {
-			row("Auto timing", "Add a program's running time to its total while it runs", func() {
-				if ui.Switch(c, &s.AutoTime).Label("Toggle auto timing").Changed() {
+		group(m.Behavior(), func() {
+			row(m.AutoTiming(), m.AutoTimingHint(), func() {
+				if ui.Switch(c, &s.AutoTime).Label(m.ToggleAutoTiming()).Changed() {
 					v.app.save()
 				}
 			})
-			row("Auto-hide the launcher", "Minimize the window after launching an item", func() {
-				if ui.Switch(c, &s.AutoHide).Label("Toggle auto-hide").Changed() {
+			row(m.AutoHide(), m.AutoHideHint(), func() {
+				if ui.Switch(c, &s.AutoHide).Label(m.ToggleAutoHide()).Changed() {
 					v.app.save()
 				}
 			})
-			row("Always on top", "Keep the window above the other windows", func() {
-				if ui.Switch(c, &s.AlwaysOnTop).Label("Toggle always on top").Changed() {
+			row(m.AlwaysOnTop(), m.AlwaysOnTopHint(), func() {
+				if ui.Switch(c, &s.AlwaysOnTop).Label(m.ToggleAlwaysOnTop()).Changed() {
 					v.app.setAlwaysOnTop(s.AlwaysOnTop)
 				}
 			})
 		})
 
-		group("Paths", func() {
-			row("Absolute paths for new items", "Store new items with full paths instead of paths relative to the launcher", func() {
-				if ui.Switch(c, &s.AbsolutePaths).Label("Toggle absolute paths").Changed() {
+		group(m.Paths(), func() {
+			row(m.AbsolutePaths(), m.AbsolutePathsHint(), func() {
+				if ui.Switch(c, &s.AbsolutePaths).Label(m.ToggleAbsolutePaths()).Changed() {
 					v.app.save()
 				}
 			})
-			row("Convert all paths", "Rewrite the paths of every item at once", func() {
+			row(m.ConvertAllPaths(), m.ConvertAllPathsHint(), func() {
 				ui.Row(c).Gap(8).Children(func() {
-					if ui.Button(c, "To absolute").Clicked() {
+					if ui.Button(c, m.ToAbsolute()).Clicked() {
 						v.convertPaths(true)
 					}
-					if ui.Button(c, "To relative").Clicked() {
+					if ui.Button(c, m.ToRelative()).Clicked() {
 						v.convertPaths(false)
 					}
 				})
 			})
 		})
 
-		group("Data", func() {
-			row("Refresh", "Apply an edit made to the data file by hand", func() {
-				if ui.Button(c, "Refresh").Clicked() {
+		group(m.Data(), func() {
+			row(m.Refresh(), m.RefreshHint(), func() {
+				if ui.Button(c, m.Refresh()).Clicked() {
 					v.refreshData()
 				}
 			})
-			row("Data directory", "The store, cached icons and window state live here", func() {
-				if ui.Button(c, "Open folder").Clicked() {
+			row(m.DataDirectory(), m.DataDirectoryHint(), func() {
+				if ui.Button(c, m.OpenFolder()).Clicked() {
 					v.app.openDataDir()
 				}
 			})
-			row("Icons", "Extract every auto-generated icon from its file again", func() {
-				if ui.Button(c, "Update icons").Clicked() {
+			row(m.Icons(), m.IconsHint(), func() {
+				if ui.Button(c, m.UpdateIcons()).Clicked() {
 					v.batchUpdateIcons()
 				}
 			})
 		})
 
-		group("About", func() {
-			row("MyGo Launcher", "Version "+appVersion, func() {
-				if ui.Button(c, "GitHub").Clicked() {
-					mygo.Shell.OpenExternal("https://github.com/canwdev/go-launcher")
+		group(m.About(), func() {
+			row("MyGo Launcher", m.Version(appVersion), func() {
+				if ui.Button(c, m.Github()).Clicked() {
+					mygo.Shell.OpenExternal("https://github.com/canwdev/mygo-launcher")
 				}
 			})
+			if v.app.updates {
+				row(m.AutoCheckUpdates(), m.AutoCheckUpdatesHint(), func() {
+					on := updateChecks()
+					if ui.Switch(c, &on).Label(m.ToggleAutoCheckUpdates()).Changed() {
+						setUpdateChecks(on)
+					}
+				})
+				row(m.AutoDownloadUpdates(), m.AutoDownloadUpdatesHint(), func() {
+					on := updateDownloads()
+					sw := ui.Switch(c, &on).Label(m.ToggleAutoDownloadUpdates()).Disabled(!updateChecks())
+					if sw.Changed() {
+						setUpdateDownloads(on)
+					}
+				})
+				row(m.Updates(), updateStatus(m), func() {
+					if ui.Button(c, m.CheckForUpdates()).Clicked() {
+						checkForUpdates()
+					}
+				})
+			}
 		})
 	})
 }
@@ -187,6 +233,43 @@ func (v *view) changeTheme(mode string) {
 		v.applyTheme()
 		v.app.refresh()
 	})
+}
+
+// changeLanguage makes the app show the language the preference asks for. The
+// language is set outside the frame, as the theme is.
+func (v *view) changeLanguage(lang string) {
+	v.prefs.Language = lang
+	savePrefs(v.prefs)
+	if v.app.win == nil {
+		return // headless: there is no app locale to change
+	}
+	v.app.dispatch(func() {
+		mygo.App.SetLocale(localeTag(lang))
+		if w := v.app.settingsWin; w != nil {
+			w.SetTitle(locales.In(mygo.App.Locale()).Settings())
+		}
+		v.app.refresh()
+	})
+}
+
+// applyLanguage makes the app show the language the preference asks for at
+// startup: "auto" is "" to follow the user's languages. MYGO_LOCALE (mygo dev
+// -lang) keeps its choice for the run.
+func (v *view) applyLanguage() {
+	if os.Getenv("MYGO_LOCALE") != "" {
+		return
+	}
+	mygo.App.SetLocale(localeTag(v.prefs.Language))
+}
+
+// localeTag is the tag of a language preference: "auto" follows the user's
+// languages, which SetLocale says with "".
+func localeTag(pref string) string {
+	switch pref {
+	case "en", "zh-Hans":
+		return pref
+	}
+	return ""
 }
 
 // changedSettings keeps the view's own settings and redraws both windows.

@@ -26,6 +26,7 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 	item, slot := ref.item, ref.slot
 	st := v.states[item.GUID]
 	p := v.pal
+	m := v.msgs()
 
 	row := ui.Row(c).Height(54).Padding(0, 8).Gap(12).Radius(10).AlignItems(ui.Center)
 	switch {
@@ -63,7 +64,7 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 				ui.Text(c, item.Name).FontSize(14).FontWeight(500).TextColor(p.text).
 					SingleLine().Shrink(1).MinWidth(0)
 				if item.RunAsAdmin {
-					ui.Icon(c, iconShield).Size(13, 13).TextColor(c.Theme().Warning).Tooltip("Runs as administrator")
+					ui.Icon(c, iconShield).Size(13, 13).TextColor(c.Theme().Warning).Tooltip(m.RunsAsAdmin())
 				}
 			})
 			if item.Path != "" {
@@ -78,9 +79,10 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 // runButton runs an item, or stops the process it started.
 func (v *view) runButton(c *ui.Context, item *AppItem, st ItemState) {
 	p := v.pal
-	label, icon := "Run", iconPlay
+	m := v.msgs()
+	label, icon := m.Run(), iconPlay
 	if st.Running {
-		label, icon = "Stop", iconStop
+		label, icon = m.Stop(), iconStop
 	}
 	b := ui.ButtonBase(c).Height(28).PaddingX(12).Gap(6).Radius(999).AlignItems(ui.Center).
 		Background(p.hover).TextColor(p.text).Label(label).FocusRing(false)
@@ -110,12 +112,13 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	// A running process locks the runtime only while its clock is moving.
 	timed := st.Running && v.app.store.Settings.AutoTime
 
-	hint := "Click to edit runtime"
+	m := v.msgs()
+	hint := m.RuntimeEditHint()
 	switch {
 	case timed:
-		hint = "Running — stop the program to edit its runtime"
+		hint = m.RuntimeRunningHint()
 	case st.Running:
-		hint = "Running, auto timing is off — click to edit the runtime"
+		hint = m.RuntimeRunningNoAutoHint()
 	}
 	field := ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 5).Radius(5)
 	field.Tooltip(hint)
