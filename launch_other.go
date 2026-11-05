@@ -4,28 +4,8 @@ package main
 
 import (
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"time"
 )
-
-func openWithDefaultHandler(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", path).Start()
-	default:
-		return exec.Command("xdg-open", path).Start()
-	}
-}
-
-func revealFile(path string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", "-R", path).Start()
-	default:
-		return exec.Command("xdg-open", filepath.Dir(path)).Start()
-	}
-}
 
 // startProcess launches path with args in workDir and returns the running
 // command; the caller decides how to wait/cleanup. elevated（以管理员身份启动）

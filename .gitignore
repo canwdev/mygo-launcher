@@ -1,9 +1,10 @@
 *.exe
 *.exe~
+/go-launcher
 /.go-launcher-data
-/build/bin
-node_modules
-/frontend/dist
+/build/
+/resources/.render/
+mygo_windows_*.syso
 *.json.md5
 *.log
 .gocache

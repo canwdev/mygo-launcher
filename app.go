@@ -1,87 +1,21 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	"image/png"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	_ "golang.org/x/image/bmp"
-
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 	"github.com/google/uuid"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-type AppItem struct {
-	GUID       string `json:"guid"`
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	Icon       string `json:"icon,omitempty"`
-	RuntimeMs  int64  `json:"runtime_ms,omitempty"`
-	Args       string `json:"args,omitempty"`
-	WorkingDir string `json:"working_dir,omitempty"`
-	// RunAsAdmin 来自 item 编辑弹窗的“Run as administrator”勾选：为 true 时始终
-	// 以管理员身份启动（Windows 走 ShellExecuteEx 的 "runas" 动词，系统弹 UAC）；
-	// 为 false 时仅在程序自身要求提权（ERROR_ELEVATION_REQUIRED）时才回退到 runas。
-	RunAsAdmin bool `json:"run_as_admin,omitempty"`
-}
-
-type CategoryNode struct {
-	GUID  string    `json:"guid"`
-	Name  string    `json:"name"`
-	Slots []*string `json:"slots"` // nil = empty cell, otherwise an app guid
-}
-
-type Settings struct {
-	GameMode      bool `json:"game_mode"`
-	AbsolutePaths bool `json:"absolute_paths"`
-	// AutoHide 是窗口最小化/恢复的“总开关”：开启时启动任意条目都会最小化
-	// launcher（Game mode 的跟踪进程结束后自动恢复窗口）；关闭时启动不做任何
-	// 最小化，Game mode 的最小化与自动恢复逻辑同样失效（跟踪/计时不受影响）。
-	AutoHide bool `json:"auto_hide"`
-	// AlwaysOnTop 让窗口始终置顶（全局菜单“窗口置顶”）。开启后在 startup 中通过
-	// WindowSetAlwaysOnTop 恢复，切换时由 SetAlwaysOnTop 立即应用并持久化。
-	AlwaysOnTop bool `json:"always_on_top"`
-}
-
-type AppStore struct {
-	Apps       map[string]*AppItem `json:"apps"` // global app pool
-	Categories []CategoryNode      `json:"categories"`
-	Settings   Settings            `json:"settings"`
-}
-
-type ItemState struct {
-	Running   bool   `json:"running"`
-	RuntimeMs int64  `json:"runtime_ms"`         // persisted baseline (accumulated)
-	StartAt   int64  `json:"start_at,omitempty"` // unix ms of process start, 0 when not running
-	IconURL   string `json:"icon_url,omitempty"`
-}
-
-type AppData struct {
-	Store AppStore             `json:"store"`
-	State map[string]ItemState `json:"state"`
-}
-
-type AddResult struct {
-	Items []*AppItem        `json:"items"`
-	Icons map[string]string `json:"icons"`
-}
-
-type IconResult struct {
-	Icon    string `json:"icon"`
-	IconURL string `json:"icon_url"`
-}
-
+// runningProc is a process the launcher started in game mode and tracks: its
+// runtime accumulates until it exits, and it can be stopped.
 type runningProc struct {
 	start   time.Time
 	wait    func() error
@@ -89,891 +23,330 @@ type runningProc struct {
 	cleanup func()
 }
 
-const dataDir = ".go-launcher-data"
-
-const saveFile = dataDir + "/go-launcher-data.json"
-
-const iconsDir = dataDir + "/cached-icons"
-
-var absBase, _ = filepath.Abs(".")
-
-func toStoredPath(abs string) string {
-	rel, err := filepath.Rel(absBase, abs)
-	if err != nil {
-		return abs
-	}
-	return rel
+// ItemState is what the view shows of an item besides its stored fields.
+type ItemState struct {
+	Running   bool
+	RuntimeMs int64
+	StartAt   int64 // unix ms of the process start, 0 when it is not running
 }
 
-func absPath(p string) string {
-	if filepath.IsAbs(p) {
-		return p
-	}
-	return filepath.Join(absBase, p)
-}
-
-// resolveLaunchPath 解析启动目标路径：裸命令名（无路径分隔符、无盘符）视为
-// PATH 中的可执行命令，用 exec.LookPath 解析出完整路径（含 PATHEXT 扩展名）；
-// 其他输入原样走 absPath。空输入返回空串。
-func resolveLaunchPath(p string) string {
-	if p == "" {
-		return ""
-	}
-	if !strings.ContainsAny(p, "\\/") && !(len(p) >= 2 && p[1] == ':') {
-		if full, err := exec.LookPath(p); err == nil {
-			return full
-		}
-	}
-	return absPath(p)
-}
-
-func saveImage(img image.Image, nameBase string) string {
-	if err := os.MkdirAll(filepath.Join(absBase, iconsDir), 0755); err != nil {
-		return ""
-	}
-	name := fmt.Sprintf("%s-%d.png", sanitizeBase(nameBase), time.Now().UnixNano())
-	abs := filepath.Join(absBase, iconsDir, name)
-	f, err := os.Create(abs)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
-		return ""
-	}
-	return "./" + filepath.ToSlash(filepath.Join(iconsDir, name))
-}
-
-func writeIcon(path string) string {
-	img, err := iconForFile(path)
-	if err != nil {
-		return ""
-	}
-	return saveImage(img, filepath.Base(path))
-}
-
-func defaultStore() AppStore {
-	return AppStore{
-		Apps: map[string]*AppItem{},
-		Categories: []CategoryNode{
-			{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}},
-		},
-		Settings: Settings{GameMode: true, AbsolutePaths: true, AutoHide: true, AlwaysOnTop: false},
-	}
-}
-
-// settingsMissingKey reports whether the raw JSON's settings object lacks the
-// given key (or the whole settings block is missing).
-func settingsMissingKey(data []byte, key string) bool {
-	var probe struct {
-		Settings json.RawMessage `json:"settings"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil || len(probe.Settings) == 0 {
-		return true
-	}
-	var keys map[string]json.RawMessage
-	if err := json.Unmarshal(probe.Settings, &keys); err != nil {
-		return true
-	}
-	_, ok := keys[key]
-	return !ok
-}
-
-// parseStore 解析 store JSON，并补齐默认值 / 迁移旧文件（game_mode、auto_hide
-// 缺省、guid/name/slots 兜底、路径规范化）。ok=false 表示内容不是合法 JSON：
-// 手动编辑写坏的中间状态不应被当成"空 store"覆盖内存数据。
-func parseStore(data []byte) (AppStore, bool) {
-	var store AppStore
-	if err := json.Unmarshal(data, &store); err != nil {
-		return AppStore{}, false
-	}
-	// Files predating the game_mode key (renamed from auto_minimize) carry no
-	// game_mode setting; default it to ON so the runtime display stays visible
-	// on startup. An explicit "game_mode": false is always respected.
-	if settingsMissingKey(data, "game_mode") {
-		store.Settings.GameMode = true
-	}
-	// Files predating the auto_hide key carry no auto_hide setting; default it to
-	// ON so launching keeps hiding the window until the user opts out.
-	if settingsMissingKey(data, "auto_hide") {
-		store.Settings.AutoHide = true
-	}
-	if store.Apps == nil {
-		store.Apps = map[string]*AppItem{}
-	}
-	if len(store.Apps) == 0 && len(store.Categories) == 0 {
-		return defaultStore(), true
-	}
-	for guid, app := range store.Apps {
-		if app == nil {
-			continue
-		}
-		app.Path = normalizePath(app.Path)
-		if app.GUID == "" {
-			app.GUID = guid
-		}
-		if app.Name == "" {
-			app.Name = defaultTitle(absPath(app.Path))
-		}
-	}
-	if len(store.Categories) == 0 {
-		store.Categories = []CategoryNode{{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}}}
-	}
-	for i := range store.Categories {
-		cat := &store.Categories[i]
-		if cat.GUID == "" {
-			cat.GUID = uuid.NewString()
-		}
-		if cat.Name == "" {
-			cat.Name = "Category"
-		}
-		if cat.Slots == nil {
-			cat.Slots = []*string{}
-		}
-	}
-	return store, true
-}
-
-func loadStore() AppStore {
-	data, err := os.ReadFile(saveFile)
-	if err != nil {
-		return defaultStore()
-	}
-	store, ok := parseStore(data)
-	if !ok {
-		return defaultStore()
-	}
-	return store
-}
-
-// writeStoreAtomic 原子写入 store，并返回写出的字节（供调用方记录文件指纹，
-// 让外部改动监听能识别出这是自己的写入）。
-func writeStoreAtomic(store AppStore) ([]byte, error) {
-	data, err := json.MarshalIndent(store, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	tmp := saveFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return nil, err
-	}
-	if err := os.Rename(tmp, saveFile); err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-func (a *App) findItem(guid string) *AppItem {
-	return a.store.Apps[guid]
-}
-
-// openFile 打开/启动一个路径。elevated（item 勾选了“Run as administrator”）时
-// 走提权启动；可执行文件走真正的进程启动（startUntracked），其余文件交给系统默认
-// 处理程序。
-func openFile(path string, args []string, workDir string, elevated bool) error {
-	// Executables are launched through the real process-run mechanism
-	// (startUntracked) with the frontend-supplied args and working directory,
-	// but without full tracking: no process handle is kept for Stop and no
-	// runtime is accumulated.
-	if isExecutable(path) || elevated {
-		return startUntracked(path, args, workDir, elevated)
-	}
-	return openWithDefaultHandler(path)
-}
-
+// App owns the store and the processes. Everything in it is used on the main
+// thread, by the view and the actions it runs; goroutines hand their results
+// over through Window.Update, except for what the mutexes below name.
 type App struct {
-	ctx          context.Context
-	mu           sync.Mutex
 	store        AppStore
 	runtimeStats map[string]int64
 	running      map[string]*runningProc
-	iconCache    map[string]string
 
-	// 外部改动监听（用户手动编辑 go-launcher-data.json 后自动生效），见
-	// store_watch.go。storeFile 是 saveFile 最近一次已知的磁盘状态。
-	storeFile     storeFileState
-	watchStop     chan struct{}
-	watchStart    sync.Once
-	watchStopOnce sync.Once
+	// icons caches decoded icons by the path the store keeps.
+	icons map[string]ui.ImageSource
+
+	// fileMu guards the store file fingerprint, which the watch goroutine reads
+	// and writes.
+	fileMu    sync.Mutex
+	storeFile storeFileState
+
+	// msgMu guards what goroutines hand to the next frame: the toasts to show
+	// and the busy line.
+	msgMu  sync.Mutex
+	toasts []string
+	busy   string
+
+	// tick tells the clock goroutine that a runtime display keeps changing.
+	tick atomic.Bool
+
+	win  *mygo.Window
+	view *view
+
+	watchCancel func()
 }
 
 func NewApp() *App {
-	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0755)
+	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
 	app := &App{
 		store:        loadStore(),
 		runtimeStats: map[string]int64{},
 		running:      map[string]*runningProc{},
-		iconCache:    map[string]string{},
-		watchStop:    make(chan struct{}),
+		icons:        map[string]ui.ImageSource{},
 	}
-	// Seed in-memory runtime stats from the persisted store so GetData/buildState
-	// return the real accumulated time on startup instead of 0 (which previously
-	// made the frontend show no real runtime on every fresh launch).
 	for guid, item := range app.store.Apps {
 		if item != nil {
 			app.runtimeStats[guid] = item.RuntimeMs
 		}
 	}
 	app.pruneIconFiles()
-	// 记住启动时磁盘上的内容，避免监听把刚读进来的文件当成外部改动。
 	app.syncStoreFileState()
 	return app
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-	// Restore the window position persisted at the previous close (see
-	// windowState). Size and maximised state are applied via the startup
-	// options; the position cannot be, because Wails centres the window on
-	// creation, so it is corrected here once the window exists.
-	applyRestoredWindowState(ctx)
-	// 恢复上次的窗口置顶设置（全局菜单“窗口置顶”）。
-	applyAlwaysOnTop(ctx, a.store.Settings.AlwaysOnTop)
-	// 监听 .go-launcher-data/go-launcher-data.json 的外部改动（用户手动编辑后
-	// 自动读取并推送给前端）。
-	a.startStoreWatcher()
-	// Frontend drives its own 30s display refresh (useAutoRuntime); the old
-	// backend 30s state tick was redundant and has been removed. State is still
-	// pushed on launch/stop/icon changes via emitState.
-}
-
-func (a *App) shutdown(_ context.Context) {
-	a.stopStoreWatcher()
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.writeStore()
-}
-
-// beforeClose persists the current window size/maximised state (OnBeforeClose)
-// so the next launch can reopen at the same geometry. It runs while the window
-// still exists, which is required for the geometry snapshot. Always returns
-// false so the window closes normally.
-func (a *App) beforeClose(ctx context.Context) bool {
-	persistWindowState(ctx)
-	return false
-}
-
-func (a *App) emitState() {
-	if a.ctx == nil {
-		return
-	}
-	a.mu.Lock()
-	state := a.buildState()
-	a.mu.Unlock()
-	runtime.EventsEmit(a.ctx, "state:updated", state)
-}
-
-func (a *App) iconURL(rel string) string {
-	if rel == "" {
-		return ""
-	}
-	if url, ok := a.iconCache[rel]; ok {
-		return url
-	}
-	data, err := os.ReadFile(absPath(rel))
-	if err != nil {
-		return ""
-	}
-	url := "data:" + mimeTypeForIcon(rel) + ";base64," + base64.StdEncoding.EncodeToString(data)
-	a.iconCache[rel] = url
-	return url
-}
-
-func mimeTypeForIcon(path string) string {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".gif":
-		return "image/gif"
-	case ".bmp":
-		return "image/bmp"
-	case ".webp":
-		return "image/webp"
-	case ".svg":
-		return "image/svg+xml"
-	default:
-		return "image/png"
-	}
-}
-
-func (a *App) buildState() map[string]ItemState {
-	state := make(map[string]ItemState, len(a.store.Apps))
-	for guid, app := range a.store.Apps {
-		if app == nil {
+// state reports what the view shows of every item.
+func (a *App) state() map[string]ItemState {
+	out := make(map[string]ItemState, len(a.store.Apps))
+	for guid, item := range a.store.Apps {
+		if item == nil {
 			continue
 		}
-		st := ItemState{IconURL: a.iconURL(app.Icon), RuntimeMs: a.runtimeStats[guid]}
+		st := ItemState{RuntimeMs: a.runtimeStats[guid]}
 		if p, ok := a.running[guid]; ok {
 			st.Running = true
-			// Frontend computes the live elapsed (now - start_at); the backend only
-			// reports the process start time and the accumulated baseline.
 			st.StartAt = p.start.UnixMilli()
 		}
-		state[guid] = st
+		out[guid] = st
 	}
-	return state
+	return out
 }
 
-// writeStore 把内存 store（含 runtimeStats 的最新累计值）写入磁盘，并记录写出的
-// 文件指纹，使外部改动监听不会把自己的写入当成用户的手动编辑。调用方必须持有 a.mu。
-func (a *App) writeStore() {
+func (a *App) item(guid string) *AppItem {
+	return a.store.Apps[guid]
+}
+
+// tab returns the tab with guid, or the first one.
+func (a *App) tab(guid string) *CategoryNode {
+	for i := range a.store.Categories {
+		if a.store.Categories[i].GUID == guid {
+			return &a.store.Categories[i]
+		}
+	}
+	if len(a.store.Categories) > 0 {
+		return &a.store.Categories[0]
+	}
+	return nil
+}
+
+// save writes the store, runtime stats included, and records the fingerprint
+// that keeps the watch from reading the file back as an edit made by hand.
+func (a *App) save() {
 	for guid, ms := range a.runtimeStats {
-		if app := a.store.Apps[guid]; app != nil {
-			app.RuntimeMs = ms
+		if item := a.store.Apps[guid]; item != nil {
+			item.RuntimeMs = ms
 		}
 	}
 	data, err := writeStoreAtomic(a.store)
 	if err != nil {
+		a.notify("Saving failed: " + err.Error())
 		return
 	}
+	a.fileMu.Lock()
 	a.rememberStoreFile(data)
+	a.fileMu.Unlock()
+	a.refresh()
 }
 
-// GetData 返回当前 store 与运行状态。读取前先做一次外部改动检查，这样用户手动
-// 编辑文件后（即使监听事件还没处理完）任何一次读取都能拿到新数据。
-func (a *App) GetData() AppData {
-	a.reloadStoreIfChanged()
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return AppData{Store: a.store, State: a.buildState()}
-}
-
-func (a *App) SaveData(store AppStore) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for guid, app := range store.Apps {
-		if app == nil {
-			continue
-		}
-		if ms, ok := a.runtimeStats[guid]; ok {
-			app.RuntimeMs = ms
-		} else {
-			a.runtimeStats[guid] = app.RuntimeMs
-		}
-	}
-	a.store = store
-	a.writeStore()
-	a.pruneIconFiles()
-	return nil
-}
-
-func (a *App) pruneIconFiles() {
-	referenced := make(map[string]bool)
-	for _, app := range a.store.Apps {
-		if app != nil && app.Icon != "" {
-			referenced[filepath.Base(app.Icon)] = true
-		}
-	}
-	entries, err := os.ReadDir(filepath.Join(absBase, iconsDir))
-	if err != nil {
+// refresh redraws the window after the store or a process changed; without a
+// window, as in tests, the view is asked for the frame instead.
+func (a *App) refresh() {
+	if a.win != nil {
+		a.win.Invalidate()
 		return
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if referenced[e.Name()] {
-			continue
-		}
-		_ = os.Remove(filepath.Join(absBase, iconsDir, e.Name()))
+	if a.view != nil {
+		a.view.refresh()
 	}
 }
 
-func (a *App) AddFiles() AddResult {
-	files, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Add Files",
-	})
-	if err != nil {
-		// 用户取消 / 对话框异常：返回空数组，不当作错误抛给前端
-		return AddResult{Items: []*AppItem{}, Icons: map[string]string{}}
-	}
-	if len(files) == 0 {
-		return AddResult{Items: []*AppItem{}, Icons: map[string]string{}}
-	}
-	return a.AddPaths(files)
-}
-
-func (a *App) AddPaths(paths []string) AddResult {
-	if len(paths) == 0 {
-		return AddResult{Items: []*AppItem{}, Icons: map[string]string{}}
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	items := make([]*AppItem, 0, len(paths))
-	icons := make(map[string]string, len(paths))
-	for _, raw := range paths {
-		path := normalizePath(raw)
-		if path == "" {
-			continue
-		}
-		name := defaultTitle(path)
-		target := path
-		args := ""
-		workDir := filepath.Dir(path)
-		iconPath := path
-		if isShortcutFile(path) {
-			if lnk, err := resolveShortcut(path); err == nil && lnk.Target != "" {
-				target = lnk.Target
-				args = lnk.Args
-				iconPath = target
-				workDir = lnk.WorkDir
-				if workDir == "" {
-					workDir = filepath.Dir(target)
-				}
-			}
-		}
-		icon := writeIcon(iconPath)
-		storedPath := target
-		storedWorkDir := workDir
-		if !a.store.Settings.AbsolutePaths {
-			storedPath = toStoredPath(target)
-			storedWorkDir = toStoredPath(workDir)
-		}
-		item := &AppItem{
-			GUID:       uuid.NewString(),
-			Name:       name,
-			Path:       storedPath,
-			WorkingDir: storedWorkDir,
-			Icon:       icon,
-			Args:       args,
-		}
-		items = append(items, item)
-		icons[item.GUID] = a.iconURL(icon)
-	}
-	return AddResult{Items: items, Icons: icons}
-}
-
-func convertItemPaths(item *AppItem, absolute bool) {
-	if item == nil {
+// dispatch runs fn on the main thread, where the store and the view live.
+// Goroutines hand everything they change over through it. Without a window,
+// as in tests, it runs at once.
+func (a *App) dispatch(fn func()) {
+	if a.win == nil {
+		fn()
 		return
 	}
-	if absolute {
-		if item.Path != "" {
-			item.Path = absPath(item.Path)
-		}
-		if item.WorkingDir != "" {
-			item.WorkingDir = absPath(item.WorkingDir)
-		}
-		if item.Icon != "" {
-			item.Icon = absPath(item.Icon)
-		}
-		return
-	}
-	if item.Path != "" {
-		item.Path = toStoredPath(absPath(item.Path))
-	}
-	if item.WorkingDir != "" {
-		item.WorkingDir = toStoredPath(absPath(item.WorkingDir))
-	}
-	if item.Icon != "" {
-		item.Icon = toStoredPath(absPath(item.Icon))
+	a.win.Update(fn)
+}
+
+// minimize and restore act on the window when there is one, following the
+// auto-hide setting.
+func (a *App) minimize() {
+	if a.win != nil {
+		a.win.Minimize()
 	}
 }
 
-func (a *App) ConvertToAbsolute() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, app := range a.store.Apps {
-		convertItemPaths(app, true)
+func (a *App) restore() {
+	if a.win != nil {
+		a.win.Restore()
 	}
-	a.writeStore()
-	return nil
 }
 
-func (a *App) ConvertToRelative() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, app := range a.store.Apps {
-		convertItemPaths(app, false)
-	}
-	a.writeStore()
-	return nil
+// notify queues a toast for the next frame; safe from any goroutine.
+func (a *App) notify(msg string) {
+	a.msgMu.Lock()
+	a.toasts = append(a.toasts, msg)
+	a.msgMu.Unlock()
+	a.refresh()
 }
 
-func (a *App) ConvertItemToAbsolute(guid string) error {
-	return a.convertItem(guid, true)
-}
-
-func (a *App) ConvertItemToRelative(guid string) error {
-	return a.convertItem(guid, false)
-}
-
-func (a *App) convertItem(guid string, absolute bool) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	item := a.findItem(guid)
-	if item == nil {
-		return fmt.Errorf("invalid item guid %q", guid)
-	}
-	convertItemPaths(item, absolute)
-	a.writeStore()
-	return nil
-}
-
-// pickToStored converts a path returned by an OS picker into the form the item
-// field should show and persist. With "Abs path for new items" on, the picked
-// absolute path is kept as-is; with it off, the pick is relativized against the
-// launcher base dir (like AddPaths does for new items), so values inserted into
-// the create/edit dialogs automatically follow the setting. Paths that cannot
-// be relativized (e.g. on another drive) are returned unchanged.
-func (a *App) pickToStored(picked string) string {
-	if picked == "" {
-		return picked
-	}
-	a.mu.Lock()
-	absolutePaths := a.store.Settings.AbsolutePaths
-	a.mu.Unlock()
-	if absolutePaths {
-		return picked
-	}
-	return toStoredPath(picked)
-}
-
-func (a *App) PickFile(initialDir string) (string, error) {
-	if initialDir == "" {
-		initialDir = absBase
-	}
-	picked, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Select File",
-		DefaultDirectory: initialDir,
-	})
+func (a *App) notifyErr(err error) {
 	if err != nil {
-		return "", err
+		a.notify(err.Error())
 	}
-	return a.pickToStored(picked), nil
 }
 
-func (a *App) PickImageFile(initialDir string) (string, error) {
-	if initialDir == "" {
-		initialDir = absBase
-	}
-	picked, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Select Image",
-		DefaultDirectory: initialDir,
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Images (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg)", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg"},
-		},
-	})
-	if err != nil {
-		return "", err
-	}
-	return a.pickToStored(picked), nil
+// setBusy shows (or clears, with "") the busy line; safe from any goroutine.
+func (a *App) setBusy(msg string) {
+	a.msgMu.Lock()
+	a.busy = msg
+	a.msgMu.Unlock()
+	a.refresh()
 }
 
-func (a *App) PickDirectory(initialDir string) (string, error) {
-	if initialDir == "" {
-		initialDir = absBase
-	}
-	picked, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "Select Folder",
-		DefaultDirectory: initialDir,
-	})
-	if err != nil {
-		return "", err
-	}
-	return a.pickToStored(picked), nil
+func (a *App) takeMessages() (toasts []string, busy string) {
+	a.msgMu.Lock()
+	toasts, busy = a.toasts, a.busy
+	a.toasts = nil
+	a.msgMu.Unlock()
+	return toasts, busy
 }
 
-// applyAlwaysOnTop 把置顶状态应用到窗口。ctx 为空（startup 之前的调用）时直接
-// 忽略：窗口还不存在，启动后会由 startup 重新应用一次。
-func applyAlwaysOnTop(ctx context.Context, onTop bool) {
-	if ctx == nil {
-		return
-	}
-	runtime.WindowSetAlwaysOnTop(ctx, onTop)
+// openPath opens a file, a folder or a URL with the system's default handler.
+func openPath(path string) error {
+	return mygo.Shell.OpenPath(path)
 }
 
-// SetAlwaysOnTop 切换窗口置顶（全局菜单“窗口置顶”）：立即应用到窗口并写入
-// store（前端也会把同一个开关随 SaveData 一起持久化，重复写入无害）。
-func (a *App) SetAlwaysOnTop(onTop bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.store.Settings.AlwaysOnTop = onTop
-	applyAlwaysOnTop(a.ctx, onTop)
-	a.writeStore()
+// openFile opens a path: executables (and items that ask for elevation) start as
+// a real process, so args and working directory apply, but without tracking:
+// no Stop handle, no runtime.
+func openFile(path string, args []string, workDir string, elevated bool) error {
+	if isExecutable(path) || elevated {
+		return startUntracked(path, args, workDir, elevated)
+	}
+	return openPath(path)
 }
 
-func (a *App) OpenDirectory(path string) error {
-	if path == "" {
-		_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0755)
-		path = filepath.Join(absBase, dataDir)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%q is not a directory", path)
-	}
-	return openWithDefaultHandler(path)
+// launchPlan is what a launch needs, read on the main thread: the process may
+// take a while to start (an elevation prompt waits for the user), so it runs on
+// a goroutine of its own.
+type launchPlan struct {
+	guid     string
+	path     string
+	args     []string
+	workDir  string
+	elevated bool
+	track    bool // game mode accumulates the runtime of executables
+	hide     bool // auto-hide minimizes the window
 }
 
-func (a *App) ChangeIcon(guid string) (IconResult, error) {
-	a.mu.Lock()
-	item := a.findItem(guid)
+var errAlreadyRunning = errors.New("already running")
+
+// planLaunch reads what running an item takes.
+func (a *App) planLaunch(guid string) (launchPlan, error) {
+	item := a.item(guid)
 	if item == nil {
-		a.mu.Unlock()
-		return IconResult{}, fmt.Errorf("invalid item guid %q", guid)
-	}
-	path := absPath(item.Path)
-	icon0 := item.Icon
-	a.mu.Unlock()
-
-	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Change Icon",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Images (*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg)", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp;*.svg"},
-		},
-	})
-	if err != nil {
-		return IconResult{}, err
-	}
-	if selection == "" {
-		return IconResult{Icon: icon0, IconURL: a.iconURL(icon0)}, nil
-	}
-	f, err := os.Open(selection)
-	if err != nil {
-		return IconResult{}, err
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		return IconResult{}, fmt.Errorf("unsupported image: %v", err)
-	}
-	icon := saveImage(img, filepath.Base(path)+"-custom")
-	if icon == "" {
-		return IconResult{}, fmt.Errorf("failed to save icon")
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	item = a.findItem(guid)
-	if item == nil {
-		return IconResult{}, fmt.Errorf("invalid item guid %q", guid)
-	}
-	if old := item.Icon; old != "" {
-		_ = os.Remove(absPath(old))
-		delete(a.iconCache, old)
-	}
-	item.Icon = icon
-	a.writeStore()
-	return IconResult{Icon: icon, IconURL: a.iconURL(icon)}, nil
-}
-
-func (a *App) UpdateIcon(guid string) (IconResult, error) {
-	a.mu.Lock()
-	item := a.findItem(guid)
-	if item == nil {
-		a.mu.Unlock()
-		return IconResult{}, fmt.Errorf("invalid item guid %q", guid)
-	}
-	if item.Path == "" {
-		a.mu.Unlock()
-		return IconResult{}, fmt.Errorf("item has no path to extract an icon from")
-	}
-	// 裸命令名（如 cmd / notepad）先解析 PATH 到真实 exe，再提取其图标
-	path := resolveLaunchPath(item.Path)
-	a.mu.Unlock()
-
-	icon := writeIcon(path)
-	if icon == "" {
-		return IconResult{}, fmt.Errorf("failed to regenerate icon")
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	item = a.findItem(guid)
-	if item == nil {
-		return IconResult{}, fmt.Errorf("invalid item guid %q", guid)
-	}
-	if old := item.Icon; old != "" {
-		_ = os.Remove(absPath(old))
-		delete(a.iconCache, old)
-	}
-	item.Icon = icon
-	a.writeStore()
-	return IconResult{Icon: icon, IconURL: a.iconURL(icon)}, nil
-}
-
-func (a *App) Reveal(guid string) error {
-	a.mu.Lock()
-	item := a.findItem(guid)
-	if item == nil {
-		a.mu.Unlock()
-		return fmt.Errorf("invalid item guid %q", guid)
-	}
-	target := absPath(item.Path)
-	if item.Path == "" && item.WorkingDir != "" {
-		target = absPath(item.WorkingDir)
-	}
-	a.mu.Unlock()
-	if target == "" {
-		return nil
-	}
-	return revealFile(target)
-}
-
-func (a *App) launch(guid string) error {
-	a.mu.Lock()
-	item := a.findItem(guid)
-	if item == nil {
-		a.mu.Unlock()
-		return fmt.Errorf("invalid item guid %q", guid)
+		return launchPlan{}, fmt.Errorf("invalid item guid %q", guid)
 	}
 	if _, ok := a.running[guid]; ok {
-		a.mu.Unlock()
-		return nil
+		return launchPlan{}, errAlreadyRunning
 	}
-	gameMode := a.store.Settings.GameMode
-	autoHide := a.store.Settings.AutoHide
-	runAsAdmin := item.RunAsAdmin
-	workingDir := ""
+	plan := launchPlan{
+		guid:     guid,
+		hide:     a.store.Settings.AutoHide,
+		elevated: item.RunAsAdmin,
+		args:     splitArgs(item.Args),
+	}
 	if item.WorkingDir != "" {
-		workingDir = absPath(item.WorkingDir)
+		plan.workDir = absPath(item.WorkingDir)
 	}
-	args := splitArgs(item.Args)
-	a.mu.Unlock()
-
-	// 目录型 item：未填 Path 时打开 Working directory（无进程可跟踪，不参与
-	// game mode 的跟踪/计时）；两者都空则静默不执行。
 	if item.Path == "" {
-		if workingDir == "" {
-			return nil
-		}
-		if err := openFile(workingDir, nil, "", false); err != nil {
-			return err
-		}
-		// Auto-hide 总开关开启：打开目录也直接最小化 launcher，无自动恢复
-		a.minimiseIfAutoHide(autoHide)
-		return nil
+		// A folder item opens its working directory; there is no process to
+		// track or time.
+		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
+		return plan, nil
 	}
+	plan.path = resolveLaunchPath(item.Path)
+	plan.track = a.store.Settings.GameMode && isExecutable(plan.path)
+	return plan, nil
+}
 
-	path := resolveLaunchPath(item.Path)
-
-	// Auto-hide 关闭 = 主开关关闭：无论 game mode 与否都不最小化、不自动恢复
-	// （game mode 仍跟踪/计时）。此处仅当 autoHide 开启时才涉及窗口控制。
-	//
-	// Game mode off: plain open only - no tracking, no timing. Auto-hide 开启时
-	// 直接最小化 launcher，因未跟踪进程故不会自动恢复窗口。
-	if !gameMode {
-		if err := openFile(path, args, workingDir, runAsAdmin); err != nil {
-			return err
-		}
-		a.minimiseIfAutoHide(autoHide)
-		return nil
+// planOpen reads what opening an item without tracking takes, as items that
+// time themselves by hand are.
+func (a *App) planOpen(guid string) (launchPlan, error) {
+	item := a.item(guid)
+	if item == nil {
+		return launchPlan{}, fmt.Errorf("invalid item guid %q", guid)
 	}
+	plan := launchPlan{
+		guid:     guid,
+		hide:     a.store.Settings.AutoHide,
+		elevated: item.RunAsAdmin,
+		args:     splitArgs(item.Args),
+	}
+	if item.WorkingDir != "" {
+		plan.workDir = absPath(item.WorkingDir)
+	}
+	if item.Path == "" {
+		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
+		return plan, nil
+	}
+	plan.path = resolveLaunchPath(item.Path)
+	return plan, nil
+}
 
-	if isExecutable(path) {
+// runLaunch starts what a plan describes. It may block, as an elevation prompt
+// does, so it runs on a goroutine of its own.
+func (a *App) runLaunch(plan launchPlan) {
+	if plan.path == "" {
+		return
+	}
+	if plan.track {
 		p := &runningProc{}
-		if err := startTracked(path, args, workingDir, runAsAdmin, p); err != nil {
-			return err
+		if err := startTracked(plan.path, plan.args, plan.workDir, plan.elevated, p); err != nil {
+			a.notifyErr(err)
+			return
 		}
-		a.mu.Lock()
-		a.running[guid] = p
-		a.mu.Unlock()
-		a.emitState()
-		if autoHide {
-			runtime.WindowMinimise(a.ctx)
-		}
-		go func() {
-			_ = p.wait()
-			elapsed := time.Since(p.start).Milliseconds()
-			a.mu.Lock()
+		a.dispatch(func() {
+			a.running[plan.guid] = p
+			if plan.hide {
+				a.minimize()
+			}
+		})
+		a.watchExit(plan.guid, p, plan.hide)
+		return
+	}
+	if err := openFile(plan.path, plan.args, plan.workDir, plan.elevated); err != nil {
+		a.notifyErr(err)
+		return
+	}
+	if plan.hide {
+		a.minimize()
+	}
+}
+
+// watchExit accumulates a tracked process' runtime once it ends, and brings the
+// launcher back when it was the last one and auto-hide asked for it.
+func (a *App) watchExit(guid string, p *runningProc, hide bool) {
+	go func() {
+		_ = p.wait()
+		elapsed := time.Since(p.start).Milliseconds()
+		a.dispatch(func() {
 			a.runtimeStats[guid] += elapsed
 			delete(a.running, guid)
-			restore := len(a.running) == 0
 			if p.cleanup != nil {
 				p.cleanup()
 			}
-			a.writeStore()
-			a.mu.Unlock()
-			a.emitState()
-			// Auto-hide 开启（且本进程是 game mode 跟踪的）才在最后一个进程
-			// 结束后自动恢复窗口；开关关闭时不做任何窗口控制。
-			if autoHide && restore {
-				runtime.WindowUnminimise(a.ctx)
+			a.save()
+			if hide && len(a.running) == 0 {
+				a.restore()
 			}
-		}()
-		return nil
-	}
-	if err := openFile(path, args, workingDir, runAsAdmin); err != nil {
-		return err
-	}
-	a.minimiseIfAutoHide(autoHide)
-	return nil
+		})
+	}()
 }
 
-// minimiseIfAutoHide 在 Auto-hide Launcher 开启时把 launcher 窗口最小化。
-// 仅供非跟踪启动使用（game mode off / 非可执行文件 / 目录型 item / Open），
-// 由于没有进程句柄可监听退出，窗口最小化后不会自动恢复。
-func (a *App) minimiseIfAutoHide(autoHide bool) {
-	if autoHide {
-		runtime.WindowMinimise(a.ctx)
-	}
-}
-
-func (a *App) Launch(guid string) error {
-	return a.launch(guid)
-}
-
-// Open launches an item without any process tracking (no runtime tracking, no
-// Stop handle). Used for items that opt into manual-only timing (autoTimer),
-// e.g. programs the launcher cannot track as a process. Auto-hide 开启时同样
-// 最小化 launcher；未跟踪进程，故不会自动恢复窗口。
-func (a *App) Open(guid string) error {
-	a.mu.Lock()
-	item := a.findItem(guid)
-	if item == nil {
-		a.mu.Unlock()
-		return fmt.Errorf("invalid item guid %q", guid)
-	}
-	autoHide := a.store.Settings.AutoHide
-	runAsAdmin := item.RunAsAdmin
-	args := splitArgs(item.Args)
-	workDir := ""
-	if item.WorkingDir != "" {
-		workDir = absPath(item.WorkingDir)
-	}
-	a.mu.Unlock()
-
-	// 目录型 item：未填 Path 时打开工作目录；两者都空则静默不执行。
-	if item.Path == "" {
-		if workDir == "" {
-			return nil
-		}
-		if err := openFile(workDir, nil, "", false); err != nil {
-			return err
-		}
-		a.minimiseIfAutoHide(autoHide)
-		return nil
-	}
-	if err := openFile(resolveLaunchPath(item.Path), args, workDir, runAsAdmin); err != nil {
-		return err
-	}
-	a.minimiseIfAutoHide(autoHide)
-	return nil
-}
-
-func (a *App) Stop(guid string) error {
-	a.mu.Lock()
+func (a *App) stop(guid string) error {
 	p, ok := a.running[guid]
-	a.mu.Unlock()
 	if ok && p.stop != nil {
 		if err := p.stop(); err != nil {
 			return err
 		}
-		a.emitState()
+		a.refresh()
 	}
 	return nil
 }
 
-// SetRuntimeMs overrides the cumulative runtime for an item. It writes the
-// authoritative runtimeStats directly so the normal SaveData merge cannot
-// clobber a user-edited value. Negative input is clamped to 0.
-func (a *App) SetRuntimeMs(guid string, ms int64) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	item := a.findItem(guid)
+// setRuntimeMs overrides an item's accumulated runtime (the runtime dialog and
+// the manual timer write through it). Negative input is clamped to 0.
+func (a *App) setRuntimeMs(guid string, ms int64) error {
+	item := a.item(guid)
 	if item == nil {
 		return fmt.Errorf("invalid item guid %q", guid)
 	}
@@ -982,6 +355,237 @@ func (a *App) SetRuntimeMs(guid string, ms int64) error {
 	}
 	a.runtimeStats[guid] = ms
 	item.RuntimeMs = ms
-	a.writeStore()
+	a.save()
+	a.refresh()
 	return nil
+}
+
+// addFiles asks for files and adds them to the tab with tabGUID.
+func (a *App) addFiles(tabGUID string) {
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:   a.win,
+			Title:    "Add Files",
+			Multiple: true,
+		})
+		if err != nil || len(paths) == 0 {
+			return
+		}
+		a.addPaths(paths, tabGUID)
+	}()
+}
+
+// addPaths adds files, folders and shortcuts to a tab. Icons are extracted on a
+// goroutine, since that reads the disk for every file.
+func (a *App) addPaths(paths []string, tabGUID string) {
+	if len(paths) == 0 {
+		return
+	}
+	absolute := a.store.Settings.AbsolutePaths
+	a.setBusy("Adding files…")
+	go func() {
+		items := make([]*AppItem, 0, len(paths))
+		for _, raw := range paths {
+			if item := buildItem(raw, absolute); item != nil {
+				items = append(items, item)
+			}
+		}
+		a.dispatch(func() {
+			a.setBusy("")
+			if len(items) == 0 {
+				return
+			}
+			tab := a.tab(tabGUID)
+			if tab == nil {
+				return
+			}
+			for _, item := range items {
+				a.store.Apps[item.GUID] = item
+				a.runtimeStats[item.GUID] = 0
+				guid := item.GUID
+				tab.Slots = append(tab.Slots, &guid)
+			}
+			a.save()
+		})
+	}()
+}
+
+// buildItem makes an item for a path, resolving shortcuts and caching the icon.
+// It reads the disk, so it runs off the main thread.
+func buildItem(raw string, absolute bool) *AppItem {
+	path := normalizePath(raw)
+	if path == "" {
+		return nil
+	}
+	name := defaultTitle(path)
+	target, args, workDir, iconPath := path, "", filepath.Dir(path), path
+	if isShortcutFile(path) {
+		if lnk, err := resolveShortcut(path); err == nil && lnk.Target != "" {
+			target, args, iconPath = lnk.Target, lnk.Args, lnk.Target
+			workDir = lnk.WorkDir
+			if workDir == "" {
+				workDir = filepath.Dir(target)
+			}
+		}
+	}
+	return &AppItem{
+		GUID:       uuid.NewString(),
+		Name:       name,
+		Path:       storedForm(target, absolute),
+		WorkingDir: storedForm(workDir, absolute),
+		Icon:       writeIcon(iconPath),
+		Args:       args,
+	}
+}
+
+func storedForm(path string, absolute bool) string {
+	if path == "" || absolute {
+		return path
+	}
+	return toStoredPath(path)
+}
+
+// updateIcon extracts an item's icon again from its path.
+func (a *App) updateIcon(guid string) error {
+	item := a.item(guid)
+	if item == nil {
+		return fmt.Errorf("invalid item guid %q", guid)
+	}
+	if item.Path == "" {
+		return errors.New("item has no path to extract an icon from")
+	}
+	icon := writeIcon(resolveLaunchPath(item.Path))
+	if icon == "" {
+		return errors.New("failed to regenerate icon")
+	}
+	a.replaceIcon(item, icon)
+	return nil
+}
+
+func (a *App) replaceIcon(item *AppItem, icon string) {
+	if old := item.Icon; old != "" {
+		_ = os.Remove(absPath(old))
+		delete(a.icons, old)
+	}
+	item.Icon = icon
+	a.save()
+	a.refresh()
+}
+
+func imageFilter() []mygo.FileFilter {
+	return []mygo.FileFilter{{Name: "Images", Extensions: []string{"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"}}}
+}
+
+// pickFile asks for a file; dir is where the dialog starts.
+func (a *App) pickFile(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select File", DefaultPath: dir})
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	return a.storedPick(paths[0])
+}
+
+func (a *App) pickImage(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select Image", DefaultPath: dir, Filters: imageFilter()})
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	return a.storedPick(paths[0])
+}
+
+func (a *App) pickDirectory(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: "Select Folder", DefaultPath: dir, Directory: true})
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	return a.storedPick(paths[0])
+}
+
+// storedPick keeps a picked path as the item fields should show it: absolute
+// with "Abs path for new items" on, relative to the launcher otherwise.
+func (a *App) storedPick(picked string) string {
+	if picked == "" {
+		return ""
+	}
+	if a.store.Settings.AbsolutePaths {
+		return picked
+	}
+	return toStoredPath(picked)
+}
+
+// openDataDir shows the data folder.
+func (a *App) openDataDir() {
+	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
+	_ = openPath(filepath.Join(absBase, dataDir))
+}
+
+// reveal shows an item in the file manager.
+func (a *App) reveal(guid string) error {
+	item := a.item(guid)
+	if item == nil {
+		return fmt.Errorf("invalid item guid %q", guid)
+	}
+	target := absPath(item.Path)
+	if item.Path == "" && item.WorkingDir != "" {
+		target = absPath(item.WorkingDir)
+	}
+	if target == "" {
+		return nil
+	}
+	mygo.Shell.ShowItemInFolder(target)
+	return nil
+}
+
+// convertPaths rewrites every item's paths, absolute or relative.
+func (a *App) convertPaths(absolute bool) {
+	for _, item := range a.store.Apps {
+		convertItemPaths(item, absolute)
+	}
+	a.save()
+	a.refresh()
+}
+
+func (a *App) convertItemPath(guid string, absolute bool) error {
+	item := a.item(guid)
+	if item == nil {
+		return fmt.Errorf("invalid item guid %q", guid)
+	}
+	convertItemPaths(item, absolute)
+	a.save()
+	a.refresh()
+	return nil
+}
+
+// setAlwaysOnTop applies the window setting and keeps it in the store.
+func (a *App) setAlwaysOnTop(on bool) {
+	a.store.Settings.AlwaysOnTop = on
+	if a.win != nil {
+		a.win.SetAlwaysOnTop(on)
+	}
+	a.save()
+}
+
+// iconImage returns an item's icon, decoded once and kept.
+func (a *App) iconImage(item *AppItem) ui.ImageSource {
+	if item == nil || item.Icon == "" {
+		return nil
+	}
+	if src, ok := a.icons[item.Icon]; ok {
+		return src
+	}
+	src := iconSource(item.Icon)
+	a.icons[item.Icon] = src
+	return src
+}
+
+// startClock redraws every ten seconds while a runtime display changes, which
+// is how a running process' time counts up, as the page's clock did.
+func (a *App) startClock() {
+	go func() {
+		for range time.Tick(10 * time.Second) {
+			if a.tick.Load() {
+				a.refresh()
+			}
+		}
+	}()
 }

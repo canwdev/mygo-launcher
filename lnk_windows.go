@@ -18,6 +18,10 @@ const (
 	stgmRead          = 0x0
 	slrNoUI           = 0x1
 	linkBufferLen     = 1024
+
+	// coinitApartmentThreaded is COINIT_APARTMENTTHREADED: the shell's own
+	// model, which its objects expect.
+	coinitApartmentThreaded = 0x2
 )
 
 var (
@@ -33,10 +37,31 @@ var (
 		Data1: 0x0000010B, Data2: 0x0000, Data3: 0x0000,
 		Data4: [8]byte{0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46},
 	}
+
+	ole32   = syscall.NewLazyDLL("ole32.dll")
+	shell32 = syscall.NewLazyDLL("shell32.dll")
+
+	procCoInitializeEx      = ole32.NewProc("CoInitializeEx")
+	procCoUninitialize      = ole32.NewProc("CoUninitialize")
 	procCoCreateInstance    = ole32.NewProc("CoCreateInstance")
 	procCoTaskMemFree       = ole32.NewProc("CoTaskMemFree")
 	procSHGetPathFromIDList = shell32.NewProc("SHGetPathFromIDListW")
 )
+
+// coInitCOM initializes COM for the current thread. uninit reports whether the
+// caller must call CoUninitialize; a thread that already initialized COM is
+// joined instead, as its owner uninitializes it.
+func coInitCOM() (ok, uninit bool) {
+	r1, _, _ := procCoInitializeEx.Call(0, uintptr(coinitApartmentThreaded))
+	switch int32(r1) {
+	case 0: // S_OK: this call initialized COM
+		return true, true
+	case 1: // S_FALSE: already initialized on this thread
+		return true, false
+	default: // RPC_E_CHANGED_MODE etc.
+		return false, false
+	}
+}
 
 // shellLinkWVtbl mirrors IShellLinkW (IUnknown + 18 methods), matching the
 // layout documented for the Windows ShellLink COM object.

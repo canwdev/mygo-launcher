@@ -56,11 +56,14 @@ func defaultTitle(path string) string {
 	return base
 }
 
+// formatRuntime spells accumulated milliseconds shortly, as the rows show them:
+// "3d 2h 5m", "--" for nothing yet and "1m" for anything under a minute.
 func formatRuntime(ms int64) string {
 	total := ms / 1000
 	d := total / 86400
 	h := (total % 86400) / 3600
 	m := (total % 3600) / 60
+	s := total % 60
 	parts := make([]string, 0, 3)
 	if d > 0 {
 		parts = append(parts, fmt.Sprintf("%dd", d))
@@ -72,7 +75,11 @@ func formatRuntime(ms int64) string {
 		parts = append(parts, fmt.Sprintf("%dm", m))
 	}
 	if len(parts) == 0 {
-		return "1m"
+		if s > 0 {
+			parts = append(parts, "1m")
+		} else {
+			parts = append(parts, "--")
+		}
 	}
 	return strings.Join(parts, " ")
 }

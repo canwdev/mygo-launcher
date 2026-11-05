@@ -1,22 +1,23 @@
 package main
 
 import (
-	"embed"
 	"log"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
-//go:embed all:frontend/dist
-var assets embed.FS
+// Window geometry of the first launch, before any state was kept: wide enough
+// for the item dialog's fields to fit without scrolling.
+const (
+	defaultWindowWidth  = 720
+	defaultWindowHeight = 520
+)
 
 func main() {
 	// Single-instance guard, scoped per install directory: a second copy from
 	// the same directory is refused (and focuses the existing window), while
-	// copies in different install directories may run simultaneously. Must run
-	// before wails.Run initialises the UI/backend.
+	// copies in different install directories may run simultaneously.
 	key := installKey()
 	if ok, err := acquireSingleton(key); err != nil {
 		log.Fatalf("single-instance check failed: %v", err)
@@ -26,41 +27,46 @@ func main() {
 	}
 	defer releaseSingleton()
 
-	// Reopen the window at the size (and maximised state) it had when last
-	// closed (persisted by beforeClose); the first run falls back to the
-	// defaults. The saved position is applied separately in startup, because
-	// Wails always centres the window on creation.
-	ws := loadWindowState()
-	width, height := defaultWindowWidth, defaultWindowHeight
-	if ws.Width > 0 && ws.Height > 0 {
-		width, height = ws.Width, ws.Height
-	}
-	startState := options.Normal
-	if ws.Maximised {
-		startState = options.Maximised
-	}
-
 	app := NewApp()
 
-	err := wails.Run(&options.App{
-		Title:            instanceTitle(installDir()),
-		Width:            width,
-		Height:           height,
-		WindowStartState: startState,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		OnStartup:     app.startup,
-		OnBeforeClose: app.beforeClose,
-		OnShutdown:    app.shutdown,
-		Bind: []interface{}{
-			app,
-		},
-		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop: true,
-		},
+	mygo.App.SetName("Go Launcher")
+	mygo.App.SetVersion(appVersion)
+	// The window's geometry is kept beside the store, in .go-launcher-data,
+	// rather than in the user's config folder: the launcher is portable.
+	mygo.App.SetWindowStateStore(windowStateStore{})
+
+	mygo.App.WhenReady(func() {
+		v := newView(app)
+		v.applyTheme()
+		win := mygo.NewWindow(mygo.WindowOptions{
+			Title:     instanceTitle(installDir()),
+			Width:     defaultWindowWidth,
+			Height:    defaultWindowHeight,
+			MinWidth:  420,
+			MinHeight: 300,
+			// A remembered size, position and maximized state are applied on
+			// top of these, from window-state.json.
+			StateKey: windowStateKey,
+			// The store's always-on-top setting applies from the first frame.
+			AlwaysOnTop: app.store.Settings.AlwaysOnTop,
+			Content:     ui.View(v.view),
+		})
+
+		// The view builds after NewWindow returned, on the main loop's next
+		// turn, so both hold the window by then.
+		app.win, v.win = win, win
+
+		win.OnFileDrop(func(e *mygo.FileDropEvent) {
+			app.addPaths(e.Paths, v.prefs.ActiveTab)
+		})
+
+		app.startClock()
+		app.startStoreWatcher()
 	})
-	if err != nil {
+
+	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+
+	app.stopStoreWatcher()
 }

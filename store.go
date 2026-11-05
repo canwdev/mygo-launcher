@@ -1,0 +1,237 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/google/uuid"
+)
+
+// The launcher keeps its data next to the executable's working directory, in a
+// hidden folder. The names are part of the on-disk format: existing stores made
+// by the Wails build keep working, and the folder is what "Open data
+// directory…" shows.
+const (
+	dataDir     = ".go-launcher-data"
+	saveFile    = dataDir + "/go-launcher-data.json"
+	iconsDir    = dataDir + "/cached-icons"
+	uiStateFile = dataDir + "/ui-state.json"
+)
+
+// absBase is the directory stored paths are relative to.
+var absBase, _ = filepath.Abs(".")
+
+// AppItem is one entry of the launcher: a program, a file or a folder.
+type AppItem struct {
+	GUID       string `json:"guid"`
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Icon       string `json:"icon,omitempty"`
+	RuntimeMs  int64  `json:"runtime_ms,omitempty"`
+	Args       string `json:"args,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty"`
+	// RunAsAdmin comes from the "Run as administrator" check box of the item
+	// dialog: true launches it elevated every time (ShellExecuteEx's "runas"
+	// verb on Windows, so the system asks for UAC), false only falls back to
+	// "runas" when the program itself needs elevation.
+	RunAsAdmin bool `json:"run_as_admin,omitempty"`
+}
+
+// CategoryNode is a tab: a row of slots, nil being an empty cell.
+type CategoryNode struct {
+	GUID  string    `json:"guid"`
+	Name  string    `json:"name"`
+	Slots []*string `json:"slots"`
+}
+
+type Settings struct {
+	GameMode      bool `json:"game_mode"`
+	AbsolutePaths bool `json:"absolute_paths"`
+	// AutoHide is the master switch of the launcher's window hiding: launching
+	// an item minimizes it (game mode restores it once its processes end), and
+	// with it off nothing is minimized at all.
+	AutoHide bool `json:"auto_hide"`
+	// AlwaysOnTop keeps the window above the others (the app menu's "Always on
+	// top"), restored at startup and applied as it is toggled.
+	AlwaysOnTop bool `json:"always_on_top"`
+}
+
+type AppStore struct {
+	Apps       map[string]*AppItem `json:"apps"` // global app pool
+	Categories []CategoryNode      `json:"categories"`
+	Settings   Settings            `json:"settings"`
+}
+
+func toStoredPath(abs string) string {
+	rel, err := filepath.Rel(absBase, abs)
+	if err != nil {
+		return abs
+	}
+	return rel
+}
+
+func absPath(p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(absBase, p)
+}
+
+// resolveLaunchPath resolves a bare command name (no separator, no drive
+// letter) through PATH, so "notepad" and "cmd" launch their real executable;
+// other inputs go through absPath. Empty stays empty.
+func resolveLaunchPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	if !strings.ContainsAny(p, "\\/") && !(len(p) >= 2 && p[1] == ':') {
+		if full, err := exec.LookPath(p); err == nil {
+			return full
+		}
+	}
+	return absPath(p)
+}
+
+func defaultStore() AppStore {
+	return AppStore{
+		Apps: map[string]*AppItem{},
+		Categories: []CategoryNode{
+			{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}},
+		},
+		Settings: Settings{GameMode: true, AbsolutePaths: true, AutoHide: true, AlwaysOnTop: false},
+	}
+}
+
+// settingsMissingKey reports whether the raw JSON's settings object lacks the
+// given key (or the whole settings block is missing).
+func settingsMissingKey(data []byte, key string) bool {
+	var probe struct {
+		Settings json.RawMessage `json:"settings"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil || len(probe.Settings) == 0 {
+		return true
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(probe.Settings, &keys); err != nil {
+		return true
+	}
+	_, ok := keys[key]
+	return !ok
+}
+
+// parseStore reads the store JSON and fills in defaults and migrations (the
+// game_mode and auto_hide keys of older files, missing guids and names, path
+// normalization). ok=false means the content is not valid JSON: a file caught
+// mid-edit must not be taken as an empty store.
+func parseStore(data []byte) (AppStore, bool) {
+	var store AppStore
+	if err := json.Unmarshal(data, &store); err != nil {
+		return AppStore{}, false
+	}
+	if settingsMissingKey(data, "game_mode") {
+		store.Settings.GameMode = true
+	}
+	if settingsMissingKey(data, "auto_hide") {
+		store.Settings.AutoHide = true
+	}
+	if store.Apps == nil {
+		store.Apps = map[string]*AppItem{}
+	}
+	if len(store.Apps) == 0 && len(store.Categories) == 0 {
+		return defaultStore(), true
+	}
+	for guid, app := range store.Apps {
+		if app == nil {
+			continue
+		}
+		app.Path = normalizePath(app.Path)
+		if app.GUID == "" {
+			app.GUID = guid
+		}
+		if app.Name == "" {
+			app.Name = defaultTitle(absPath(app.Path))
+		}
+	}
+	if len(store.Categories) == 0 {
+		store.Categories = []CategoryNode{{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}}}
+	}
+	for i := range store.Categories {
+		cat := &store.Categories[i]
+		if cat.GUID == "" {
+			cat.GUID = uuid.NewString()
+		}
+		if cat.Name == "" {
+			cat.Name = "Category"
+		}
+		if cat.Slots == nil {
+			cat.Slots = []*string{}
+		}
+	}
+	return store, true
+}
+
+func loadStore() AppStore {
+	data, err := os.ReadFile(filepath.Join(absBase, saveFile))
+	if err != nil {
+		return defaultStore()
+	}
+	store, ok := parseStore(data)
+	if !ok {
+		return defaultStore()
+	}
+	return store
+}
+
+// writeStoreAtomic writes the store and returns the bytes written, so the
+// caller can record the file fingerprint that tells its own writes from edits
+// made by hand.
+func writeStoreAtomic(store AppStore) ([]byte, error) {
+	data, err := json.MarshalIndent(store, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(absBase, dataDir)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(absBase, saveFile)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+// convertItemPaths rewrites an item's paths as absolute or relative to absBase.
+func convertItemPaths(item *AppItem, absolute bool) {
+	if item == nil {
+		return
+	}
+	if absolute {
+		if item.Path != "" {
+			item.Path = absPath(item.Path)
+		}
+		if item.WorkingDir != "" {
+			item.WorkingDir = absPath(item.WorkingDir)
+		}
+		if item.Icon != "" {
+			item.Icon = absPath(item.Icon)
+		}
+		return
+	}
+	if item.Path != "" {
+		item.Path = toStoredPath(absPath(item.Path))
+	}
+	if item.WorkingDir != "" {
+		item.WorkingDir = toStoredPath(absPath(item.WorkingDir))
+	}
+	if item.Icon != "" {
+		item.Icon = toStoredPath(absPath(item.Icon))
+	}
+}

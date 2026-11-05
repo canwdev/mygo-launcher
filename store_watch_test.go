@@ -1,50 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo"
 )
-
-// requireStoreWatch 跳过依赖文件系统监听的用例：监听目前只在 Windows 上实现
-// （见 store_watch_windows.go / store_watch_other.go）。
-func requireStoreWatch(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS != "windows" {
-		t.Skip("store file watching is only implemented on Windows")
-	}
-}
-
-// newTestApp 构造一个不依赖 Wails/NewApp 的 App（NewApp 会在仓库目录里建
-// .go-launcher-data），并把工作目录切到临时目录，让 saveFile 落在隔离的位置。
-func newTestApp(t *testing.T) *App {
-	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(wd) })
-
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	app := &App{
-		store:        loadStore(),
-		runtimeStats: map[string]int64{},
-		running:      map[string]*runningProc{},
-		iconCache:    map[string]string{},
-		watchStop:    make(chan struct{}),
-	}
-	app.syncStoreFileState()
-	return app
-}
 
 // writeManualStore 模拟用户手动编辑 go-launcher-data.json。
 func writeManualStore(t *testing.T, store AppStore) {
@@ -58,12 +24,13 @@ func writeManualStore(t *testing.T, store AppStore) {
 
 func writeManualBytes(t *testing.T, data []byte) {
 	t.Helper()
-	if err := os.WriteFile(saveFile, data, 0644); err != nil {
+	path := filepath.Join(absBase, saveFile)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// 保证 mtime 与上一次已知状态不同（部分文件系统时间戳粒度较粗）。
 	now := time.Now()
-	if err := os.Chtimes(saveFile, now, now); err != nil {
+	if err := os.Chtimes(path, now, now); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -76,35 +43,6 @@ func testStoreWithHandItem() AppStore {
 		Categories: []CategoryNode{
 			{GUID: "cat-1", Name: "Manual", Slots: []*string{ptrString("hand")}},
 		},
-	}
-}
-
-func ptrString(s string) *string { return &s }
-
-func TestParseStore(t *testing.T) {
-	if _, ok := parseStore([]byte("{ not json")); ok {
-		t.Fatal("parseStore must reject invalid JSON")
-	}
-
-	// 旧文件缺 game_mode / auto_hide：默认打开
-	store, ok := parseStore([]byte(`{"apps":{"a":{"guid":"a","path":"C:/a.exe"}},"categories":[{"guid":"c","name":"Main"}]}`))
-	if !ok {
-		t.Fatal("parseStore rejected valid JSON")
-	}
-	if !store.Settings.GameMode || !store.Settings.AutoHide {
-		t.Fatalf("legacy file should default game_mode/auto_hide to true, got %+v", store.Settings)
-	}
-	if store.Categories[0].Slots == nil {
-		t.Fatal("nil slots must be normalized to an empty slice")
-	}
-
-	// 空 store 回退默认（与 loadStore 的既有语义一致）
-	empty, ok := parseStore([]byte(`{"apps":{},"categories":[]}`))
-	if !ok {
-		t.Fatal("parseStore rejected an empty store")
-	}
-	if len(empty.Categories) != 1 || len(empty.Apps) != 0 {
-		t.Fatalf("empty store should fall back to the default store, got %+v", empty)
 	}
 }
 
@@ -121,12 +59,10 @@ func TestSyncStoreFileStateBaselinesExistingFile(t *testing.T) {
 func TestReloadStoreIfChangedIgnoresOwnWrites(t *testing.T) {
 	app := newTestApp(t)
 
-	app.mu.Lock()
 	app.store.Apps["own"] = &AppItem{GUID: "own", Name: "Own", Path: "C:/own.exe"}
 	app.runtimeStats["own"] = 555
 	app.store.Categories[0].Slots = []*string{ptrString("own")}
-	app.writeStore()
-	app.mu.Unlock()
+	app.save()
 
 	if got := app.reloadStoreIfChanged(); got != storeReloadNone {
 		t.Fatalf("own write must not be treated as an external edit, got %v", got)
@@ -138,9 +74,7 @@ func TestReloadStoreIfChangedIgnoresOwnWrites(t *testing.T) {
 
 func TestReloadStoreIfChangedAppliesManualEdit(t *testing.T) {
 	app := newTestApp(t)
-	app.mu.Lock()
-	app.writeStore()
-	app.mu.Unlock()
+	app.save()
 
 	writeManualStore(t, testStoreWithHandItem())
 
@@ -183,12 +117,10 @@ func TestReloadStoreIfChangedIgnoresInvalidContent(t *testing.T) {
 
 func TestReloadStoreDropsItemsRemovedOnDisk(t *testing.T) {
 	app := newTestApp(t)
-	app.mu.Lock()
 	app.store.Apps["hand"] = &AppItem{GUID: "hand", Name: "Hand", Path: "C:/hand.exe"}
 	app.runtimeStats["hand"] = 999
 	app.running["hand"] = &runningProc{}
-	app.writeStore()
-	app.mu.Unlock()
+	app.save()
 
 	writeManualStore(t, AppStore{
 		Apps:       map[string]*AppItem{},
@@ -209,131 +141,26 @@ func TestReloadStoreDropsItemsRemovedOnDisk(t *testing.T) {
 	}
 }
 
-func TestGetDataPicksUpManualEditImmediately(t *testing.T) {
+// TestRuntimeText 固定运行时数值的读法：写成短格式，运行中的计时再加一段
+// 「(+ 1m)」，没有运行时只显示占位符。
+func TestRuntimeText(t *testing.T) {
 	app := newTestApp(t)
-	app.mu.Lock()
-	app.writeStore()
-	app.mu.Unlock()
+	v := newView(app)
+	app.store.Apps["a"] = &AppItem{GUID: "a", Name: "A", RuntimeMs: 90_000}
+	app.runtimeStats["a"] = 90_000
+	v.states = app.state()
 
-	writeManualStore(t, testStoreWithHandItem())
-
-	data := app.GetData()
-	if data.Store.Apps["hand"] == nil {
-		t.Fatal("GetData must re-read a hand-edited file (Refresh menu)")
+	if got := v.runtimeText("a"); got != "1m" {
+		t.Fatalf("runtime text of 90s should be %q, got %q", "1m", got)
 	}
-	if data.State["hand"].RuntimeMs != 12345 {
-		t.Fatalf("GetData state should reflect the hand-edited runtime, got %+v", data.State["hand"])
-	}
-}
-
-func TestStoreWatcherPicksUpManualEdit(t *testing.T) {
-	requireStoreWatch(t)
-	app := newTestApp(t)
-	app.mu.Lock()
-	app.writeStore()
-	app.mu.Unlock()
-	app.startStoreWatcher()
-	defer app.stopStoreWatcher()
-
-	writeManualStore(t, testStoreWithHandItem())
-
-	waitForApp(t, app, "hand")
-}
-
-// TestStoreWatcherPicksUpReplaceByRename 覆盖编辑器常见的保存方式：写临时文件再
-// 原子改名覆盖（此时是目录事件，而不是对目标文件的直接写入）。
-func TestStoreWatcherPicksUpReplaceByRename(t *testing.T) {
-	requireStoreWatch(t)
-	app := newTestApp(t)
-	app.mu.Lock()
-	app.writeStore()
-	app.mu.Unlock()
-	app.startStoreWatcher()
-	defer app.stopStoreWatcher()
-
-	data, err := json.MarshalIndent(testStoreWithHandItem(), "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	tmp := saveFile + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(tmp, saveFile); err != nil {
-		t.Fatal(err)
+	if got := v.runtimeText("missing"); got != "--" {
+		t.Fatalf("an item without runtime should show the placeholder, got %q", got)
 	}
 
-	waitForApp(t, app, "hand")
-}
-
-// TestStoreWatcherSurvivesDeleteAndRecreate：文件被删掉时保留内存数据，重新出现
-// 后再被读入。
-func TestStoreWatcherSurvivesDeleteAndRecreate(t *testing.T) {
-	requireStoreWatch(t)
-	app := newTestApp(t)
-	app.mu.Lock()
-	app.store.Apps["keep"] = &AppItem{GUID: "keep", Name: "Keep", Path: "C:/keep.exe"}
-	app.writeStore()
-	app.mu.Unlock()
-	app.startStoreWatcher()
-	defer app.stopStoreWatcher()
-
-	if err := os.Remove(saveFile); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(500 * time.Millisecond)
-	app.mu.Lock()
-	_, kept := app.store.Apps["keep"]
-	app.mu.Unlock()
-	if !kept {
-		t.Fatal("deleting the file must not wipe the in-memory store")
-	}
-
-	writeManualStore(t, testStoreWithHandItem())
-	waitForApp(t, app, "hand")
-}
-
-// waitForApp 等某个 guid 出现在内存 store 里（监听是异步的）。
-func waitForApp(t *testing.T, app *App, guid string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		app.mu.Lock()
-		_, found := app.store.Apps[guid]
-		app.mu.Unlock()
-		if found {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("the file watcher did not pick up %q within 5s", guid)
-}
-
-// TestStoreWatcherIgnoresOwnWrites 验证程序自己的写入（writeStore）不会触发重载：
-// 落盘后再改内存，如果监听把自己的写入当成外部编辑，内存里的改动会被磁盘内容覆盖。
-func TestStoreWatcherIgnoresOwnWrites(t *testing.T) {
-	requireStoreWatch(t)
-	app := newTestApp(t)
-	app.startStoreWatcher()
-	defer app.stopStoreWatcher()
-
-	app.mu.Lock()
-	app.store.Apps["own"] = &AppItem{GUID: "own", Name: "OnDisk", Path: "C:/own.exe"}
-	app.store.Categories[0].Slots = []*string{ptrString("own")}
-	app.writeStore()
-	app.store.Apps["own"].Name = "InMemoryOnly"
-	app.mu.Unlock()
-
-	time.Sleep(time.Second)
-
-	app.mu.Lock()
-	got := ""
-	if item := app.store.Apps["own"]; item != nil {
-		got = item.Name
-	}
-	app.mu.Unlock()
-	if got != "InMemoryOnly" {
-		t.Fatalf("own write must not be re-read from disk, got %q", got)
+	v.prefs.Timers["a"] = time.Now().Add(-65 * time.Second).UnixMilli()
+	got := v.runtimeText("a")
+	if len(got) <= len("1m") || got[:len("1m")] != "1m" {
+		t.Fatalf("a running timer must be added to the runtime, got %q", got)
 	}
 }
 
@@ -344,29 +171,37 @@ func TestStopStoreWatcherIsIdempotent(t *testing.T) {
 	app.stopStoreWatcher()
 }
 
-// TestWatchStoreFileStartStop 反复建立/停止底层监听，覆盖 stop 时取消挂起 I/O 的
-// 路径（卡住、句柄提前关闭等）。
-func TestWatchStoreFileStartStop(t *testing.T) {
-	requireStoreWatch(t)
-	newTestApp(t)
-	dir, err := filepath.Abs(filepath.Dir(saveFile))
+// TestStoreWatchDeliversEdits 验证底层监听：写一次 store 文件后要收到事件，
+// 这是手改配置能生效的前提。
+func TestStoreWatchDeliversEdits(t *testing.T) {
+	app := newTestApp(t)
+	app.save()
+	path := filepath.Join(absBase, saveFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	w, err := mygo.WatchFiles(ctx, path, mygo.FileWatchOptions{})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("watching %s: %v", path, err)
 	}
-	name := filepath.Base(saveFile)
-	for i := 0; i < 20; i++ {
-		stop := make(chan struct{})
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			_ = watchStoreFile(dir, name, stop, func() {})
-		}()
-		time.Sleep(5 * time.Millisecond)
-		close(stop)
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			t.Fatalf("watchStoreFile did not stop on iteration %d", i)
+	defer w.Close()
+
+	writeManualStore(t, testStoreWithHandItem())
+
+	done := make(chan error, 1)
+	go func() {
+		events, err := w.Next(ctx)
+		if err == nil && len(events) == 0 {
+			err = errors.New("an empty batch says nothing changed")
 		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("the watch ended before an edit: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("no event arrived within 10s of an edit")
 	}
 }

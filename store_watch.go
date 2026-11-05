@@ -1,43 +1,36 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/egoist/mygo"
 )
 
-// 用户手动编辑 .go-launcher-data/go-launcher-data.json 后自动生效：
-// 用文件系统事件监听盯住数据目录（Windows 实现见 store_watch_windows.go，
-// 基于 ReadDirectoryChangesW，不轮询），事件到达后重新比对文件指纹
-// （mtime/size + 内容 hash）再重载内存 store，并通过 "store:reloaded" 把新数据
-// 推给前端。程序自己写入触发的事件靠内容 hash 识别后忽略，不会自我触发。
-// 内容写坏（JSON 非法）时保留内存中的旧数据，只发一次 "store:reload-failed"，
-// 避免把编辑到一半的文件当空 store 加载。
+// The store file is watched so edits made by hand apply to the running app: a
+// change to .go-launcher-data/go-launcher-data.json is read back, compared with
+// the fingerprint of the last write (content hash) to tell it from the app's
+// own saves, and applied. Content that is not valid JSON keeps the store as it
+// is, and says so, so a half-finished edit is not taken as an empty store.
 const (
-	// storeWatchQuiet 是事件合并窗口：一次保存往往触发多条事件（写临时文件 +
-	// 改名、分块写入等），等写入停下来再读文件，避免读到写了一半的内容。
-	storeWatchQuiet = 150 * time.Millisecond
-	// storeWatchRetry 是监听建立失败（目录被删、句柄失效等）后的重试间隔。
+	// storeWatchRetry is how long to wait before watching again, after the
+	// folder or the file went away.
 	storeWatchRetry = 2 * time.Second
 )
 
-// errStoreWatchUnsupported 表示当前平台没有实现文件监听（见 store_watch_other.go）。
-var errStoreWatchUnsupported = errors.New("store file watching is not supported on this platform")
-
-// storeFileState 是 saveFile 最近一次已知的磁盘状态：mtime/size 用于廉价的
-// “没变”判断，内容 hash 用于区分自己的写入与外部编辑。
+// storeFileState is the last known state of saveFile: mtime and size for the
+// cheap "did not change" test, and the content hash that tells the app's own
+// writes from someone else's.
 type storeFileState struct {
 	modTime time.Time
 	size    int64
 	hash    string
 }
 
-// matches 报告磁盘上的文件是否与记录的状态一致（mtime + size）。
 func (s storeFileState) matches(info os.FileInfo) bool {
 	return !s.modTime.IsZero() && s.size == info.Size() && s.modTime.Equal(info.ModTime())
 }
@@ -47,89 +40,83 @@ func contentHash(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// storeReloadResult 描述一次 reloadStoreIfChanged 的结果。
 type storeReloadResult int
 
 const (
-	storeReloadNone    storeReloadResult = iota // 文件没变 / 是自己的写入 / 暂时读不到
-	storeReloadApplied                          // 已应用外部改动
-	storeReloadInvalid                          // 外部内容不是合法 JSON，已忽略
+	storeReloadNone    storeReloadResult = iota // unchanged, our own write, or unreadable for now
+	storeReloadApplied                          // an edit from outside was applied
+	storeReloadInvalid                          // the file is not valid JSON; it was ignored
 )
 
-// syncStoreFileState 记录磁盘上当前的 store 内容（启动时调用一次）。
+// syncStoreFileState records the file as it is on disk, as the app starts.
 func (a *App) syncStoreFileState() {
-	data, err := os.ReadFile(saveFile)
+	data, err := os.ReadFile(filepath.Join(absBase, saveFile))
 	if err != nil {
-		a.storeFile = storeFileState{}
 		return
 	}
+	a.fileMu.Lock()
 	a.rememberStoreFile(data)
+	a.fileMu.Unlock()
 }
 
-// rememberStoreFile 记录刚写入（或刚读入）的文件指纹。调用方必须持有 a.mu，
-// 或在构造阶段单线程调用。
+// rememberStoreFile records the fingerprint of the bytes just written or read.
+// The caller holds fileMu.
 func (a *App) rememberStoreFile(data []byte) {
 	state := storeFileState{hash: contentHash(data)}
-	if info, err := os.Stat(saveFile); err == nil {
+	if info, err := os.Stat(filepath.Join(absBase, saveFile)); err == nil {
 		state.modTime = info.ModTime()
 		state.size = info.Size()
 	}
 	a.storeFile = state
 }
 
-// reloadStoreIfChanged 检查 saveFile 是否被外部（手动编辑）改动，有则重载内存
-// store。调用方不得持有 a.mu；返回本次是否应用了改动。它只改内存，不推送事件，
-// 由调用方（监听回调 / GetData）决定是否通知前端。
+// reloadStoreIfChanged applies an edit made by hand, if the file changed since
+// the last write. It runs on the main thread, and does not redraw.
 func (a *App) reloadStoreIfChanged() storeReloadResult {
-	info, err := os.Stat(saveFile)
+	path := filepath.Join(absBase, saveFile)
+	info, err := os.Stat(path)
 	if err != nil {
-		return storeReloadNone // 文件暂不存在（正在被原子替换 / 被删除）：等下一次事件
+		return storeReloadNone // being replaced, or gone: the next event tells
 	}
-	a.mu.Lock()
+	a.fileMu.Lock()
 	known := a.storeFile
-	a.mu.Unlock()
+	a.fileMu.Unlock()
 	if known.matches(info) {
 		return storeReloadNone
 	}
-	data, err := os.ReadFile(saveFile)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return storeReloadNone
 	}
 	hash := contentHash(data)
-	// 读取期间文件可能又被替换，重新取一次指纹作为新的基准。
-	info, err = os.Stat(saveFile)
+	info, err = os.Stat(path)
 	if err != nil {
 		return storeReloadNone
 	}
 	next := storeFileState{modTime: info.ModTime(), size: info.Size(), hash: hash}
 
-	a.mu.Lock()
+	a.fileMu.Lock()
+	defer a.fileMu.Unlock()
 	if hash == a.storeFile.hash {
-		// 内容与我们最近一次写入一致：只是 mtime/size 变了（例如自己的写入），
-		// 不算外部改动。
+		// Only the timestamp or size moved: this is a write of the app's own.
 		a.storeFile = next
-		a.mu.Unlock()
 		return storeReloadNone
 	}
 	store, ok := parseStore(data)
+	a.storeFile = next
 	if !ok {
-		// 记住这份坏内容，避免同一份坏文件被重复报错。
-		a.storeFile = next
-		a.mu.Unlock()
 		return storeReloadInvalid
 	}
 	a.applyStoreLocked(store)
-	a.storeFile = next
-	a.mu.Unlock()
-
-	// 窗口级设置（置顶）也可能被手改，立即重新应用（ctx 为空时内部忽略）。
-	applyAlwaysOnTop(a.ctx, store.Settings.AlwaysOnTop)
+	if a.win != nil {
+		a.win.SetAlwaysOnTop(store.Settings.AlwaysOnTop)
+	}
 	return storeReloadApplied
 }
 
-// applyStoreLocked 用外部编辑后的 store 替换内存 store：runtime 统计以文件为准
-// （用户可能手改了 runtime_ms），被删掉的条目放弃跟踪（进程继续运行，只是不再
-// 计时 / 无法 Stop）。调用方必须持有 a.mu。
+// applyStoreLocked replaces the store with one edited by hand. The file is
+// authoritative for the runtime, and items it dropped are no longer tracked
+// (their processes keep running, untimed and unstoppable).
 func (a *App) applyStoreLocked(store AppStore) {
 	stats := make(map[string]int64, len(store.Apps))
 	for guid, item := range store.Apps {
@@ -144,64 +131,61 @@ func (a *App) applyStoreLocked(store AppStore) {
 		}
 	}
 	a.store = store
-	// 这里不做 pruneIconFiles：外部编辑可能只是临时删掉条目，直接删缓存图标不可逆，
-	// 交给下一次正常保存（SaveData / 退出）清理。
 }
 
-// startStoreWatcher 启动外部改动监听（startup 时调用一次）。
-func (a *App) startStoreWatcher() {
-	a.watchStart.Do(func() {
-		go a.watchStoreLoop()
-	})
-}
-
-// watchStoreLoop 盯住 store 所在的目录，直到收到停止信号或平台不支持。
-func (a *App) watchStoreLoop() {
-	dir, err := filepath.Abs(filepath.Dir(saveFile))
-	if err != nil {
-		return
-	}
-	name := filepath.Base(saveFile)
-	for {
-		select {
-		case <-a.watchStop:
-			return
-		default:
-		}
-		err := watchStoreFile(dir, name, a.watchStop, a.handleStoreFileEvent)
-		if err == nil || errors.Is(err, errStoreWatchUnsupported) {
-			return // 停止信号 / 平台未实现监听
-		}
-		// 目录被删、句柄失效等临时错误：稍后重试，别让监听永久失效。
-		select {
-		case <-a.watchStop:
-			return
-		case <-time.After(storeWatchRetry):
-		}
-	}
-}
-
-// handleStoreFileEvent 处理一次“数据目录里的 store 文件被动过”的事件。
+// handleStoreFileEvent applies an edit from outside and tells the user.
 func (a *App) handleStoreFileEvent() {
 	switch a.reloadStoreIfChanged() {
 	case storeReloadApplied:
-		a.emitStoreReloaded()
+		a.notify("Reloaded from go-launcher-data.json")
 	case storeReloadInvalid:
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "store:reload-failed", saveFile)
+		a.notify("go-launcher-data.json is not valid JSON; change ignored")
+	}
+	a.refresh()
+}
+
+// startStoreWatcher watches the store file for edits made by hand.
+func (a *App) startStoreWatcher() {
+	ctx, cancel := context.WithCancel(context.Background())
+	a.watchCancel = cancel
+	path := filepath.Join(absBase, saveFile)
+	go func() {
+		for ctx.Err() == nil {
+			w, err := mygo.WatchFiles(ctx, path, mygo.FileWatchOptions{})
+			if err != nil {
+				// Not there yet: the app writes it on its first save.
+				if !sleepCtx(ctx, storeWatchRetry) {
+					return
+				}
+				continue
+			}
+			for {
+				if _, err := w.Next(ctx); err != nil {
+					break // the file went away or the watch was stopped
+				}
+				a.dispatch(func() { a.handleStoreFileEvent() })
+			}
+			_ = w.Close()
+			if !sleepCtx(ctx, storeWatchRetry) {
+				return
+			}
 		}
-	}
+	}()
 }
 
-// stopStoreWatcher 结束监听（shutdown 时调用；重复调用安全）。
 func (a *App) stopStoreWatcher() {
-	a.watchStopOnce.Do(func() { close(a.watchStop) })
+	if a.watchCancel != nil {
+		a.watchCancel()
+		a.watchCancel = nil
+	}
 }
 
-// emitStoreReloaded 把重载后的完整数据推给前端（前端整体替换本地 store）。
-func (a *App) emitStoreReloaded() {
-	if a.ctx == nil {
-		return
+// sleepCtx waits for d, and reports false when ctx was canceled meanwhile.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
-	runtime.EventsEmit(a.ctx, "store:reloaded", a.GetData())
 }
