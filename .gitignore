@@ -8,3 +8,4 @@ mygo_windows_*.syso
 *.json.md5
 *.log
 .gocache
+/.workbuddy/
