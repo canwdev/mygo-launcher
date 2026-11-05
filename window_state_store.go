@@ -15,7 +15,7 @@ const windowStateKey = "main"
 // the Wails build kept it.
 const windowStateFile = dataDir + "/window-state.json"
 
-// windowStateStore keeps the window's geometry in .go-launcher-data instead of
+// windowStateStore keeps the window's geometry in mygo-launcher-data instead of
 // MyGo's own file in the user's config folder: the launcher keeps all its data
 // next to the executable.
 type windowStateStore struct{}

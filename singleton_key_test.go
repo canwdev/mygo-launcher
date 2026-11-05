@@ -22,7 +22,7 @@ func TestInstallKeyStableAndHex(t *testing.T) {
 
 func TestInstanceTitleUsesFullDir(t *testing.T) {
 	got := instanceTitle(`C:\games\minecraft`)
-	want := "Go Launcher - C:\\games\\minecraft"
+	want := "MyGo Launcher - C:\\games\\minecraft"
 	if got != want {
 		t.Fatalf("instanceTitle() = %q, want %q", got, want)
 	}
@@ -32,7 +32,7 @@ func TestInstanceTitleUsesFullDir(t *testing.T) {
 }
 
 func TestInstanceTitleMatchesTitlePattern(t *testing.T) {
-	re := regexp.MustCompile(`^Go Launcher - .+$`)
+	re := regexp.MustCompile(`^MyGo Launcher - .+$`)
 	if !re.MatchString(instanceTitle(installDir())) {
 		t.Fatalf("instanceTitle(installDir()) must match the window-title pattern, got %q", instanceTitle(installDir()))
 	}

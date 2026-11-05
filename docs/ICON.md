@@ -1,6 +1,6 @@
-# Go Launcher 应用图标
+# MyGo Launcher 应用图标
 
-本文档说明 Go Launcher 应用图标的文件、设计、使用方式与仓库提交约定。
+本文档说明 MyGo Launcher 应用图标的文件、设计、使用方式与仓库提交约定。
 
 ## 图标文件
 
@@ -35,7 +35,7 @@ MyGo 打包时自己把 PNG 转成多尺寸 ICO，仓库里不再保存 `icon.ic
 
 ## 更换图标后刷新缓存
 
-应用运行时内存图标缓存重启即清空；磁盘缓存 `.go-launcher-data/cached-icons/` 不入库。若桌面/任务栏仍显示旧图标，运行以下脚本刷新 Windows 图标缓存：
+应用运行时内存图标缓存重启即清空；磁盘缓存 `mygo-launcher-data/cached-icons/` 不入库。若桌面/任务栏仍显示旧图标，运行以下脚本刷新 Windows 图标缓存：
 
 ```powershell
 Remove-Item "$env:LOCALAPPDATA\IconCache.db" -Force -ErrorAction SilentlyContinue
@@ -47,4 +47,4 @@ Start-Process explorer
 ## 仓库提交约定
 
 - **提交**：`resources/icon.svg`、`resources/icon.png`、`docs/generate-icon.ps1`、`docs/ICON.md`。
-- **不提交**：`build/`（打包产物）、`resources/.render/`（渲染临时文件）、`.go-launcher-data/`（运行时数据）——见 `.gitignore`。
+- **不提交**：`build/`（打包产物）、`resources/.render/`（渲染临时文件）、`mygo-launcher-data/`（运行时数据）——见 `.gitignore`。

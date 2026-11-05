@@ -12,7 +12,7 @@ import (
 )
 
 // The store file is watched so edits made by hand apply to the running app: a
-// change to .go-launcher-data/go-launcher-data.json is read back, compared with
+// change to mygo-launcher-data/go-launcher-data.json is read back, compared with
 // the fingerprint of the last write (content hash) to tell it from the app's
 // own saves, and applied. Content that is not valid JSON keeps the store as it
 // is, and says so, so a half-finished edit is not taken as an empty store.

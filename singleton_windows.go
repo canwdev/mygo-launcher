@@ -19,7 +19,7 @@ import (
 // The "Local\" prefix explicitly scopes the mutex to the current terminal
 // session: it needs no SeCreateGlobalPrivilege (unlike "Global\") and lets two
 // different user sessions run their own copies of the same installation.
-const singleInstanceMutexPrefix = `Local\go-launcher-singleton-`
+const singleInstanceMutexPrefix = `Local\mygo-launcher-singleton-`
 
 // Win32 constants for window management (user32.h / winuser.h).
 const (

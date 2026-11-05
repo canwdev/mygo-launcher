@@ -46,5 +46,5 @@ func installKey() string {
 // 把完整目录放进标题后，FindWindowW 就能按目录找到对应窗口；且完整目录天然唯一
 // （不同安装目录全路径必不同），无需再叠加校验位。标题本身也直接展示安装位置。
 func instanceTitle(dir string) string {
-	return "Go Launcher - " + dir
+	return "MyGo Launcher - " + dir
 }

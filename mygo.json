@@ -1,6 +1,6 @@
 {
-  "name": "Go Launcher",
+  "name": "MyGo Launcher",
   "identifier": "com.canwdev.golauncher",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "out": "build"
 }

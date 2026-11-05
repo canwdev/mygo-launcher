@@ -15,7 +15,7 @@ import (
 // platforms. The full file name is this prefix plus the install-directory hash,
 // so different install directories get different lock files and can run
 // concurrently, while a second launch from the same directory is refused.
-const singleInstanceLockPrefix = ".go-launcher-singleton-"
+const singleInstanceLockPrefix = ".mygo-launcher-singleton-"
 
 // instanceLock is the open lock file held for the lifetime of the process.
 var instanceLock *os.File

@@ -1,4 +1,4 @@
-# go-launcher
+# MyGo Launcher
 
 <p align="center">
   <img src="resources/icon.png" alt="icon" width="180" height="180" />
@@ -11,7 +11,7 @@ runtime), lets you run/stop them, drag & drop to add more, and manage entries vi
 a per-item menu. Each item can be launched as administrator (check *Run as
 administrator* in the item editor — it is stored in the data file and shows a
 shield marker; Windows asks for UAC). Launcher data lives in
-`.go-launcher-data/go-launcher-data.json`; edit that file by hand and the running
+`mygo-launcher-data/go-launcher-data.json`; edit that file by hand and the running
 app reloads it automatically (see [Data file](#data-file)).
 
 ## Requirements
@@ -35,7 +35,7 @@ changes.
 ## Build
 
 ```sh
-go tool mygo build          # build/windows-amd64/Go Launcher.exe + installer
+go tool mygo build          # build/windows-amd64/MyGo Launcher.exe + installer
 go build ./...              # compile only, for a quick check
 go test ./...               # tests, the interface's included (headless)
 ```
@@ -45,19 +45,23 @@ go test ./...               # tests, the interface's included (headless)
 Every push to `master` runs [`.github/workflows/release.yml`](./.github/workflows/release.yml)
 on `windows-latest`: it checks out MyGo at the pinned commit beside the repo (for
 the `replace` directive), runs `go tool mygo build`, then publishes a GitHub
-Release tagged `v<version>-<run number>` (e.g. `v0.1.2-42`) with the executable
+Release tagged `v<version>-<run number>` (e.g. `v0.2.0-42`) with the executable
 and the installer attached (Windows x64 only). Bump `version` in `mygo.json` and
 `appVersion` in `version.go` when you want a new release version. Manual runs are
 possible from the Actions tab (`workflow_dispatch`).
 
 ## Data file
 
-Everything the launcher knows is kept in `.go-launcher-data/go-launcher-data.json`
+Everything the launcher knows is kept in `mygo-launcher-data/go-launcher-data.json`
 (next to the working directory of the executable):
 
 - `apps` — global item pool (`guid` / `name` / `path` / `icon` / `args` / `working_dir` / `runtime_ms` / `run_as_admin`)
 - `categories` — the tabs, each with a `slots` array of app guids (`null` = empty grid cell)
 - `settings` — `game_mode` / `auto_hide` / `always_on_top` / `absolute_paths`
+
+0.2.0 renamed the folder from `.go-launcher-data`; on startup the launcher moves
+the old one into place, cached icons and window geometry included, and rewrites
+the icon paths that name it.
 
 The file is watched while the app runs (`mygo.WatchFiles`, event-driven — no
 polling): save a manual edit and the launcher applies it right away and refreshes
@@ -69,10 +73,10 @@ and the store is written back on every change.
 The window keeps its own settings in the same folder, because they belong to the
 window rather than to the launcher's data:
 
-- `.go-launcher-data/ui-state.json` — theme, list/grid view, active tab, manual and
+- `mygo-launcher-data/ui-state.json` — theme, list/grid view, active tab, manual and
   auto timers (what the previous build kept in the page's localStorage)
-- `.go-launcher-data/window-state.json` — window position, size and maximized state
-- `.go-launcher-data/cached-icons/` — icons extracted from the files items point at
+- `mygo-launcher-data/window-state.json` — window position, size and maximized state
+- `mygo-launcher-data/cached-icons/` — icons extracted from the files items point at
 
 ## Structure
 

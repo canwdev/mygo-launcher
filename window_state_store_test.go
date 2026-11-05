@@ -8,7 +8,7 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// TestWindowStateStoreRoundTrip 验证窗口几何写进 .go-launcher-data 并能读回。
+// TestWindowStateStoreRoundTrip 验证窗口几何写进数据文件夹并能读回。
 func TestWindowStateStoreRoundTrip(t *testing.T) {
 	old := absBase
 	absBase = t.TempDir()

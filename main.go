@@ -29,9 +29,9 @@ func main() {
 
 	app := NewApp()
 
-	mygo.App.SetName("Go Launcher")
+	mygo.App.SetName("MyGo Launcher")
 	mygo.App.SetVersion(appVersion)
-	// The window's geometry is kept beside the store, in .go-launcher-data,
+	// The window's geometry is kept beside the store, in mygo-launcher-data,
 	// rather than in the user's config folder: the launcher is portable.
 	mygo.App.SetWindowStateStore(windowStateStore{})
 

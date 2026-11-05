@@ -23,7 +23,7 @@ launcher lists files/programs with icons and accumulated runtime, and can run/st
 
 ```sh
 go tool mygo dev               # dev with live reload
-go tool mygo build             # build/windows-amd64/Go Launcher.exe + NSIS installer
+go tool mygo build             # build/windows-amd64/MyGo Launcher.exe + NSIS installer
 go build ./...                 # compile only
 go test ./...                  # tests, the interface's included (headless)
 go vet ./...
@@ -59,7 +59,7 @@ frames except those fields. Consequences that bite:
 
 ## Data
 
-- Everything lives in `.go-launcher-data/` beside the working directory: `go-launcher-data.json`
+- Everything lives in `mygo-launcher-data/` beside the working directory: `go-launcher-data.json`
   (the store: `apps` / `categories` / `settings`), `ui-state.json` (theme, view mode, active tab,
   timers), `window-state.json` (geometry), `cached-icons/`.
 - **The on-disk format is shared with the previous Wails build** (`run_as_admin`, `runtime_ms`,
@@ -72,6 +72,10 @@ frames except those fields. Consequences that bite:
   fingerprint, so the watcher (`store_watch.go`, `mygo.WatchFiles`) can tell the app's own writes
   from an edit made by hand. A file caught mid-edit (invalid JSON) is ignored, not treated as an
   empty store.
+- **The folder was renamed in 0.2.0** (`.go-launcher-data` → `mygo-launcher-data`).
+  `prepareDataDir` (`data_migration.go`) moves the old folder at startup (renaming it, or copying
+  if a file is held open), and `parseStore` rewrites the icon paths that name it, so
+  `legacyDataDir` must not be dropped while old installs exist.
 
 ## Testing the interface
 

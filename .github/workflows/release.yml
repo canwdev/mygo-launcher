@@ -25,7 +25,7 @@ env:
 
 jobs:
   release:
-    name: Build Go Launcher and publish release
+    name: Build MyGo Launcher and publish release
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
         run: |
           $version = (Get-Content 'mygo.json' -Raw | ConvertFrom-Json).version
           if ([string]::IsNullOrWhiteSpace($version)) { throw 'mygo.json has no version field' }
-          # tag = v<mygo.json version>-<GitHub run number>，例如 v0.1.2-42
+          # tag = v<mygo.json version>-<GitHub run number>，例如 v0.2.0-42
           $tag = 'v{0}-{1}' -f $version, '${{ github.run_number }}'
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -72,7 +72,7 @@ jobs:
         shell: pwsh
         run: |
           $dir = 'build/windows-amd64'
-          $exe = Join-Path $dir 'Go Launcher.exe'
+          $exe = Join-Path $dir 'MyGo Launcher.exe'
           if (-not (Test-Path $exe)) { throw "build produced no $exe" }
           $item = Get-Item $exe
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
@@ -103,21 +103,21 @@ jobs:
           prerelease: false
           # 附件：单文件 exe 与安装包
           files: |
-            build/windows-amd64/Go Launcher.exe
-            build/windows-amd64/go-launcher-setup-*.exe
+            build/windows-amd64/MyGo Launcher.exe
+            build/windows-amd64/mygo-launcher-setup-*.exe
           fail_on_unmatched_files: true
           # 自动附带由 commit 生成的 changelog
           generate_release_notes: true
           body: |
             Automated build of `master` — `${{ github.sha }}` ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
 
-            - **Assets:** `Go Launcher.exe` (single file, no runtime needed — the UI is drawn by Go) and the NSIS installer
+            - **Assets:** `MyGo Launcher.exe` (single file, no runtime needed — the UI is drawn by Go) and the NSIS installer
             - **Version:** `${{ steps.version.outputs.version }}` (from `mygo.json`) + build ${{ github.run_number }}
             - **SHA256:** `${{ steps.artifact.outputs.sha256 }}`
             - **Built with:** MyGo `${{ env.MYGO_COMMIT }}`
 
 # 备注：
 # - 版本号取自 mygo.json 的 version（发版前手动往上抬，同时改 version.go 的
-#   appVersion），tag 形如 v0.1.2-42，其中 42 是 GitHub 的 run number。
+#   appVersion），tag 形如 v0.2.0-42，其中 42 是 GitHub 的 run number。
 # - 每次 push 都会新建一个 release（每个 tag 一次）；只想在打 tag 时发布的话，
 #   把 on.push 换成 on.push.tags: ['v*']。

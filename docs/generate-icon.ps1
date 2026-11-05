@@ -1,7 +1,7 @@
 ﻿<#requires -Version 5.1
 <#
 .SYNOPSIS
-    从 resources/icon.svg 生成 Go Launcher 的应用图标，并可选重新打包。
+    从 resources/icon.svg 生成 MyGo Launcher 的应用图标，并可选重新打包。
 
 .DESCRIPTION
     完整图标生成流程：

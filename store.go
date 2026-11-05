@@ -11,11 +11,15 @@ import (
 )
 
 // The launcher keeps its data next to the executable's working directory, in a
-// hidden folder. The names are part of the on-disk format: existing stores made
-// by the Wails build keep working, and the folder is what "Open data
+// folder of its own: the store, the icon cache and the window's settings. The
+// names are part of the on-disk format, and the folder is what "Open data
 // directory…" shows.
 const (
-	dataDir     = ".go-launcher-data"
+	dataDir = "mygo-launcher-data"
+	// legacyDataDir is where builds before 0.2.0 kept it. prepareDataDir moves
+	// it into place, and parseStore rewrites the icon paths that name it.
+	legacyDataDir = ".go-launcher-data"
+
 	saveFile    = dataDir + "/go-launcher-data.json"
 	iconsDir    = dataDir + "/cached-icons"
 	uiStateFile = dataDir + "/ui-state.json"
@@ -95,6 +99,16 @@ func resolveLaunchPath(p string) string {
 	return absPath(p)
 }
 
+// migrateIconPath points an icon of an earlier build at the data folder of this
+// one: icon paths are relative, so the folder's rename would leave every cached
+// icon unreachable. Both separators appear in stored paths.
+func migrateIconPath(icon string) string {
+	if icon == "" || !strings.Contains(icon, legacyDataDir) {
+		return icon
+	}
+	return strings.ReplaceAll(icon, legacyDataDir, dataDir)
+}
+
 func defaultStore() AppStore {
 	return AppStore{
 		Apps: map[string]*AppItem{},
@@ -124,8 +138,9 @@ func settingsMissingKey(data []byte, key string) bool {
 
 // parseStore reads the store JSON and fills in defaults and migrations (the
 // game_mode and auto_hide keys of older files, missing guids and names, path
-// normalization). ok=false means the content is not valid JSON: a file caught
-// mid-edit must not be taken as an empty store.
+// normalization, icon paths that name the folder of earlier builds). ok=false
+// means the content is not valid JSON: a file caught mid-edit must not be taken
+// as an empty store.
 func parseStore(data []byte) (AppStore, bool) {
 	var store AppStore
 	if err := json.Unmarshal(data, &store); err != nil {
@@ -148,6 +163,7 @@ func parseStore(data []byte) (AppStore, bool) {
 			continue
 		}
 		app.Path = normalizePath(app.Path)
+		app.Icon = migrateIconPath(app.Icon)
 		if app.GUID == "" {
 			app.GUID = guid
 		}

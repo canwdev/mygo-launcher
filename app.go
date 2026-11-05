@@ -62,7 +62,8 @@ type App struct {
 }
 
 func NewApp() *App {
-	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
+	// Creates the data folder, carrying over the one of earlier builds.
+	prepareDataDir()
 	app := &App{
 		store:        loadStore(),
 		runtimeStats: map[string]int64{},
