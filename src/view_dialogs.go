@@ -129,16 +129,24 @@ func (v *view) itemDialogFields(c *ui.Context) {
 	})
 
 	v.labeled(c, m.Icon(), func() {
-		ui.Row(c).Gap(6).Children(func() {
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.TextInput(c, &v.editIcon).Grow(1).Placeholder(m.IconAuto())
+			if iconTakesIndex(v.editIcon) {
+				ui.Text(c, m.IconIndex()).FontSize(11).TextColor(p.muted)
+				ui.TextInput(c, &v.editIconIndex).Width(44).Tooltip(m.IconIndexHint())
+			}
 			v.browseButton(c, m.Browse(), func() string {
 				start := dirname(v.editIcon)
 				if start == "" {
 					start = dirname(v.editPath)
 				}
-				return v.app.pickImage(start)
-			}, func(p string) { v.editIcon = p })
-			ui.Button(c, m.Clear()).OnClick(func() { v.editIcon = ""; v.refresh() })
+				return v.app.pickIcon(start)
+			}, func(p string) { v.editIcon = p; v.editIconIndex = "0" })
+			ui.Button(c, m.Clear()).OnClick(func() {
+				v.editIcon = ""
+				v.editIconIndex = "0"
+				v.refresh()
+			})
 		})
 	})
 }

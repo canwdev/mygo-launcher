@@ -141,16 +141,20 @@ func TestConvertItemPathsRoundTrip(t *testing.T) {
 		Path:       filepath.Join("tools", "app.exe"),
 		WorkingDir: filepath.Join("tools"),
 		Icon:       filepath.Join(iconsDir, "app.png"),
+		Link:       filepath.Join("tools", "app.lnk"),
 	}
-	relative := item.Path
+	relative, relativeLink := item.Path, item.Link
 
 	convertItemPaths(item, true)
-	if !filepath.IsAbs(item.Path) || !filepath.IsAbs(item.Icon) {
+	if !filepath.IsAbs(item.Path) || !filepath.IsAbs(item.Icon) || !filepath.IsAbs(item.Link) {
 		t.Fatalf("absolute conversion failed: %+v", item)
 	}
 	convertItemPaths(item, false)
 	if item.Path != relative {
 		t.Fatalf("relative conversion did not restore the path: got %q, want %q", item.Path, relative)
+	}
+	if item.Link != relativeLink {
+		t.Fatalf("relative conversion did not restore the link: got %q, want %q", item.Link, relativeLink)
 	}
 	if filepath.IsAbs(item.WorkingDir) {
 		t.Fatalf("working directory must be relative again: %q", item.WorkingDir)

@@ -7,28 +7,41 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// listBody shows the tab as rows: one per item, as MyGo Music lists tracks.
+// listMargin is the page's room around the rows, and the larger trailing room
+// it keeps for the add button, so the last row stays clear of it while the
+// rest scrolls under it.
+var listMargin = [4]float32{12, 10, 68, 10}
+
+// listBody shows the tab as rows: one per item, as MyGo Music lists tracks. As
+// in the grid, the page's padding belongs to the scrolling content, so that the
+// rows scroll under the add button while its own bottom keeps the last one
+// clear.
 func (v *view) listBody(c *ui.Context, tab *CategoryNode) {
 	rows := v.rows(tab)
 	if len(rows) == 0 {
 		v.emptyState(c, tab)
 		return
 	}
-	v.list.Key = func(i int) any { return rows[i].item.GUID }
-	v.list.Label = func(i int) string { return rows[i].item.Name }
-	ui.List(c, &v.list, len(rows), func(i int) {
-		v.listRow(c, rows[i])
-	}).Grow(1).Padding(16, 16, 88, 16)
+	pv := v.pageState(tab)
+	ui.Scroll(c).Grow(1).TrackScroll(&pv.listScroll).Children(func() {
+		ui.Column(c).Padding(listMargin[:]...).Role(ui.RoleList).Children(func() {
+			for _, ref := range rows {
+				v.listRow(c, tab, ref)
+			}
+		})
+	})
 }
 
 // listRow is one item in the list.
-func (v *view) listRow(c *ui.Context, ref rowRef) {
+func (v *view) listRow(c *ui.Context, tab *CategoryNode, ref rowRef) {
 	item, slot := ref.item, ref.slot
 	st := v.states[item.GUID]
 	p := v.pal
 	m := v.msgs()
+	metrics := v.icons()
 
-	row := ui.Row(c).Height(54).Padding(0, 8).Gap(12).Radius(10).AlignItems(ui.Center)
+	row := ui.Row(c).Height(metrics.rowHeight).Padding(0, 6).Gap(10).Radius(8).
+		AlignItems(ui.Center).Role(ui.RoleListItem)
 	switch {
 	case v.isLocated(item.GUID):
 		row.Background(p.accent.Alpha(0.12))
@@ -40,16 +53,25 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 
 	// Dragging, and taking what is dragged: a row reorders, and takes items
 	// from another spot (or copies with Cmd/Ctrl held).
-	row.Drag(dragItem{guid: item.GUID, slot: slot, tab: v.prefs.ActiveTab})
+	row.Drag(dragItem{guid: item.GUID, slot: slot, tab: tab.GUID})
+	// The line shows where the drop lands: above the row when the pointer
+	// aims before it, below it when after.
+	if _, over := ui.DragOver[dragItem](row); over {
+		insertLine(row, false, dropAfter(row, false), p)
+	}
 	if dragged, ok := ui.Drop[dragItem](row); ok {
 		copyItem := c.Modifiers()&ui.Cmd != 0
-		v.later(func() { v.reorderSlots(dragged.slot, slot, copyItem) })
-	}
-	if _, over := ui.DragOver[dragItem](row); over {
-		row.BorderWidth(0, 0, 0, 2).BorderColor(p.accent)
+		at := slot
+		// The frame that sees the drop no longer reports the drag over the
+		// row, but still knows where the pointer let go.
+		if dropAfter(row, false) {
+			at++
+		}
+		v.dropDragged(dragged, tab, at, copyItem)
 	}
 	if row.Dragging() {
 		row.Opacity(0.4)
+		v.itemDraggingNow = true
 	}
 
 	if row.DoubleClicked() {
@@ -58,21 +80,27 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 	row.PopoverMenu(v.itemMenu(item, slot))
 
 	row.Children(func() {
-		v.itemIcon(c, item, 34)
+		v.itemIcon(c, item, metrics.listIcon)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, item.Name).FontSize(14).FontWeight(500).TextColor(p.text).
+				ui.Text(c, item.Name).FontSize(metrics.listFont).FontWeight(500).TextColor(p.text).
 					SingleLine().Shrink(1).MinWidth(0)
 				if item.RunAsAdmin {
 					ui.Icon(c, iconShield).Size(13, 13).TextColor(c.Theme().Warning).Tooltip(m.RunsAsAdmin())
 				}
 			})
 			if item.Path != "" {
-				ui.Text(c, item.Path).FontSize(12).TextColor(p.muted).SingleLine().Shrink(1).MinWidth(0)
+				ui.Text(c, item.Path).FontSize(max(metrics.listFont-3, 10)).TextColor(p.muted).SingleLine().Shrink(1).MinWidth(0)
 			}
 		})
 		v.runtimeField(c, item, st)
 		v.runButton(c, item, st)
+
+		// Files land above or below the row, as its two halves take them.
+		top := ui.Box(c).Key("file-before").Absolute().Top(0).Left(0).Right(0).HeightPercent(50)
+		bottom := ui.Box(c).Key("file-after").Absolute().Bottom(0).Left(0).Right(0).HeightPercent(50)
+		v.fileDropHalf(row, top, tab.GUID, slot, false, false, p)
+		v.fileDropHalf(row, bottom, tab.GUID, slot+1, false, true, p)
 	})
 }
 
@@ -84,7 +112,7 @@ func (v *view) runButton(c *ui.Context, item *AppItem, st ItemState) {
 	if st.Running {
 		label, icon = m.Stop(), iconStop
 	}
-	b := ui.ButtonBase(c).Height(28).PaddingX(12).Gap(6).Radius(999).AlignItems(ui.Center).
+	b := ui.ButtonBase(c).Height(26).PaddingX(10).Gap(5).Radius(999).AlignItems(ui.Center).
 		Background(p.hover).TextColor(p.text).Label(label).FocusRing(false)
 	if b.Hovered() {
 		b.Background(p.press)

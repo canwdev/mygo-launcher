@@ -153,38 +153,111 @@ func TestViewSearch(t *testing.T) {
 	}
 }
 
-// TestViewTabsAddRename 验证标签的增、改名与切换。
+// TestViewTabsAddRename 验证页面的增、改名与切换。
 func TestViewTabsAddRename(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 460)
 
-	if err := tt.Click("Add tab"); err != nil {
-		t.Fatalf("add a tab: %v", err)
+	if err := tt.Click("Add page"); err != nil {
+		t.Fatalf("add a page: %v", err)
 	}
 	if len(app.store.Categories) != 2 {
-		t.Fatalf("adding a tab must append one, got %+v", app.store.Categories)
+		t.Fatalf("adding a page must append one, got %+v", app.store.Categories)
 	}
-	if !tt.HasText("New Tab") {
-		t.Fatalf("the new tab must show in the strip, texts %q", tt.Texts())
+	if !tt.HasText("New Page") {
+		t.Fatalf("the new page must show in the strip, texts %q", tt.Texts())
 	}
 
-	if err := tt.RightClick("New Tab"); err != nil {
-		t.Fatalf("open the tab menu: %v", err)
+	if err := tt.RightClick("New Page"); err != nil {
+		t.Fatalf("open the page menu: %v", err)
 	}
 	if err := tt.Click("Rename"); err != nil {
 		t.Fatalf("choose Rename: %v", err)
 	}
-	if !tt.HasText("Rename Tab") {
+	if !tt.HasText("Rename Page") {
 		t.Fatalf("the rename dialog must open, texts %q", tt.Texts())
 	}
 	tt.Type(" 2")
 	if err := tt.Click("OK"); err != nil {
 		t.Fatalf("confirm the rename: %v", err)
 	}
-	if !tt.HasText("New Tab 2") {
-		t.Fatalf("the renamed tab must show, texts %q", tt.Texts())
+	if !tt.HasText("New Page 2") {
+		t.Fatalf("the renamed page must show, texts %q", tt.Texts())
 	}
-	if app.store.Categories[1].Name != "New Tab 2" {
+	if app.store.Categories[1].Name != "New Page 2" {
 		t.Fatalf("the rename must be saved, got %q", app.store.Categories[1].Name)
+	}
+}
+
+// TestViewLastPageCannotBeRemoved 验证只剩一个页面时菜单里没有「Remove」入口，
+// 即使直接请求也不会删掉它。
+func TestViewLastPageCannotBeRemoved(t *testing.T) {
+	t.Run("only page", func(t *testing.T) {
+		app, v, tt := newTestView(t, 720, 460)
+
+		v.requestDeleteTab(app.store.Categories[0].GUID, "Default")
+		if len(app.store.Categories) != 1 {
+			t.Fatalf("the only page must stay, got %d pages", len(app.store.Categories))
+		}
+		if err := tt.RightClick("Default"); err != nil {
+			t.Fatalf("open the page menu: %v", err)
+		}
+		if tt.HasText("Remove") {
+			t.Fatalf("the only page must not offer Remove, texts %q", tt.Texts())
+		}
+	})
+	t.Run("another page", func(t *testing.T) {
+		_, v, tt := newTestView(t, 720, 460)
+		v.addTab()
+		tt.Frame()
+
+		if err := tt.RightClick("Default"); err != nil {
+			t.Fatalf("open the page menu: %v", err)
+		}
+		if !tt.HasText("Remove") {
+			t.Fatalf("a page beside another must offer Remove, texts %q", tt.Texts())
+		}
+	})
+}
+
+// TestViewOffersUpdateIconOutsideFolders 验证路径外的图标可以从菜单「更新图标」
+// 收进来，已经自定义的图标则没有这一项。
+func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
+	t.Run("outside", func(t *testing.T) {
+		app, _, tt := newTestView(t, 720, 460)
+		app.store.Apps["a"].Icon = `C:\pictures\a.png`
+		tt.Frame()
+		if err := tt.RightClick("Alpha"); err != nil {
+			t.Fatalf("open the item menu: %v", err)
+		}
+		if !tt.HasText("Update icon") {
+			t.Fatalf("an icon outside the folders must offer Update icon, texts %q", tt.Texts())
+		}
+	})
+	t.Run("custom", func(t *testing.T) {
+		app, _, tt := newTestView(t, 720, 460)
+		app.store.Apps["a"].Icon = "./" + customIconsDir + "/a.png"
+		tt.Frame()
+		if err := tt.RightClick("Alpha"); err != nil {
+			t.Fatalf("open the item menu: %v", err)
+		}
+		if tt.HasText("Update icon") {
+			t.Fatalf("a custom icon needs no update entry, texts %q", tt.Texts())
+		}
+	})
+}
+
+// TestViewShowsIconIndexForPrograms 验证图标是程序或 DLL 时才显示序号输入框。
+func TestViewShowsIconIndexForPrograms(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+	v.openEdit("a")
+	tt.Frame()
+	if tt.HasText("Index") {
+		t.Fatalf("an image icon needs no index, texts %q", tt.Texts())
+	}
+	v.editIcon = `C:\Windows\System32\shell32.dll`
+	tt.Frame()
+	if !tt.HasText("Index") {
+		t.Fatalf("a DLL icon needs an index field, texts %q", tt.Texts())
 	}
 }
 
@@ -400,6 +473,73 @@ func TestViewSettingsChoosesAccent(t *testing.T) {
 	}
 }
 
+// TestViewSettingsCustomAccent 验证强调色最右的自定义按钮：点开取色器，选中的颜色
+// 以 #rrggbb 写进偏好。
+func TestViewSettingsCustomAccent(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	settings := newTestSettings(t, v)
+	if err := settings.Click("Custom accent color"); err != nil {
+		t.Fatalf("open the custom accent picker: %v", err)
+	}
+	if !v.customAccentOpen {
+		t.Fatal("the custom accent picker must open")
+	}
+	if err := settings.Click("Red"); err != nil {
+		t.Fatalf("choose a color: %v", err)
+	}
+	if !strings.HasPrefix(v.prefs.Accent, "#") {
+		t.Fatalf("the custom accent must be a hex color, got %q", v.prefs.Accent)
+	}
+	if got := loadPrefs().Accent; got != v.prefs.Accent {
+		t.Fatalf("the custom accent must be saved, got %q", got)
+	}
+}
+
+// TestViewSettingsChoosesIconSize 验证图标大小的三个挡位：默认中，选择小或大后记住
+// 并写回 ui-state.json。
+func TestViewSettingsChoosesIconSize(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	if v.prefs.IconSize != "medium" {
+		t.Fatalf("the icon size must be medium by default, got %q", v.prefs.IconSize)
+	}
+	settings := newTestSettings(t, v)
+	if err := settings.Click("Small"); err != nil {
+		t.Fatalf("choose the small icons: %v", err)
+	}
+	if v.prefs.IconSize != "small" {
+		t.Fatalf("the icon size must be remembered, got %q", v.prefs.IconSize)
+	}
+	if got := loadPrefs().IconSize; got != "small" {
+		t.Fatalf("the icon size must be saved, got %q", got)
+	}
+	if err := settings.Click("Large"); err != nil {
+		t.Fatalf("choose the large icons: %v", err)
+	}
+	if v.prefs.IconSize != "large" {
+		t.Fatalf("the icon size must change, got %q", v.prefs.IconSize)
+	}
+}
+
+// TestViewGridShowsRuntimeOnHover 验证网格单元左上角的时长默认不画，指针移到格子上
+// 才出现，免得空白的「--」占满网格。
+func TestViewGridShowsRuntimeOnHover(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+	v.prefs.ViewMode = "grid"
+	tt.Frame()
+	if tt.HasText("--") {
+		t.Fatalf("an unhovered cell must not show its runtime, texts %q", tt.Texts())
+	}
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta cell")
+	}
+	tt.Move(beta.X+beta.W/2, beta.Y+beta.H/2)
+	tt.Frame()
+	if !tt.HasText("--") {
+		t.Fatalf("a hovered cell must show its runtime, texts %q", tt.Texts())
+	}
+}
+
 // fakeUpdater swaps the updater plugin's preferences for ones in memory, until
 // the returned function puts them back: the plugin panics without useUpdater.
 func fakeUpdater(checks, downloads *bool, checked *int, last *time.Time, available *string) func() {
@@ -567,8 +707,13 @@ func TestViewShowsChineseTexts(t *testing.T) {
 // drag presses at from, moves in steps to to, and releases there: the gesture
 // that drags a row, a cell or a tab.
 func drag(tt *ui.Tester, from, to ui.Rect) {
+	dragTo(tt, from, to.X+to.W/2, to.Y+to.H/2)
+}
+
+// dragTo drags from the middle of from and lets go at x2, y2, which picks the
+// side of a drop target the item lands on.
+func dragTo(tt *ui.Tester, from ui.Rect, x2, y2 float32) {
 	x1, y1 := from.X+from.W/2, from.Y+from.H/2
-	x2, y2 := to.X+to.W/2, to.Y+to.H/2
 	tt.Press(x1, y1)
 	for i := 1; i <= 8; i++ {
 		tt.Move(x1+(x2-x1)*float32(i)/8, y1+(y2-y1)*float32(i)/8)
@@ -601,10 +746,78 @@ func TestViewListDragReorders(t *testing.T) {
 	if !ok {
 		t.Fatal("no Beta row")
 	}
-	drag(tt, alpha, beta)
+	dragTo(tt, alpha, 600, beta.Y+beta.H) // below Beta: after it
 
 	if got := tabSlots(app, 0); len(got) != 2 || got[0] != "b" || got[1] != "a" {
 		t.Fatalf("slots = %v, want the dragged item first", got)
+	}
+}
+
+// TestViewDropsItemOnItsPageNothing 验证把条目拖到它当前所在的页面胶囊上放下，
+// 什么都不改变。
+func TestViewDropsItemOnItsPageNothing(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	chip, ok := tt.Find("Default")
+	if !ok {
+		t.Fatal("no Default page")
+	}
+	drag(tt, alpha, chip)
+	if got := tabSlots(app, 0); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("slots = %v, want the drop on its own page to change nothing", got)
+	}
+}
+
+// TestViewDropsItemAtEndOfPage 验证条目拖到没有落点的地方时落到页面末尾，
+// 而不是取消拖动。
+func TestViewDropsItemAtEndOfPage(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	dragTo(tt, alpha, 360, 350) // the empty part of the page
+	if got := tabSlots(app, 0); len(got) != 2 || got[0] != "b" || got[1] != "a" {
+		t.Fatalf("slots = %v, want the dropped item at the end", got)
+	}
+}
+
+// TestViewDropsBesideTarget 验证拖动的指示线决定落点：下/右半边插在目标之后，
+// 上/左半边插在它之前。
+func TestViewDropsBesideTarget(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	app.store.Apps["c"] = &AppItem{GUID: "c", Name: "Gamma", Path: "C:/tools/gamma.exe"}
+	app.store.Categories[0].Slots = []*string{ptrString("a"), ptrString("b"), ptrString("c")}
+	tt.Frame()
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta row")
+	}
+	dragTo(tt, alpha, 600, beta.Y+beta.H) // below Beta: after it
+	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "a" || got[2] != "c" {
+		t.Fatalf("slots = %v, want the item after Beta", got)
+	}
+
+	// Beta and Gamma now swap places around Alpha: drag Gamma above Alpha.
+	alpha, ok = tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	gamma, ok := tt.Find("Gamma")
+	if !ok {
+		t.Fatal("no Gamma row")
+	}
+	dragTo(tt, gamma, 600, alpha.Y) // above Alpha: before it
+	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "c" || got[2] != "a" {
+		t.Fatalf("slots = %v, want the item before Alpha", got)
 	}
 }
 
@@ -623,7 +836,7 @@ func TestViewGridDragReorders(t *testing.T) {
 	if !ok {
 		t.Fatal("no Beta cell")
 	}
-	drag(tt, alpha, beta)
+	dragTo(tt, alpha, beta.X+beta.W/2+20, beta.Y+beta.H/2) // the cell's right half
 
 	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "a" || got[2] != "empty" {
 		t.Fatalf("slots = %v, want the dragged item first and the empty cell last", got)
@@ -633,7 +846,7 @@ func TestViewGridDragReorders(t *testing.T) {
 // TestViewDragsItemToTab 验证把列表里的一行拖到另一个标签上，条目就搬过去。
 func TestViewDragsItemToTab(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 520)
-	if err := tt.Click("Add tab"); err != nil {
+	if err := tt.Click("Add page"); err != nil {
 		t.Fatalf("add a tab: %v", err)
 	}
 	app.store.Categories[1].Name = "Second"
@@ -660,6 +873,117 @@ func TestViewDragsItemToTab(t *testing.T) {
 	}
 }
 
+// TestViewDragOverTabShowsIt 验证拖着条目停在页面胶囊上一会儿，就自动切换到这个
+// 页面，方便直接把条目放到它里面的某个位置。
+func TestViewDragOverTabShowsIt(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 520)
+	if err := tt.Click("Add page"); err != nil {
+		t.Fatalf("add a page: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	if err := tt.Click("Default"); err != nil {
+		t.Fatalf("show the first page: %v", err)
+	}
+	tt.Frame()
+	second := app.store.Categories[1].GUID
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	chip, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second page")
+	}
+	x1, y1 := alpha.X+alpha.W/2, alpha.Y+alpha.H/2
+	x2, y2 := chip.X+chip.W/2, chip.Y+chip.H/2
+	tt.Press(x1, y1)
+	for i := 1; i <= 8; i++ {
+		tt.Move(x1+(x2-x1)*float32(i)/8, y1+(y2-y1)*float32(i)/8)
+	}
+	if v.prefs.ActiveTab == second {
+		t.Fatal("the page must not show at once on a passing drag")
+	}
+	tt.Advance(2 * time.Second)
+	tt.Frame()
+	if v.prefs.ActiveTab != second {
+		t.Fatalf("resting on a page must show it, active %q want %q", v.prefs.ActiveTab, second)
+	}
+	tt.Release(x2, y2)
+	tt.Frame()
+	if got := tabSlots(app, 1); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("the second page = %v, want the dragged item", got)
+	}
+	// The drag ended with the drop: a later click must not drop it again.
+	if err := tt.Click("Default"); err != nil {
+		t.Fatalf("show the first page again: %v", err)
+	}
+	tt.Frame()
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta row")
+	}
+	tt.ClickAt(beta.X+beta.W/2, beta.Y+beta.H/2)
+	tt.Frame()
+	if got := tabSlots(app, 0); len(got) != 1 || got[0] != "b" {
+		t.Fatalf("the first page = %v, want the drop not to repeat", got)
+	}
+}
+
+// TestViewDropsItemInAnotherPage 验证拖着条目停在另一个页面上切过去后，能直接落到
+// 那个页面的条目旁，而不是卡在原页面。
+func TestViewDropsItemInAnotherPage(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 520)
+	if err := tt.Click("Add page"); err != nil {
+		t.Fatalf("add a page: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	app.store.Apps["c"] = &AppItem{GUID: "c", Name: "Gamma", Path: "C:/tools/gamma.exe"}
+	app.store.Categories[1].Slots = []*string{ptrString("c")}
+	if err := tt.Click("Default"); err != nil {
+		t.Fatalf("show the first page: %v", err)
+	}
+	tt.Frame()
+	second := app.store.Categories[1].GUID
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	chip, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second page")
+	}
+	x1, y1 := alpha.X+alpha.W/2, alpha.Y+alpha.H/2
+	x2, y2 := chip.X+chip.W/2, chip.Y+chip.H/2
+	tt.Press(x1, y1)
+	for i := 1; i <= 8; i++ {
+		tt.Move(x1+(x2-x1)*float32(i)/8, y1+(y2-y1)*float32(i)/8)
+	}
+	tt.Advance(time.Second)
+	tt.Frame()
+	if v.prefs.ActiveTab != second {
+		t.Fatalf("resting on a page must show it, active %q want %q", v.prefs.ActiveTab, second)
+	}
+
+	gamma, ok := tt.Find("Gamma")
+	if !ok {
+		t.Fatalf("no Gamma row after switching, texts %q", tt.Texts())
+	}
+	x3, y3 := gamma.X, gamma.Y+gamma.H/2
+	tt.Move(x3, y3)
+	tt.Frame()
+	tt.Release(x3, y3)
+	tt.Frame()
+
+	if got := tabSlots(app, 0); len(got) != 1 || got[0] != "b" {
+		t.Fatalf("the first page = %v, want the dragged item gone", got)
+	}
+	if got := tabSlots(app, 1); len(got) != 2 || got[0] != "a" || got[1] != "c" {
+		t.Fatalf("the second page = %v, want the item before Gamma", got)
+	}
+}
+
 // TestViewDropsFiles 验证把文件从资源管理器拖到窗口，条目加入当前标签。
 func TestViewDropsFiles(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 460)
@@ -680,10 +1004,80 @@ func TestViewDropsFiles(t *testing.T) {
 	}
 }
 
+// TestViewDropsFilesAtPosition 验证文件拖到某个条目旁时插在那个位置，而不是加到
+// 末尾；列表和网格都用同一条插入线。
+func TestViewDropsFilesAtPosition(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 520)
+	path := filepath.Join(t.TempDir(), "gamma.txt")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	if !tt.DropFiles(alpha.X, alpha.Y+alpha.H, path) {
+		t.Fatalf("the row must take dropped files, slots %v", tabSlots(app, 0))
+	}
+	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "a" || got[2] != "b" || got[1] == "a" || got[1] == "b" {
+		t.Fatalf("slots = %v, want the file after Alpha", got)
+	}
+
+	v.prefs.ViewMode = "grid"
+	tt.Frame()
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta cell")
+	}
+	if !tt.DropFiles(beta.X+beta.W/2-15, beta.Y+beta.H/2, path) {
+		t.Fatal("the cell must take dropped files")
+	}
+	got := tabSlots(app, 0)
+	if len(got) != 4 || got[0] != "a" || got[3] != "b" {
+		t.Fatalf("slots = %v, want the file before Beta", got)
+	}
+}
+
+// TestViewDropsFilesOnGridHalf 验证网格单元多出或收起运行时字段（悬停）时，文件仍按
+// 左右半边插在条目前或后，不因卡片子元素数量变化而丢失位置。
+func TestViewDropsFilesOnGridHalf(t *testing.T) {
+	for _, hover := range []bool{false, true} {
+		name := "unhovered"
+		if hover {
+			name = "hovered"
+		}
+		t.Run(name, func(t *testing.T) {
+			app, v, tt := newTestView(t, 720, 520)
+			path := filepath.Join(t.TempDir(), "gamma.txt")
+			if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			v.prefs.ViewMode = "grid"
+			tt.Frame()
+			alpha, ok := tt.Find("Alpha")
+			if !ok {
+				t.Fatal("no Alpha cell")
+			}
+			cx, cy := alpha.X+alpha.W/2, alpha.Y+alpha.H/2
+			if hover {
+				tt.Move(cx, cy)
+				tt.Frame()
+			}
+			if !tt.DropFiles(cx+20, cy, path) {
+				t.Fatal("the cell's right half must take files")
+			}
+			if got := tabSlots(app, 0); len(got) != 3 || got[0] != "a" || got[2] != "b" {
+				t.Fatalf("slots = %v, want the file after Alpha", got)
+			}
+		})
+	}
+}
+
 // TestViewDropsFilesOnTab 验证拖到某个标签上的文件加入该标签。
 func TestViewDropsFilesOnTab(t *testing.T) {
 	app, _, tt := newTestView(t, 900, 520)
-	if err := tt.Click("Add tab"); err != nil {
+	if err := tt.Click("Add page"); err != nil {
 		t.Fatalf("add a tab: %v", err)
 	}
 	app.store.Categories[1].Name = "Second"
@@ -715,7 +1109,7 @@ func TestViewDropsFilesOnTab(t *testing.T) {
 // TestViewTabDragReorders 验证拖动标签改它们的顺序。
 func TestViewTabDragReorders(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 520)
-	if err := tt.Click("Add tab"); err != nil {
+	if err := tt.Click("Add page"); err != nil {
 		t.Fatalf("add a tab: %v", err)
 	}
 	app.store.Categories[1].Name = "Second"

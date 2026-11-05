@@ -8,19 +8,24 @@ import "github.com/egoist/mygo/ui"
 func (v *view) header(c *ui.Context) {
 	p := v.pal
 	m := v.msgs()
-	ui.Row(c).Height(56).Padding(0, 16).Gap(10).AlignItems(ui.Center).
+	ui.Row(c).Height(50).Padding(0, 12).Gap(8).AlignItems(ui.Center).
 		Background(p.sidebar).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).
 		DragWindow().Children(func() {
-		ui.ScrollHorizontal(c).TrackScroll(&v.navScroll).Height(36).Grow(1).Shrink(1).MinWidth(0).Children(func() {
+		// The strip scrolls sideways with its native scroll bar when the
+		// pages do not fit.
+		nav := ui.ScrollHorizontal(c).TrackScroll(&v.navScroll).Height(36).Grow(1).Shrink(1).
+			MinWidth(0)
+		nav.Children(func() {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 				for i := range v.app.store.Categories {
 					v.tabChip(c, i)
 				}
-				if iconButton(c, iconPlus, 13, p.faint, m.AddTab()).Size(26, 26).Radius(7).Clicked() {
+				if iconButton(c, iconPlus, 13, p.faint, m.AddTab()).Size(24, 24).Radius(7).Clicked() {
 					v.later(v.addTab)
 				}
 			})
 		})
+		v.navRect = nav.Bounds()
 		if iconButton(c, iconSearch, 16, p.muted, m.Search()).Clicked() {
 			v.openSearch()
 		}

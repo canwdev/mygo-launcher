@@ -24,8 +24,38 @@ func sanitizeBase(name string) string {
 	return base
 }
 
+// isShellTarget reports whether path names something the shell opens instead of
+// a file: a URL ("https://…"), a settings or shell URI ("ms-settings:colors",
+// "shell:AppsFolder"), or a shell namespace path ("::{CLSID}"). A drive letter
+// ("C:\…") is a file path, not a scheme. Items migrated from CLaunch carry
+// these, and they must not be joined to the data directory or rewritten.
+func isShellTarget(path string) bool {
+	if path == "" {
+		return false
+	}
+	if strings.HasPrefix(path, "::") {
+		return true
+	}
+	colon := strings.IndexByte(path, ':')
+	if colon <= 0 {
+		return false
+	}
+	if colon == 1 {
+		// A one-letter scheme is a drive: "C:\tools\x.exe" and "C:x" are paths.
+		return false
+	}
+	for _, r := range path[:colon] {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+			r == '+' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func normalizePath(path string) string {
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" || isShellTarget(path) {
 		return path
 	}
 	p := strings.ReplaceAll(path, "/", `\`)

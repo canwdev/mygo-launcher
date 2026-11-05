@@ -209,10 +209,14 @@ func (v *view) scrollTo(guid string) {
 	if tab == nil {
 		return
 	}
+	m := v.icons()
+	pv := v.pageState(tab)
 	if v.prefs.ViewMode == "grid" {
 		for i, slot := range tab.Slots {
 			if slot != nil && *slot == guid {
-				v.grid.ScrollTo(i, ui.Center)
+				row := i / max(pv.gridCols, 1)
+				y := gridMargin[0] + float32(row)*m.cellHeight
+				pv.gridScroll.ScrollTo(0, max(y, 0), ui.Animation{})
 				return
 			}
 		}
@@ -220,7 +224,8 @@ func (v *view) scrollTo(guid string) {
 	}
 	for i, row := range v.rows(tab) {
 		if row.item.GUID == guid {
-			v.list.ScrollTo(i, ui.Center)
+			y := listMargin[0] + float32(i)*m.rowHeight
+			pv.listScroll.ScrollTo(0, max(y, 0), ui.Animation{})
 			return
 		}
 	}

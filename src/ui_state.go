@@ -11,11 +11,12 @@ import (
 // kept them in the page's localStorage. They live in ui-state.json beside the
 // store.
 type uiPrefs struct {
-	Theme     string `json:"theme"`              // auto, light or dark
-	ViewMode  string `json:"view_mode"`          // list or grid
-	ActiveTab string `json:"active_tab"`         // guid of the tab shown
-	Accent    string `json:"accent,omitempty"`   // preset id or #rrggbb; empty is blue
-	Language  string `json:"language,omitempty"` // auto, en or zh-Hans
+	Theme     string `json:"theme"`               // auto, light or dark
+	ViewMode  string `json:"view_mode"`           // list or grid
+	ActiveTab string `json:"active_tab"`          // guid of the tab shown
+	Accent    string `json:"accent,omitempty"`    // preset id or #rrggbb; empty is blue
+	Language  string `json:"language,omitempty"`  // auto, en or zh-Hans
+	IconSize  string `json:"icon_size,omitempty"` // small, medium or large
 }
 
 func defaultPrefs() uiPrefs {
@@ -23,6 +24,7 @@ func defaultPrefs() uiPrefs {
 		Theme:    "auto",
 		ViewMode: "list",
 		Language: "auto",
+		IconSize: "medium",
 	}
 }
 
@@ -50,6 +52,11 @@ func loadPrefs() uiPrefs {
 	case "en", "zh-Hans":
 	default:
 		p.Language = "auto"
+	}
+	switch p.IconSize {
+	case "small", "medium", "large":
+	default:
+		p.IconSize = "medium"
 	}
 	return p
 }

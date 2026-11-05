@@ -17,7 +17,8 @@ const launchCooldown = time.Second
 func (v *view) itemMenu(item *AppItem, slot int) func(m *ui.Menu) {
 	guid, name := item.GUID, item.Name
 	tabGUID := v.prefs.ActiveTab
-	autoIcon := isAutoIcon(item.Icon)
+	// An icon outside the app's folders is offered too: updating takes it in.
+	autoIcon := isAutoIcon(item.Icon) || !allowedIcon(item.Icon)
 	msgs := v.msgs()
 	return func(m *ui.Menu) {
 		if m.Item(msgs.Edit()).Chosen() {
@@ -143,6 +144,7 @@ func (v *view) openEdit(guid string) {
 	v.editArgs = item.Args
 	v.editWorkDir = item.WorkingDir
 	v.editIcon = item.Icon
+	v.editIconIndex = "0"
 	v.editAdmin = item.RunAsAdmin
 }
 
@@ -153,15 +155,21 @@ func (v *view) openCreate() {
 	v.editOpen, v.editNew, v.editGUID = true, true, ""
 	v.editName, v.editPath, v.editArgs = "", "", ""
 	v.editWorkDir, v.editIcon, v.editAdmin = "", "", false
+	v.editIconIndex = "0"
 }
 
 func (v *view) saveItemDialog() {
+	icon, err := v.app.customIcon(v.editIcon, iconIndex(v.editIconIndex))
+	if err != nil {
+		v.app.notify(err.Error())
+		return // the dialog stays open, to choose another icon
+	}
 	fields := itemFields{
 		Name:       strings.TrimSpace(v.editName),
 		Path:       strings.TrimSpace(v.editPath),
 		Args:       strings.TrimSpace(v.editArgs),
 		WorkDir:    strings.TrimSpace(v.editWorkDir),
-		Icon:       strings.TrimSpace(v.editIcon),
+		Icon:       icon,
 		RunAsAdmin: v.editAdmin,
 	}
 	if v.editNew {
@@ -194,6 +202,16 @@ func (v *view) applyRename() {
 	v.renameOpen = false
 }
 
+// iconIndex reads the icon index field: the first icon when it is not a
+// number or negative.
+func iconIndex(text string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // itemFields reads an item's values, with name replacing its own.
 func (v *view) itemFields(guid, name string) itemFields {
 	item := v.app.item(guid)
@@ -212,15 +230,34 @@ func (v *view) itemFields(guid, name string) itemFields {
 
 // === Store-wide actions ===
 
-// batchUpdateIcons extracts every auto icon again: the paths are read on the
-// main thread, the icons on a goroutine, and the result is applied back on the
-// main thread.
+// batchUpdateIcons draws every auto icon again, and takes in the icons still
+// outside the app's folders: the paths are read on the main thread, the icons
+// on a goroutine, and the result is applied back on the main thread.
 func (v *view) batchUpdateIcons() {
-	type job struct{ guid, path string }
+	type job struct {
+		guid string
+		path string
+		icon bool // the item's own icon, outside the app's folders
+	}
 	var jobs []job
 	for guid, item := range v.app.store.Apps {
-		if item != nil && item.Path != "" && isAutoIcon(item.Icon) {
-			jobs = append(jobs, job{guid, resolveLaunchPath(item.Path)})
+		if item == nil {
+			continue
+		}
+		switch {
+		case item.Icon != "" && !allowedIcon(item.Icon):
+			jobs = append(jobs, job{guid: guid, path: absPath(item.Icon), icon: true})
+		case isAutoIcon(item.Icon):
+			path := ""
+			switch {
+			case item.Link != "":
+				path = absPath(item.Link)
+			case item.Path != "":
+				path = resolveLaunchPath(item.Path)
+			}
+			if path != "" {
+				jobs = append(jobs, job{guid: guid, path: path})
+			}
 		}
 	}
 	v.app.setBusy(v.msgs().UpdatingIcons())
@@ -228,7 +265,13 @@ func (v *view) batchUpdateIcons() {
 		type result struct{ guid, icon string }
 		results := make([]result, 0, len(jobs))
 		for _, j := range jobs {
-			if icon := writeIcon(j.path); icon != "" {
+			icon := ""
+			if j.icon {
+				icon, _ = v.app.customIcon(j.path, 0)
+			} else {
+				icon = writeIcon(j.path)
+			}
+			if icon != "" {
 				results = append(results, result{j.guid, icon})
 			}
 		}
@@ -240,7 +283,9 @@ func (v *view) batchUpdateIcons() {
 					continue
 				}
 				if old := item.Icon; old != "" {
-					_ = os.Remove(absPath(old))
+					if isAutoIcon(old) || isCustomIcon(old) {
+						_ = os.Remove(absPath(old))
+					}
 					delete(v.app.icons, old)
 				}
 				item.Icon = r.icon

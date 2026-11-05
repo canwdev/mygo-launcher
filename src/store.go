@@ -16,10 +16,11 @@ import (
 // names are part of the on-disk format, and the folder is what "Open data
 // directory…" shows.
 const (
-	dataDir     = "mygo-launcher-data"
-	saveFile    = dataDir + "/go-launcher-data.json"
-	iconsDir    = dataDir + "/cached-icons"
-	uiStateFile = dataDir + "/ui-state.json"
+	dataDir        = "mygo-launcher-data"
+	saveFile       = dataDir + "/go-launcher-data.json"
+	iconsDir       = dataDir + "/cached-icons"
+	customIconsDir = dataDir + "/custom-icons"
+	uiStateFile    = dataDir + "/ui-state.json"
 )
 
 // absBase is the directory stored paths are relative to.
@@ -39,6 +40,9 @@ type AppItem struct {
 	// verb on Windows, so the system asks for UAC), false only falls back to
 	// "runas" when the program itself needs elevation.
 	RunAsAdmin bool `json:"run_as_admin,omitempty"`
+	// Link is the shortcut the item was added from, kept to draw the
+	// shortcut's icon; empty for an item added from its target directly.
+	Link string `json:"link,omitempty"`
 }
 
 // CategoryNode is a tab: a row of slots, nil being an empty cell.
@@ -81,7 +85,7 @@ func toStoredPath(abs string) string {
 }
 
 func absPath(p string) string {
-	if filepath.IsAbs(p) {
+	if p == "" || filepath.IsAbs(p) || isShellTarget(p) {
 		return p
 	}
 	return filepath.Join(absBase, p)
@@ -233,6 +237,9 @@ func convertItemPaths(item *AppItem, absolute bool) {
 		if item.Icon != "" {
 			item.Icon = absPath(item.Icon)
 		}
+		if item.Link != "" {
+			item.Link = absPath(item.Link)
+		}
 		return
 	}
 	if item.Path != "" {
@@ -243,5 +250,8 @@ func convertItemPaths(item *AppItem, absolute bool) {
 	}
 	if item.Icon != "" {
 		item.Icon = toStoredPath(absPath(item.Icon))
+	}
+	if item.Link != "" {
+		item.Link = toStoredPath(absPath(item.Link))
 	}
 }

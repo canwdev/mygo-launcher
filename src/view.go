@@ -41,9 +41,31 @@ type view struct {
 	// busy is the line shown while a long task runs.
 	busy string
 
-	list      ui.ListState
-	grid      ui.GridState
-	navScroll ui.ScrollState
+	// customAccentOpen says the settings' custom accent picker shows.
+	customAccentOpen bool
+
+	// dragHoverTab is the page an item being dragged rests on, and
+	// dragHoverSince when it came to rest there: the page shows itself after
+	// tabHoverDelay.
+	dragHoverTab   string
+	dragHoverSince time.Time
+
+	navScroll  ui.ScrollState
+	navRect    ui.Rect            // the tab strip's box
+	tabRects   map[string]ui.Rect // each page's chip
+	centerNav  bool               // center the active chip next frame
+	hoverTab   string             // the page chip the pointer rests on
+	hoverSince time.Time
+
+	// pages is what each page keeps of its own: where it scrolls, and how
+	// many cells its grid row holds.
+	pages map[string]*pageView
+
+	// itemDragging says an item was dragged in the last frame, and
+	// itemDraggingNow whether one is now: while it is, every page stays
+	// built, so that showing another page does not end the drag.
+	itemDragging    bool
+	itemDraggingNow bool
 
 	// locate is the item a search result brought into view, highlighted for a
 	// moment.
@@ -54,15 +76,16 @@ type view struct {
 	launchAt map[string]time.Time
 
 	// dialogs
-	editOpen    bool
-	editNew     bool
-	editGUID    string
-	editName    string
-	editPath    string
-	editArgs    string
-	editWorkDir string
-	editIcon    string
-	editAdmin   bool
+	editOpen      bool
+	editNew       bool
+	editGUID      string
+	editName      string
+	editPath      string
+	editArgs      string
+	editWorkDir   string
+	editIcon      string
+	editIconIndex string
+	editAdmin     bool
 
 	runtimeOpen    bool
 	runtimeGUID    string
@@ -78,6 +101,10 @@ type view struct {
 	confirmMsg    string
 	confirmAction func()
 
+	// migrateStatus says how the last CLaunch import went, shown in the
+	// settings' migration row; empty while none ran.
+	migrateStatus string
+
 	searchOpen   bool
 	searchQuery  string
 	searchChosen int
@@ -90,8 +117,12 @@ func newView(app *App) *view {
 		app:            app,
 		prefs:          loadPrefs(),
 		states:         map[string]ItemState{},
+		pages:          map[string]*pageView{},
+		tabRects:       map[string]ui.Rect{},
+		centerNav:      true,
 		launchAt:       map[string]time.Time{},
 		runtimeMinutes: "0",
+		editIconIndex:  "0",
 	}
 }
 
@@ -154,7 +185,17 @@ func (v *view) view(c *ui.Context) {
 	if files := page.DroppedFiles(); len(files) > 0 {
 		v.app.addPaths(files, v.tabGUID())
 	}
-	dropOver := page.FileDragOver()
+	// An item dropped where no row, cell or page chip takes it lands at the
+	// end of the page shown, rather than nowhere.
+	if dragged, ok := ui.Drop[dragItem](page); ok {
+		copyItem := c.Modifiers()&ui.Cmd != 0
+		guid := v.tabGUID()
+		at := 0
+		if tab := v.tab(); tab != nil {
+			at = len(tab.Slots)
+		}
+		v.later(func() { v.moveItemToTabAt(dragged.guid, guid, at, copyItem) })
+	}
 	page.Children(func() {
 		v.header(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Background(p.bg).Children(func() {
@@ -162,12 +203,23 @@ func (v *view) view(c *ui.Context) {
 			v.busyLine(c)
 			v.addFab(c)
 		})
-		if dropOver {
-			v.dropOverlay(c)
-		}
 	})
 	v.dialogs(c)
 	v.search(c)
+
+	// What this frame saw of a drag serves the next one.
+	v.itemDragging, v.itemDraggingNow = v.itemDraggingNow, false
+
+	// The page shown is where the strip centers, after the wheel or a click
+	// chose it.
+	if v.centerNav && v.navRect.W > 0 {
+		if r, ok := v.tabRects[v.prefs.ActiveTab]; ok {
+			x := v.navScroll.X + (r.X + r.W/2) - (v.navRect.X + v.navRect.W/2)
+			x = max(0, min(x, v.navScroll.MaxX))
+			v.navScroll.X = x
+		}
+		v.centerNav = false
+	}
 
 	if deferred {
 		// An action queued for this pass changed the state this frame shows
@@ -207,7 +259,7 @@ func (v *view) busyLine(c *ui.Context) {
 		return
 	}
 	p := v.pal
-	ui.Row(c).Height(34).Padding(0, 16).Gap(8).AlignItems(ui.Center).
+	ui.Row(c).Height(30).Padding(0, 12).Gap(8).AlignItems(ui.Center).
 		BorderWidth(1, 0, 0, 0).BorderColor(p.hairline).Children(func() {
 		ui.Spinner(c).Size(12, 12)
 		ui.Text(c, v.busy).FontSize(12).TextColor(p.muted)
@@ -219,7 +271,7 @@ func (v *view) busyLine(c *ui.Context) {
 func (v *view) addFab(c *ui.Context) {
 	p := v.pal
 	m := v.msgs()
-	b := ui.ButtonBase(c).Absolute().Bottom(24).Right(24).Size(52, 52).Radius(999).Center().
+	b := ui.ButtonBase(c).Absolute().Bottom(20).Right(20).Size(46, 46).Radius(999).Center().
 		Background(p.accent).TextColor(p.onAccent).Label(m.AddButton()).
 		Tooltip(m.AddButtonHint()).FocusRing(false).
 		Shadow(0, 8, 22, -6, ui.RGBA(0, 0, 0, 0.35))
@@ -233,30 +285,8 @@ func (v *view) addFab(c *ui.Context) {
 		pose.Scale = 0.92
 	}
 	b.AnimatePose(pose, ui.Snappy)
-	b.Children(func() { ui.Icon(c, iconPlus).Size(22, 22) })
+	b.Children(func() { ui.Icon(c, iconPlus).Size(20, 20) })
 	b.PopoverMenuButton(v.addMenu)
-}
-
-// dropOverlay covers the window while files dragged from Explorer are over it,
-// saying where they will go: the alpha fill lets the page show through.
-func (v *view) dropOverlay(c *ui.Context) {
-	p := v.pal
-	msgs := v.msgs()
-	tab := msgs.ThisTab()
-	if t := v.tab(); t != nil {
-		tab = t.Name
-	}
-	ui.Box(c).Absolute().Top(8).Left(8).Right(8).Bottom(8).Radius(14).
-		Background(p.accent.Alpha(0.10)).Border(2, p.accent).BorderStyle(ui.BorderDashed).
-		Center().Children(func() {
-		ui.Column(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(48, 48).Radius(14).Background(p.accent).Center().Children(func() {
-				ui.Icon(c, iconBox).Size(22, 22).TextColor(p.onAccent)
-			})
-			ui.Text(c, msgs.DropFiles()).FontSize(15).FontWeight(600).TextColor(p.text)
-			ui.Text(c, msgs.DropInto(tab)).FontSize(12).TextColor(p.muted).SingleLine()
-		})
-	})
 }
 
 func (v *view) addMenu(m *ui.Menu) {
@@ -277,18 +307,112 @@ func (v *view) tabGUID() string {
 	return ""
 }
 
-// body shows the active tab: a list of rows, or a grid of cells.
+// dropAfter reports whether the pointer over e aims past its middle: right of
+// side-by-side items, as a grid's cells and pages, or below a stacked row. A
+// native drop, as files from Explorer, knows where it landed but not that the
+// pointer is over e, so the position in e's box decides.
+func dropAfter(e ui.Element, vertical bool) bool {
+	x, y, _ := e.PointerPosition()
+	b := e.Bounds()
+	if vertical {
+		return x > b.W/2 && x < b.W
+	}
+	return y > b.H/2 && y < b.H
+}
+
+// fileDropHalf makes half of an item a target for files dragged from another
+// app, inserting them at at, and shows the insertion line on the item it is
+// half of. A native drop says which element it is over, not where in it, so
+// the halves say before or after.
+func (v *view) fileDropHalf(parent, half ui.Element, tabGUID string, at int, vertical, after bool, p palette) {
+	if files := half.DroppedFiles(); len(files) > 0 {
+		v.later(func() { v.app.addPathsAt(files, tabGUID, at) })
+	}
+	if half.FileDragOver() {
+		insertLine(parent, vertical, after, p)
+	}
+}
+
+// insertLine draws where a drop lands: a vertical line at the left or right
+// edge of side-by-side items, as between a grid's cells, or a horizontal line
+// above or below a row, as between a list's rows.
+func insertLine(e ui.Element, vertical, after bool, p palette) {
+	switch {
+	case vertical && after:
+		e.BorderWidth(0, 2, 0, 0)
+	case vertical:
+		e.BorderWidth(0, 0, 0, 2)
+	case after:
+		e.BorderWidth(0, 0, 2, 0)
+	default:
+		e.BorderWidth(2, 0, 0, 0)
+	}
+	e.BorderColor(p.accent)
+}
+
+// dropTo turns the side a drop aims at into the index moveSlot takes: at is
+// index when left of the slot, index+1 when right, in the slots as they are; a
+// moved slot lands one place earlier once it leaves.
+func dropTo(from, at int, copyItem bool) int {
+	if copyItem || from >= at {
+		return at
+	}
+	return at - 1
+}
+
+// body shows the active page: a list of rows, or a grid of cells. While an
+// item is dragged every page builds, though hidden, so that showing another
+// page does not end the drag: the item's row or cell stays mounted, and the
+// drop can land anywhere in the page the pointer shows.
 func (v *view) body(c *ui.Context) {
-	tab := v.tab()
-	if tab == nil {
+	active := v.tab()
+	if active == nil {
 		v.emptyState(c, nil)
 		return
 	}
-	if v.prefs.ViewMode == "grid" {
-		v.gridBody(c, tab)
-		return
+	tabs := v.app.store.Categories
+	ui.Box(c).Grow(1).Children(func() {
+		// The pages kept mounted while an item is dragged go under the active
+		// one, which paints last over them, so that its background hides them
+		// while its drag keeps painting the copy the pointer follows.
+		for activePass := 0; activePass < 2; activePass++ {
+			for i := range tabs {
+				tab := &tabs[i]
+				isActive := tab.GUID == active.GUID
+				if isActive != (activePass == 1) {
+					continue
+				}
+				if !isActive && !v.itemDragging {
+					continue
+				}
+				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.pal.bg)
+				page.Children(func() {
+					if v.prefs.ViewMode == "grid" {
+						v.gridBody(c, tab)
+					} else {
+						v.listBody(c, tab)
+					}
+				})
+			}
+		}
+	})
+}
+
+// pageView is what the window keeps for a page of its own.
+type pageView struct {
+	listScroll ui.ScrollState
+	gridScroll ui.ScrollState
+	gridCols   int
+}
+
+// pageState returns what a page keeps, making it the first time.
+func (v *view) pageState(tab *CategoryNode) *pageView {
+	pv := v.pages[tab.GUID]
+	if pv == nil {
+		pv = &pageView{}
+		v.pages[tab.GUID] = pv
 	}
-	v.listBody(c, tab)
+	return pv
 }
 
 func (v *view) anyRunning() bool {
@@ -314,9 +438,9 @@ func (v *view) runningCount() int {
 func (v *view) emptyState(c *ui.Context, tab *CategoryNode) {
 	p := v.pal
 	m := v.msgs()
-	ui.Column(c).Grow(1).Padding(40).Gap(8).Center().Children(func() {
-		ui.Box(c).Size(48, 48).Radius(14).Background(p.hover).Center().Children(func() {
-			ui.Icon(c, iconBox).Size(22, 22).TextColor(p.faint)
+	ui.Column(c).Grow(1).Padding(28).Gap(6).Center().Children(func() {
+		ui.Box(c).Size(44, 44).Radius(12).Background(p.hover).Center().Children(func() {
+			ui.Icon(c, iconBox).Size(20, 20).TextColor(p.faint)
 		})
 		ui.Text(c, m.NoFilesTitle()).FontSize(14).FontWeight(500).TextColor(p.text)
 		ui.Text(c, m.NoFilesHint()).

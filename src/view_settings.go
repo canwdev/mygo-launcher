@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -51,20 +52,20 @@ func (v *view) settingsView(c *ui.Context) {
 	}
 	s := &v.app.store.Settings
 
-	ui.Scroll(c).Fill().Padding(24, 28, 32, 28).Gap(8).Children(func() {
-		ui.Text(c, m.Settings()).FontSize(22).FontWeight(700).LetterSpacing(-0.3).Margin(0, 0, 10, 0)
+	ui.Scroll(c).Fill().Padding(16, 20, 24, 20).Gap(6).Children(func() {
+		ui.Text(c, m.Settings()).FontSize(20).FontWeight(700).LetterSpacing(-0.3).Margin(0, 0, 6, 0)
 
 		group := func(title string, rows func()) {
-			ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(p.muted).Margin(14, 4, 4, 4)
-			ui.Column(c).Radius(12).Background(p.bg).Border(1, p.hairline).
+			ui.Text(c, title).FontSize(11.5).FontWeight(600).TextColor(p.muted).Margin(10, 2, 2, 2)
+			ui.Column(c).Radius(10).Background(p.bg).Border(1, p.hairline).
 				Dividers(1, p.hairline).Children(rows)
 		}
 		row := func(label, desc string, control func()) {
-			ui.Row(c).Padding(12, 16).Gap(16).AlignItems(ui.Center).MinHeight(48).Children(func() {
-				ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
-					ui.Text(c, label).FontSize(13.5).FontWeight(500)
+			ui.Row(c).Padding(8, 14).Gap(12).AlignItems(ui.Center).MinHeight(42).Children(func() {
+				ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
+					ui.Text(c, label).FontSize(13).FontWeight(500)
 					if desc != "" {
-						ui.Text(c, desc).FontSize(12).TextColor(p.muted).LineHeight(1.4)
+						ui.Text(c, desc).FontSize(11.5).TextColor(p.muted).LineHeight(1.35)
 					}
 				})
 				control()
@@ -108,7 +109,7 @@ func (v *view) settingsView(c *ui.Context) {
 							color = a.dark
 						}
 						sw := ui.ButtonBase(c).Size(20, 20).Radius(10).Background(color).
-							Label(a.label).FocusRing(false)
+							Label(a.label).Tooltip(a.label).FocusRing(false)
 						chosen := v.prefs.Accent == a.id || v.prefs.Accent == "" && a.id == defaultAccent
 						if chosen {
 							sw.Border(2, p.text)
@@ -121,13 +122,40 @@ func (v *view) settingsView(c *ui.Context) {
 							v.changedSettings()
 						}
 					}
+					// The custom accent is the accent in use with an edit icon on
+					// it: it opens the color picker, which starts from that color.
 					custom := accentColor(v.prefs.Accent, p.dark)
-					well := ui.ColorWell(c, &custom).Label(m.CustomAccent())
-					if well.Changed() {
-						v.prefs.Accent = hexColor(custom)
-						v.changedSettings()
+					well := ui.ButtonBase(c).Size(20, 20).Radius(10).Background(custom).
+						Label(m.CustomAccent()).Tooltip(m.CustomAccent()).FocusRing(false)
+					if well.Hovered() {
+						well.Background(custom.Mix(ui.RGB(255, 255, 255), 0.18))
 					}
+					if well.Clicked() {
+						v.customAccentOpen = !v.customAccentOpen
+					}
+					well.Children(func() {
+						ui.Icon(c, iconEdit).Size(11, 11).TextColor(accentText(custom))
+					})
+					ui.Popover(c, well, &v.customAccentOpen, func() {
+						if ui.ColorPicker(c, &custom).Changed() {
+							v.prefs.Accent = hexColor(custom)
+							v.changedSettings()
+						}
+					})
 				})
+			})
+			row(m.IconSize(), m.IconSizeHint(), func() {
+				sizes := []string{"small", "medium", "large"}
+				i := 1
+				for k, size := range sizes {
+					if size == v.prefs.IconSize {
+						i = k
+					}
+				}
+				if segmented(c.Key("icon-size"), &i, m.Small(), m.Medium(), m.Large()) {
+					v.prefs.IconSize = sizes[i]
+					v.changedSettings()
+				}
 			})
 			row(m.BackgroundOnClose(), m.BackgroundOnCloseHint(), func() {
 				if ui.Switch(c, &s.BackgroundOnClose).Label(m.ToggleBackgroundOnClose()).Changed() {
@@ -188,6 +216,11 @@ func (v *view) settingsView(c *ui.Context) {
 					v.batchUpdateIcons()
 				}
 			})
+			row(m.MigrateCLaunch(), v.migrateHint(m), func() {
+				if ui.Button(c, m.ChooseCLaunchIni()).Clicked() {
+					v.migrateCLaunch()
+				}
+			})
 		})
 
 		group(m.About(), func() {
@@ -218,6 +251,80 @@ func (v *view) settingsView(c *ui.Context) {
 			}
 		})
 	})
+}
+
+// migrateHint is the migration row's description: what the row does, or what the
+// last import said.
+func (v *view) migrateHint(m locales.Messages) string {
+	if v.migrateStatus != "" {
+		return v.migrateStatus
+	}
+	return m.MigrateCLaunchHint()
+}
+
+// migrateCLaunch asks for a CLaunch.ini and adds its pages as new tabs. The
+// system dialog blocks and the icons are read from the disk, so both run on a
+// goroutine; the store is changed on the main thread, where it lives.
+func (v *view) migrateCLaunch() {
+	if v.app.win == nil {
+		return // headless: there is no window to open the dialog on
+	}
+	absolute := v.app.store.Settings.AbsolutePaths
+	v.migrateStatus = v.msgs().MigratingCLaunch()
+	v.app.setBusy(v.migrateStatus)
+	// The settings window is where the button was clicked: put the dialog over
+	// it, not over the launcher behind it.
+	parent := v.app.settingsWin
+	if parent == nil {
+		parent = v.app.win
+	}
+	go func() {
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:  parent,
+			Title:   locales.SelectCLaunchIniTitle(),
+			Filters: []mygo.FileFilter{{Name: locales.CLaunchIniFilter(), Extensions: []string{"ini"}}},
+		})
+		if err != nil || len(paths) == 0 {
+			v.app.dispatch(func() {
+				v.app.setBusy("")
+				v.migrateStatus = ""
+				v.app.refresh()
+			})
+			return
+		}
+		imp, err := importCLaunchFile(paths[0], absolute, true)
+		v.app.dispatch(func() {
+			v.app.setBusy("")
+			if err != nil {
+				v.migrateStatus = v.msgs().CLaunchImportFailed(err.Error())
+				v.app.notify(v.migrateStatus)
+				v.app.refresh()
+				return
+			}
+			v.applyCLaunchImport(imp)
+		})
+	}()
+}
+
+// applyCLaunchImport adds the tabs an import produced, shows the first of them
+// and says what came of the import. It runs on the main thread.
+func (v *view) applyCLaunchImport(imp cLaunchImport) {
+	first, tabs, items := v.app.addCLaunchImport(imp)
+	m := v.msgs()
+	switch {
+	case tabs == 0:
+		v.migrateStatus = m.CLaunchImportEmpty()
+	case imp.Skipped > 0:
+		v.migrateStatus = m.CLaunchImported(strconv.Itoa(tabs), strconv.Itoa(items)) + " · " + m.CLaunchImportSkipped(imp.Skipped)
+	default:
+		v.migrateStatus = m.CLaunchImported(strconv.Itoa(tabs), strconv.Itoa(items))
+	}
+	v.app.notify(v.migrateStatus)
+	if first != "" {
+		v.prefs.ActiveTab = first
+		v.savePrefs()
+	}
+	v.app.refresh()
 }
 
 // changeTheme makes the appearance the preference asks for. The theme source

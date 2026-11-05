@@ -1,6 +1,14 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"time"
+
+	"github.com/egoist/mygo/ui"
+)
+
+// tabHoverDelay is how long something being dragged rests on a page before the
+// page shows itself, so that it can be dropped where the pointer aims.
+const tabHoverDelay = 200 * time.Millisecond
 
 // tabChip is one tab of the top navigation: it takes the click that shows it,
 // drags onto another place in the strip, takes items dragged onto it (moving
@@ -16,14 +24,20 @@ func (v *view) tabChip(c *ui.Context, index int) {
 	// the items and this wrapper, its place in the strip, takes the tabs
 	// dragged over it.
 	slot := ui.Row(c).AlignItems(ui.Center)
-	if dragged, ok := ui.Drop[dragTab](slot); ok && dragged.index != index {
-		v.later(func() { v.moveTab(dragged.index, index) })
-	}
 	_, overTab := ui.DragOver[dragTab](slot)
 
 	slot.Children(func() {
-		b := ui.ButtonBase(c.Key(guid)).Height(30).PaddingX(12).Gap(5).Radius(8).
+		b := ui.ButtonBase(c.Key(guid)).Height(32).PaddingX(12).Gap(4).Radius(7).
 			AlignItems(ui.Center).FocusRing(false).Label(name)
+		v.tabRects[guid] = b.Bounds()
+		if dragged, ok := ui.Drop[dragTab](slot); ok && dragged.index != index {
+			at := index
+			if dropAfter(b, true) {
+				at++
+			}
+			to := dropTo(dragged.index, at, false)
+			v.later(func() { v.moveTab(dragged.index, to) })
+		}
 
 		// Files from Explorer dropped on a tab are added to it, rather than
 		// to the active tab.
@@ -33,25 +47,44 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		filesOver := b.FileDragOver()
 
 		switch {
-		case filesOver:
-			b.Background(p.accent.Alpha(0.12)).Border(2, p.accent)
 		case selected:
 			b.Background(p.press)
 		case b.Hovered():
 			b.Background(p.hover)
 		}
-		if overTab && !filesOver {
-			b.Border(1, p.accent)
+		// The line shows where a dragged page lands: at the left edge of the
+		// chip when the pointer aims before it, at the right edge when after.
+		if overTab {
+			insertLine(b, true, dropAfter(b, true), p)
 		}
 
 		// An item dragged over the tab: dropping moves it there, Cmd/Ctrl
-		// copies.
-		if _, over := ui.DragOver[dragItem](b); over && !filesOver {
+		// copies. Resting on it a moment shows the page, so the drop can aim
+		// at a place in it; files from Explorer do the same.
+		_, overItem := ui.DragOver[dragItem](b)
+		if (overItem || filesOver) && !overTab {
 			b.Border(2, p.accent)
+		}
+		if overItem || filesOver {
+			if v.dragHoverTab != guid {
+				v.dragHoverTab, v.dragHoverSince = guid, c.Now()
+			}
+			if !selected {
+				c.After(tabHoverDelay)
+				if c.Now().Sub(v.dragHoverSince) >= tabHoverDelay {
+					v.later(func() { v.setActiveTab(guid) })
+				}
+			}
+		} else if v.dragHoverTab == guid {
+			v.dragHoverTab = ""
 		}
 		if dragged, ok := ui.Drop[dragItem](b); ok {
 			copyItem := c.Modifiers()&ui.Cmd != 0
-			v.later(func() { v.moveItemToTab(dragged.guid, guid, copyItem) })
+			// Dropping an item on the page it already belongs to changes
+			// nothing; copying it there still makes another.
+			if copyItem || dragged.tab != guid {
+				v.later(func() { v.moveItemToTab(dragged.guid, guid, copyItem) })
+			}
 		}
 
 		// Tabs themselves reorder by dragging.
@@ -60,7 +93,20 @@ func (v *view) tabChip(c *ui.Context, index int) {
 			b.Opacity(0.4)
 		}
 		if b.Clicked() {
+			v.centerNav = true
 			v.setActiveTab(guid)
+		}
+		// Resting the pointer on a page shows it after a moment.
+		if b.Hovered() && !selected && !overItem && !filesOver {
+			if v.hoverTab != guid {
+				v.hoverTab, v.hoverSince = guid, c.Now()
+			}
+			c.After(tabHoverDelay)
+			if c.Now().Sub(v.hoverSince) >= tabHoverDelay {
+				v.later(func() { v.setActiveTab(guid) })
+			}
+		} else if v.hoverTab == guid {
+			v.hoverTab = ""
 		}
 		menu := v.tabMenu(guid, name)
 		b.PopoverMenu(menu)
@@ -89,6 +135,8 @@ func tabItemCount(tab *CategoryNode) int {
 // tabMenu is a tab's menu, shared by a right click and the ⋯ of the chip.
 func (v *view) tabMenu(guid, name string) func(m *ui.Menu) {
 	msgs := v.msgs()
+	// The last page stays: it is the window's only place for its items.
+	removable := len(v.app.store.Categories) > 1
 	return func(m *ui.Menu) {
 		if m.Item(msgs.Rename()).Chosen() {
 			v.later(func() { v.openTabRename(guid, name) })
@@ -96,9 +144,11 @@ func (v *view) tabMenu(guid, name string) func(m *ui.Menu) {
 		if m.Item(msgs.Duplicate()).Chosen() {
 			v.later(func() { v.duplicateTab(guid) })
 		}
-		m.Separator()
-		if m.Item(msgs.Remove()).Chosen() {
-			v.later(func() { v.requestDeleteTab(guid, name) })
+		if removable {
+			m.Separator()
+			if m.Item(msgs.Remove()).Chosen() {
+				v.later(func() { v.requestDeleteTab(guid, name) })
+			}
 		}
 	}
 }
@@ -114,6 +164,9 @@ func (v *view) openTabRename(guid, name string) {
 
 // requestDeleteTab deletes an empty tab at once, and asks about one with items.
 func (v *view) requestDeleteTab(guid, name string) {
+	if len(v.app.store.Categories) <= 1 {
+		return
+	}
 	tab := v.app.tab(guid)
 	if tab == nil {
 		return

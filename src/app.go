@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -83,7 +84,7 @@ func NewApp() *App {
 			app.runtimeStats[guid] = item.RuntimeMs
 		}
 	}
-	app.pruneIconFiles()
+	app.pruneIcons()
 	app.syncStoreFileState()
 	return app
 }
@@ -211,10 +212,23 @@ func openPath(path string) error {
 
 // openFile opens a path: executables (and items that ask for elevation) start as
 // a real process, so args and working directory apply, but without tracking:
-// no Stop handle, no runtime.
+// no Stop handle, no runtime. A URL or shell target is handed to the shell.
 func openFile(path string, args []string, workDir string, elevated bool) error {
+	if isShellTarget(path) {
+		return openShellTarget(path)
+	}
 	if isExecutable(path) || elevated {
 		return startUntracked(path, args, workDir, elevated)
+	}
+	return openPath(path)
+}
+
+// openShellTarget opens a URL, a shell URI or a Start menu app. A packaged app
+// is started by its Applications folder item with the default verb, which the
+// "open" verb OpenPath uses does not reach.
+func openShellTarget(path string) error {
+	if strings.HasPrefix(strings.ToLower(path), "shell:appsfolder\\") {
+		return mygo.Shell.LaunchApp(mygo.InstalledApp{Path: path})
 	}
 	return openPath(path)
 }
@@ -256,6 +270,12 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 		// A folder item opens its working directory; there is no process to
 		// track or time.
 		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
+		return plan, nil
+	}
+	if isShellTarget(item.Path) {
+		// A URL or shell namespace goes to the shell as written: it is not a
+		// file to resolve and not a process to track.
+		plan.path, plan.elevated = item.Path, false
 		return plan, nil
 	}
 	plan.path = resolveLaunchPath(item.Path)
@@ -351,11 +371,7 @@ func (a *App) setRuntimeMs(guid string, ms int64) error {
 // addFiles asks for files and adds them to the tab with tabGUID.
 func (a *App) addFiles(tabGUID string) {
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent:   a.win,
-			Title:    locales.AddFilesTitle(),
-			Multiple: true,
-		})
+		paths, err := openFilesDialog(a.win, locales.AddFilesTitle())
 		if err != nil || len(paths) == 0 {
 			return
 		}
@@ -388,6 +404,28 @@ func (a *App) addPaths(paths []string, tabGUID string) {
 	}()
 }
 
+// addPathsAt adds files, folders and shortcuts at slot at of a tab, or at its
+// end for -1, as dropping them between two items does.
+func (a *App) addPathsAt(paths []string, tabGUID string, at int) {
+	if len(paths) == 0 {
+		return
+	}
+	absolute := a.store.Settings.AbsolutePaths
+	withIcon := a.win != nil
+	if !withIcon {
+		a.addItemsAt(buildItems(paths, absolute, false), tabGUID, at)
+		return
+	}
+	a.setBusy(locales.AddingFiles())
+	go func() {
+		items := buildItems(paths, absolute, true)
+		a.dispatch(func() {
+			a.setBusy("")
+			a.addItemsAt(items, tabGUID, at)
+		})
+	}()
+}
+
 // buildItems makes entries for paths, resolving shortcuts and caching icons. It
 // reads the disk, so it runs off the main thread outside tests.
 func buildItems(paths []string, absolute, withIcon bool) []*AppItem {
@@ -402,6 +440,12 @@ func buildItems(paths []string, absolute, withIcon bool) []*AppItem {
 
 // addItems puts entries at the end of a tab and saves the store.
 func (a *App) addItems(items []*AppItem, tabGUID string) {
+	a.addItemsAt(items, tabGUID, -1)
+}
+
+// addItemsAt puts entries at slot at of a tab, or at its end for -1, and saves
+// the store.
+func (a *App) addItemsAt(items []*AppItem, tabGUID string, at int) {
 	if len(items) == 0 {
 		return
 	}
@@ -409,11 +453,15 @@ func (a *App) addItems(items []*AppItem, tabGUID string) {
 	if tab == nil {
 		return
 	}
+	if at < 0 || at > len(tab.Slots) {
+		at = len(tab.Slots)
+	}
 	for _, item := range items {
 		a.store.Apps[item.GUID] = item
 		a.runtimeStats[item.GUID] = 0
 		guid := item.GUID
-		tab.Slots = append(tab.Slots, &guid)
+		tab.Slots = append(tab.Slots[:at], append([]*string{&guid}, tab.Slots[at:]...)...)
+		at++
 	}
 	a.save()
 }
@@ -426,11 +474,11 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 		return nil
 	}
 	name := defaultTitle(path)
-	target, args, workDir, iconPath := path, "", filepath.Dir(path), path
+	target, args, workDir, link := path, "", filepath.Dir(path), ""
 	if isShortcutFile(path) {
 		if lnk, err := resolveShortcut(path); err == nil && lnk.Target != "" {
-			target, args, iconPath = lnk.Target, lnk.Args, lnk.Target
-			workDir = lnk.WorkDir
+			target, args, workDir = lnk.Target, lnk.Args, lnk.WorkDir
+			link = storedForm(path, absolute)
 			if workDir == "" {
 				workDir = filepath.Dir(target)
 			}
@@ -438,7 +486,12 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 	}
 	icon := ""
 	if withIcon {
-		icon = writeIcon(iconPath)
+		// A shortcut's own icon is the one Explorer draws, with the app's
+		// badge; the target's may be a blank stub, as chrome_proxy.exe's is.
+		icon = writeIcon(path)
+		if icon == "" && target != path {
+			icon = writeIcon(target)
+		}
 	}
 	return &AppItem{
 		GUID:       uuid.NewString(),
@@ -447,6 +500,7 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 		WorkingDir: storedForm(workDir, absolute),
 		Icon:       icon,
 		Args:       args,
+		Link:       link,
 	}
 }
 
@@ -463,10 +517,31 @@ func (a *App) updateIcon(guid string) error {
 	if item == nil {
 		return fmt.Errorf("invalid item guid %q", guid)
 	}
-	if item.Path == "" {
+	// An icon outside the app's folders is taken in, drawn down like one the
+	// dialog chose; one already there needs nothing.
+	if item.Icon != "" && !allowedIcon(item.Icon) {
+		icon, err := a.customIcon(item.Icon, 0)
+		if err != nil {
+			return err
+		}
+		a.replaceIcon(item, icon)
+		return nil
+	}
+	if isCustomIcon(item.Icon) {
+		return nil // already kept in the app's folder
+	}
+	if item.Path == "" && item.Link == "" {
 		return errors.New(locales.NoIconPath())
 	}
-	icon := writeIcon(resolveLaunchPath(item.Path))
+	// A shortcut's own icon is the one Explorer draws; its target's may be a
+	// blank stub.
+	icon := ""
+	if item.Link != "" {
+		icon = writeIcon(absPath(item.Link))
+	}
+	if icon == "" && item.Path != "" {
+		icon = writeIcon(resolveLaunchPath(item.Path))
+	}
 	if icon == "" {
 		return errors.New(locales.IconFailed())
 	}
@@ -476,7 +551,11 @@ func (a *App) updateIcon(guid string) error {
 
 func (a *App) replaceIcon(item *AppItem, icon string) {
 	if old := item.Icon; old != "" {
-		_ = os.Remove(absPath(old))
+		// Never remove a file outside the app's icon folders: an icon added
+		// before the folders were enforced may point at the user's own file.
+		if isAutoIcon(old) || isCustomIcon(old) {
+			_ = os.Remove(absPath(old))
+		}
 		delete(a.icons, old)
 	}
 	item.Icon = icon
@@ -484,8 +563,10 @@ func (a *App) replaceIcon(item *AppItem, icon string) {
 	a.refresh()
 }
 
-func imageFilter() []mygo.FileFilter {
-	return []mygo.FileFilter{{Name: locales.ImagesFilter(), Extensions: []string{"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"}}}
+func iconFilter() []mygo.FileFilter {
+	return []mygo.FileFilter{{Name: locales.IconFilesFilter(), Extensions: []string{
+		"png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "exe", "dll",
+	}}}
 }
 
 // pickFile asks for a file; dir is where the dialog starts.
@@ -497,8 +578,8 @@ func (a *App) pickFile(dir string) string {
 	return a.storedPick(paths[0])
 }
 
-func (a *App) pickImage(dir string) string {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectImageTitle(), DefaultPath: dir, Filters: imageFilter()})
+func (a *App) pickIcon(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectIconTitle(), DefaultPath: dir, Filters: iconFilter()})
 	if err != nil || len(paths) == 0 {
 		return ""
 	}
@@ -579,7 +660,7 @@ func (a *App) setAlwaysOnTop(on bool) {
 
 // iconImage returns an item's icon, decoded once and kept.
 func (a *App) iconImage(item *AppItem) ui.ImageSource {
-	if item == nil || item.Icon == "" {
+	if item == nil || item.Icon == "" || !allowedIcon(item.Icon) {
 		return nil
 	}
 	if src, ok := a.icons[item.Icon]; ok {

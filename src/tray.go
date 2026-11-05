@@ -92,11 +92,14 @@ func (v *view) trayMenu() *mygo.Menu {
 	})
 }
 
-// showMain brings the main window back from the tray.
+// showMain brings the main window back from the tray. A minimized window is
+// restored first: Show alone would leave it minimized.
 func (v *view) showMain() {
-	if v.app.win != nil {
-		v.app.win.Show()
+	if v.app.win == nil {
+		return
 	}
+	v.app.win.Restore()
+	v.app.win.Show()
 }
 
 // handleClose hides the main window in the tray while the app is set to keep
@@ -130,6 +133,6 @@ func (v *view) setBackgroundOnClose(on bool) {
 	v.app.save()
 	v.syncTray()
 	if !on && v.app.win != nil && !v.app.win.IsVisible() {
-		v.app.win.Show()
+		v.showMain()
 	}
 }

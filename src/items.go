@@ -54,6 +54,7 @@ func (v *view) addTab() {
 	cat := CategoryNode{GUID: uuid.NewString(), Name: v.msgs().NewTabName(), Slots: []*string{}}
 	v.app.store.Categories = append(v.app.store.Categories, cat)
 	v.prefs.ActiveTab = cat.GUID
+	v.centerNav = true
 	v.savePrefs()
 	v.app.save()
 }
@@ -79,6 +80,7 @@ func (v *view) removeTab(guid string) {
 		v.savePrefs()
 	}
 	v.pruneOrphans()
+	v.app.pruneIcons()
 	v.app.save()
 }
 
@@ -174,6 +176,10 @@ func (v *view) updateItem(guid string, fields itemFields) {
 	if item == nil {
 		return
 	}
+	if item.Path != fields.Path {
+		item.Link = "" // the shortcut the item came from no longer describes it
+	}
+	oldIcon := item.Icon
 	item.Name = fields.Name
 	item.Path = fields.Path
 	item.Args = fields.Args
@@ -181,6 +187,9 @@ func (v *view) updateItem(guid string, fields itemFields) {
 	item.Icon = fields.Icon
 	item.RunAsAdmin = fields.RunAsAdmin
 	v.app.save()
+	if oldIcon != item.Icon {
+		v.app.pruneIcons() // the icon it replaced, if nothing else uses it
+	}
 	v.app.notify(v.msgs().ItemUpdated())
 }
 
@@ -196,6 +205,7 @@ func (v *view) removeItem(guid string) {
 		v.app.store.Categories[i].Slots = kept
 	}
 	v.pruneOrphans()
+	v.app.pruneIcons()
 	v.app.save()
 }
 
@@ -240,6 +250,33 @@ func (v *view) moveItemToTab(guid, tabGUID string, copyItem bool) {
 		v.app.store.Categories[i].Slots = kept
 	}
 	tab.Slots = append(tab.Slots, &guid)
+	v.app.save()
+}
+
+// moveItemToTabAt moves an item (or copies it) into a tab at slot at, as a
+// drop between its items does.
+func (v *view) moveItemToTabAt(guid, tabGUID string, at int, copyItem bool) {
+	tab := v.app.tab(tabGUID)
+	item := v.app.item(guid)
+	if tab == nil || item == nil {
+		return
+	}
+	if copyItem {
+		v.duplicateItem(guid, tabGUID, at-1)
+		return
+	}
+	for i := range v.app.store.Categories {
+		kept := v.app.store.Categories[i].Slots[:0]
+		for _, slot := range v.app.store.Categories[i].Slots {
+			if slot != nil && *slot == guid {
+				continue
+			}
+			kept = append(kept, slot)
+		}
+		v.app.store.Categories[i].Slots = kept
+	}
+	at = clamp(at, 0, len(tab.Slots))
+	tab.Slots = append(tab.Slots[:at], append([]*string{&guid}, tab.Slots[at:]...)...)
 	v.app.save()
 }
 
@@ -351,6 +388,20 @@ type dragItem struct {
 	guid string
 	slot int
 	tab  string
+}
+
+// dropDragged puts a dropped item at slot at of tab: it reorders within the
+// page it came from, or moves to another page, or copies either way.
+func (v *view) dropDragged(dragged dragItem, tab *CategoryNode, at int, copyItem bool) {
+	if tab == nil {
+		return
+	}
+	if dragged.tab != tab.GUID {
+		// Dragged from another page, which a drop between items brings here.
+		v.later(func() { v.moveItemToTabAt(dragged.guid, tab.GUID, at, copyItem) })
+		return
+	}
+	v.later(func() { v.reorderSlots(dragged.slot, dropTo(dragged.slot, at, copyItem), copyItem) })
 }
 
 // dragTab is a tab dragged to another place.

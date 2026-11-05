@@ -54,11 +54,11 @@ func (msgs Messages) AddButtonHint() string {
 	return Catalog.Format(msgs.locale, "addButtonHint", nil)
 }
 
-// AddTab says "Add tab"
+// AddTab says "Add page"
 // in the language the app shows.
 func AddTab() string { return In(i18n.Locale()).AddTab() }
 
-// AddTab says "Add tab"
+// AddTab says "Add page"
 // in the language of msgs.
 func (msgs Messages) AddTab() string {
 	return Catalog.Format(msgs.locale, "addTab", nil)
@@ -122,36 +122,6 @@ func Exit() string { return In(i18n.Locale()).Exit() }
 // in the language of msgs.
 func (msgs Messages) Exit() string {
 	return Catalog.Format(msgs.locale, "exit", nil)
-}
-
-// DropFiles says "Drop files to add them"
-// in the language the app shows.
-func DropFiles() string { return In(i18n.Locale()).DropFiles() }
-
-// DropFiles says "Drop files to add them"
-// in the language of msgs.
-func (msgs Messages) DropFiles() string {
-	return Catalog.Format(msgs.locale, "dropFiles", nil)
-}
-
-// DropInto says "They go into \"{tab}\""
-// in the language the app shows.
-func DropInto(tab string) string { return In(i18n.Locale()).DropInto(tab) }
-
-// DropInto says "They go into \"{tab}\""
-// in the language of msgs.
-func (msgs Messages) DropInto(tab string) string {
-	return Catalog.Format(msgs.locale, "dropInto", map[string]any{"tab": tab})
-}
-
-// ThisTab says "this tab"
-// in the language the app shows.
-func ThisTab() string { return In(i18n.Locale()).ThisTab() }
-
-// ThisTab says "this tab"
-// in the language of msgs.
-func (msgs Messages) ThisTab() string {
-	return Catalog.Format(msgs.locale, "thisTab", nil)
 }
 
 // PickFiles says "Pick files…"
@@ -254,31 +224,31 @@ func (msgs Messages) RuntimeRunningNoAutoHint() string {
 	return Catalog.Format(msgs.locale, "runtimeRunningNoAutoHint", nil)
 }
 
-// EmptyCell says "Empty"
+// EmptyCell says "Blank"
 // in the language the app shows.
 func EmptyCell() string { return In(i18n.Locale()).EmptyCell() }
 
-// EmptyCell says "Empty"
+// EmptyCell says "Blank"
 // in the language of msgs.
 func (msgs Messages) EmptyCell() string {
 	return Catalog.Format(msgs.locale, "emptyCell", nil)
 }
 
-// InsertEmpty says "Insert empty"
+// InsertEmpty says "Insert blank"
 // in the language the app shows.
 func InsertEmpty() string { return In(i18n.Locale()).InsertEmpty() }
 
-// InsertEmpty says "Insert empty"
+// InsertEmpty says "Insert blank"
 // in the language of msgs.
 func (msgs Messages) InsertEmpty() string {
 	return Catalog.Format(msgs.locale, "insertEmpty", nil)
 }
 
-// RemoveEmpty says "Remove empty"
+// RemoveEmpty says "Remove blank"
 // in the language the app shows.
 func RemoveEmpty() string { return In(i18n.Locale()).RemoveEmpty() }
 
-// RemoveEmpty says "Remove empty"
+// RemoveEmpty says "Remove blank"
 // in the language of msgs.
 func (msgs Messages) RemoveEmpty() string {
 	return Catalog.Format(msgs.locale, "removeEmpty", nil)
@@ -314,11 +284,11 @@ func (msgs Messages) Rename() string {
 	return Catalog.Format(msgs.locale, "rename", nil)
 }
 
-// RenameTab says "Rename Tab"
+// RenameTab says "Rename Page"
 // in the language the app shows.
 func RenameTab() string { return In(i18n.Locale()).RenameTab() }
 
-// RenameTab says "Rename Tab"
+// RenameTab says "Rename Page"
 // in the language of msgs.
 func (msgs Messages) RenameTab() string {
 	return Catalog.Format(msgs.locale, "renameTab", nil)
@@ -354,11 +324,11 @@ func (msgs Messages) RemoveItemConfirm(name string) string {
 	return Catalog.Format(msgs.locale, "removeItemConfirm", map[string]any{"name": name})
 }
 
-// RemoveTabConfirm says "Remove tab \"{name}\"?"
+// RemoveTabConfirm says "Remove page \"{name}\"?"
 // in the language the app shows.
 func RemoveTabConfirm(name string) string { return In(i18n.Locale()).RemoveTabConfirm(name) }
 
-// RemoveTabConfirm says "Remove tab \"{name}\"?"
+// RemoveTabConfirm says "Remove page \"{name}\"?"
 // in the language of msgs.
 func (msgs Messages) RemoveTabConfirm(name string) string {
 	return Catalog.Format(msgs.locale, "removeTabConfirm", map[string]any{"name": name})
@@ -584,6 +554,26 @@ func (msgs Messages) IconAuto() string {
 	return Catalog.Format(msgs.locale, "iconAuto", nil)
 }
 
+// IconIndex says "Index"
+// in the language the app shows.
+func IconIndex() string { return In(i18n.Locale()).IconIndex() }
+
+// IconIndex says "Index"
+// in the language of msgs.
+func (msgs Messages) IconIndex() string {
+	return Catalog.Format(msgs.locale, "iconIndex", nil)
+}
+
+// IconIndexHint says "Which icon to take from an .ico, .exe or .dll (0 is the first)"
+// in the language the app shows.
+func IconIndexHint() string { return In(i18n.Locale()).IconIndexHint() }
+
+// IconIndexHint says "Which icon to take from an .ico, .exe or .dll (0 is the first)"
+// in the language of msgs.
+func (msgs Messages) IconIndexHint() string {
+	return Catalog.Format(msgs.locale, "iconIndexHint", nil)
+}
+
 // Clear says "Clear"
 // in the language the app shows.
 func Clear() string { return In(i18n.Locale()).Clear() }
@@ -706,31 +696,31 @@ func (msgs Messages) SearchHelp() string {
 	return Catalog.Format(msgs.locale, "searchHelp", nil)
 }
 
-// LocateInTab says "Locate in tab"
+// LocateInTab says "Locate in page"
 // in the language the app shows.
 func LocateInTab() string { return In(i18n.Locale()).LocateInTab() }
 
-// LocateInTab says "Locate in tab"
+// LocateInTab says "Locate in page"
 // in the language of msgs.
 func (msgs Messages) LocateInTab() string {
 	return Catalog.Format(msgs.locale, "locateInTab", nil)
 }
 
-// LocateIn says "Locate in {tab}"
+// LocateIn says "Locate in {page}"
 // in the language the app shows.
-func LocateIn(tab string) string { return In(i18n.Locale()).LocateIn(tab) }
+func LocateIn(page string) string { return In(i18n.Locale()).LocateIn(page) }
 
-// LocateIn says "Locate in {tab}"
+// LocateIn says "Locate in {page}"
 // in the language of msgs.
-func (msgs Messages) LocateIn(tab string) string {
-	return Catalog.Format(msgs.locale, "locateIn", map[string]any{"tab": tab})
+func (msgs Messages) LocateIn(page string) string {
+	return Catalog.Format(msgs.locale, "locateIn", map[string]any{"page": page})
 }
 
-// NewTabName says "New Tab"
+// NewTabName says "New Page"
 // in the language the app shows.
 func NewTabName() string { return In(i18n.Locale()).NewTabName() }
 
-// NewTabName says "New Tab"
+// NewTabName says "New Page"
 // in the language of msgs.
 func (msgs Messages) NewTabName() string {
 	return Catalog.Format(msgs.locale, "newTabName", nil)
@@ -746,11 +736,11 @@ func (msgs Messages) DefaultTabName() string {
 	return Catalog.Format(msgs.locale, "defaultTabName", nil)
 }
 
-// UntitledTabName says "Category"
+// UntitledTabName says "Page"
 // in the language the app shows.
 func UntitledTabName() string { return In(i18n.Locale()).UntitledTabName() }
 
-// UntitledTabName says "Category"
+// UntitledTabName says "Page"
 // in the language of msgs.
 func (msgs Messages) UntitledTabName() string {
 	return Catalog.Format(msgs.locale, "untitledTabName", nil)
@@ -906,6 +896,36 @@ func (msgs Messages) IconFailed() string {
 	return Catalog.Format(msgs.locale, "iconFailed", nil)
 }
 
+// IconInvalid says "This icon file is not an image or an icon"
+// in the language the app shows.
+func IconInvalid() string { return In(i18n.Locale()).IconInvalid() }
+
+// IconInvalid says "This icon file is not an image or an icon"
+// in the language of msgs.
+func (msgs Messages) IconInvalid() string {
+	return Catalog.Format(msgs.locale, "iconInvalid", nil)
+}
+
+// IconTooLarge says "The icon image is too large"
+// in the language the app shows.
+func IconTooLarge() string { return In(i18n.Locale()).IconTooLarge() }
+
+// IconTooLarge says "The icon image is too large"
+// in the language of msgs.
+func (msgs Messages) IconTooLarge() string {
+	return Catalog.Format(msgs.locale, "iconTooLarge", nil)
+}
+
+// IconIndexInvalid says "There is no icon at that index"
+// in the language the app shows.
+func IconIndexInvalid() string { return In(i18n.Locale()).IconIndexInvalid() }
+
+// IconIndexInvalid says "There is no icon at that index"
+// in the language of msgs.
+func (msgs Messages) IconIndexInvalid() string {
+	return Catalog.Format(msgs.locale, "iconIndexInvalid", nil)
+}
+
 // ElevationCancelled says "Elevation was cancelled"
 // in the language the app shows.
 func ElevationCancelled() string { return In(i18n.Locale()).ElevationCancelled() }
@@ -976,14 +996,14 @@ func (msgs Messages) SelectFileTitle() string {
 	return Catalog.Format(msgs.locale, "selectFileTitle", nil)
 }
 
-// SelectImageTitle says "Select Image"
+// SelectIconTitle says "Select Icon"
 // in the language the app shows.
-func SelectImageTitle() string { return In(i18n.Locale()).SelectImageTitle() }
+func SelectIconTitle() string { return In(i18n.Locale()).SelectIconTitle() }
 
-// SelectImageTitle says "Select Image"
+// SelectIconTitle says "Select Icon"
 // in the language of msgs.
-func (msgs Messages) SelectImageTitle() string {
-	return Catalog.Format(msgs.locale, "selectImageTitle", nil)
+func (msgs Messages) SelectIconTitle() string {
+	return Catalog.Format(msgs.locale, "selectIconTitle", nil)
 }
 
 // SelectFolderTitle says "Select Folder"
@@ -996,14 +1016,14 @@ func (msgs Messages) SelectFolderTitle() string {
 	return Catalog.Format(msgs.locale, "selectFolderTitle", nil)
 }
 
-// ImagesFilter says "Images"
+// IconFilesFilter says "Images and icons"
 // in the language the app shows.
-func ImagesFilter() string { return In(i18n.Locale()).ImagesFilter() }
+func IconFilesFilter() string { return In(i18n.Locale()).IconFilesFilter() }
 
-// ImagesFilter says "Images"
+// IconFilesFilter says "Images and icons"
 // in the language of msgs.
-func (msgs Messages) ImagesFilter() string {
-	return Catalog.Format(msgs.locale, "imagesFilter", nil)
+func (msgs Messages) IconFilesFilter() string {
+	return Catalog.Format(msgs.locale, "iconFilesFilter", nil)
 }
 
 // Appearance says "Appearance"
@@ -1074,6 +1094,56 @@ func CustomAccent() string { return In(i18n.Locale()).CustomAccent() }
 // in the language of msgs.
 func (msgs Messages) CustomAccent() string {
 	return Catalog.Format(msgs.locale, "customAccent", nil)
+}
+
+// IconSize says "Icon size"
+// in the language the app shows.
+func IconSize() string { return In(i18n.Locale()).IconSize() }
+
+// IconSize says "Icon size"
+// in the language of msgs.
+func (msgs Messages) IconSize() string {
+	return Catalog.Format(msgs.locale, "iconSize", nil)
+}
+
+// IconSizeHint says "The size of icons and rows in the list and the grid"
+// in the language the app shows.
+func IconSizeHint() string { return In(i18n.Locale()).IconSizeHint() }
+
+// IconSizeHint says "The size of icons and rows in the list and the grid"
+// in the language of msgs.
+func (msgs Messages) IconSizeHint() string {
+	return Catalog.Format(msgs.locale, "iconSizeHint", nil)
+}
+
+// Small says "Small"
+// in the language the app shows.
+func Small() string { return In(i18n.Locale()).Small() }
+
+// Small says "Small"
+// in the language of msgs.
+func (msgs Messages) Small() string {
+	return Catalog.Format(msgs.locale, "small", nil)
+}
+
+// Medium says "Medium"
+// in the language the app shows.
+func Medium() string { return In(i18n.Locale()).Medium() }
+
+// Medium says "Medium"
+// in the language of msgs.
+func (msgs Messages) Medium() string {
+	return Catalog.Format(msgs.locale, "medium", nil)
+}
+
+// Large says "Large"
+// in the language the app shows.
+func Large() string { return In(i18n.Locale()).Large() }
+
+// Large says "Large"
+// in the language of msgs.
+func (msgs Messages) Large() string {
+	return Catalog.Format(msgs.locale, "large", nil)
 }
 
 // BackgroundOnClose says "Run in background"
@@ -1404,6 +1474,128 @@ func UpdateIcons() string { return In(i18n.Locale()).UpdateIcons() }
 // in the language of msgs.
 func (msgs Messages) UpdateIcons() string {
 	return Catalog.Format(msgs.locale, "updateIcons", nil)
+}
+
+// MigrateCLaunch says "Migrate from CLaunch"
+// in the language the app shows.
+func MigrateCLaunch() string { return In(i18n.Locale()).MigrateCLaunch() }
+
+// MigrateCLaunch says "Migrate from CLaunch"
+// in the language of msgs.
+func (msgs Messages) MigrateCLaunch() string {
+	return Catalog.Format(msgs.locale, "migrateCLaunch", nil)
+}
+
+// MigrateCLaunchHint says "Create new pages from a CLaunch.ini"
+// in the language the app shows.
+func MigrateCLaunchHint() string { return In(i18n.Locale()).MigrateCLaunchHint() }
+
+// MigrateCLaunchHint says "Create new pages from a CLaunch.ini"
+// in the language of msgs.
+func (msgs Messages) MigrateCLaunchHint() string {
+	return Catalog.Format(msgs.locale, "migrateCLaunchHint", nil)
+}
+
+// ChooseCLaunchIni says "Choose CLaunch.ini…"
+// in the language the app shows.
+func ChooseCLaunchIni() string { return In(i18n.Locale()).ChooseCLaunchIni() }
+
+// ChooseCLaunchIni says "Choose CLaunch.ini…"
+// in the language of msgs.
+func (msgs Messages) ChooseCLaunchIni() string {
+	return Catalog.Format(msgs.locale, "chooseCLaunchIni", nil)
+}
+
+// CLaunchIniFilter says "CLaunch settings"
+// in the language the app shows.
+func CLaunchIniFilter() string { return In(i18n.Locale()).CLaunchIniFilter() }
+
+// CLaunchIniFilter says "CLaunch settings"
+// in the language of msgs.
+func (msgs Messages) CLaunchIniFilter() string {
+	return Catalog.Format(msgs.locale, "cLaunchIniFilter", nil)
+}
+
+// SelectCLaunchIniTitle says "Select CLaunch.ini"
+// in the language the app shows.
+func SelectCLaunchIniTitle() string { return In(i18n.Locale()).SelectCLaunchIniTitle() }
+
+// SelectCLaunchIniTitle says "Select CLaunch.ini"
+// in the language of msgs.
+func (msgs Messages) SelectCLaunchIniTitle() string {
+	return Catalog.Format(msgs.locale, "selectCLaunchIniTitle", nil)
+}
+
+// MigratingCLaunch says "Migrating from CLaunch…"
+// in the language the app shows.
+func MigratingCLaunch() string { return In(i18n.Locale()).MigratingCLaunch() }
+
+// MigratingCLaunch says "Migrating from CLaunch…"
+// in the language of msgs.
+func (msgs Messages) MigratingCLaunch() string {
+	return Catalog.Format(msgs.locale, "migratingCLaunch", nil)
+}
+
+// CLaunchImportFailed says "Could not read the CLaunch file: {error}"
+// in the language the app shows.
+func CLaunchImportFailed(error string) string { return In(i18n.Locale()).CLaunchImportFailed(error) }
+
+// CLaunchImportFailed says "Could not read the CLaunch file: {error}"
+// in the language of msgs.
+func (msgs Messages) CLaunchImportFailed(error string) string {
+	return Catalog.Format(msgs.locale, "cLaunchImportFailed", map[string]any{"error": error})
+}
+
+// CLaunchImported says "Imported {tabs} pages and {items} items from CLaunch"
+// in the language the app shows.
+func CLaunchImported(tabs string, items string) string {
+	return In(i18n.Locale()).CLaunchImported(tabs, items)
+}
+
+// CLaunchImported says "Imported {tabs} pages and {items} items from CLaunch"
+// in the language of msgs.
+func (msgs Messages) CLaunchImported(tabs string, items string) string {
+	return Catalog.Format(msgs.locale, "cLaunchImported", map[string]any{"tabs": tabs, "items": items})
+}
+
+// CLaunchImportEmpty says "Nothing in this CLaunch.ini could be imported"
+// in the language the app shows.
+func CLaunchImportEmpty() string { return In(i18n.Locale()).CLaunchImportEmpty() }
+
+// CLaunchImportEmpty says "Nothing in this CLaunch.ini could be imported"
+// in the language of msgs.
+func (msgs Messages) CLaunchImportEmpty() string {
+	return Catalog.Format(msgs.locale, "cLaunchImportEmpty", nil)
+}
+
+// CLaunchImportSkipped says "{count, plural, one {# entry was skipped} other {# entries were skipped}}"
+// in the language the app shows.
+func CLaunchImportSkipped(count int) string { return In(i18n.Locale()).CLaunchImportSkipped(count) }
+
+// CLaunchImportSkipped says "{count, plural, one {# entry was skipped} other {# entries were skipped}}"
+// in the language of msgs.
+func (msgs Messages) CLaunchImportSkipped(count int) string {
+	return Catalog.Format(msgs.locale, "cLaunchImportSkipped", map[string]any{"count": count})
+}
+
+// CLaunchTabName says "CLaunch {n}"
+// in the language the app shows.
+func CLaunchTabName(n string) string { return In(i18n.Locale()).CLaunchTabName(n) }
+
+// CLaunchTabName says "CLaunch {n}"
+// in the language of msgs.
+func (msgs Messages) CLaunchTabName(n string) string {
+	return Catalog.Format(msgs.locale, "cLaunchTabName", map[string]any{"n": n})
+}
+
+// CLaunchItemName says "CLaunch item"
+// in the language the app shows.
+func CLaunchItemName() string { return In(i18n.Locale()).CLaunchItemName() }
+
+// CLaunchItemName says "CLaunch item"
+// in the language of msgs.
+func (msgs Messages) CLaunchItemName() string {
+	return Catalog.Format(msgs.locale, "cLaunchItemName", nil)
 }
 
 // About says "About"
