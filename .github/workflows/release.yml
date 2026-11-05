@@ -109,12 +109,12 @@ jobs:
           # 自动附带由 commit 生成的 changelog
           generate_release_notes: true
           body: |
-            Automated build of `master` — `${{ github.sha }}` ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+            `master` 的自动构建 —— `${{ github.sha }}`（[运行记录](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})）
 
-            - **Assets:** `MyGo Launcher.exe` (single file, no runtime needed — the UI is drawn by Go) and the NSIS installer
-            - **Version:** `${{ steps.version.outputs.version }}` (from `mygo.json`) + build ${{ github.run_number }}
-            - **SHA256:** `${{ steps.artifact.outputs.sha256 }}`
-            - **Built with:** MyGo `${{ env.MYGO_COMMIT }}`
+            - **产物**：`MyGo Launcher.exe`（单文件，无需运行时，界面由 Go 绘制）与 NSIS 安装包
+            - **版本**：`${{ steps.version.outputs.version }}`（来自 `mygo.json`）+ 构建号 ${{ github.run_number }}
+            - **SHA256**：`${{ steps.artifact.outputs.sha256 }}`
+            - **构建所用 MyGo**：`${{ env.MYGO_COMMIT }}`
 
 # 备注：
 # - 版本号取自 mygo.json 的 version（发版前手动往上抬，同时改 version.go 的

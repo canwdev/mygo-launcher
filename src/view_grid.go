@@ -9,8 +9,8 @@ import (
 // The grid's cells: at least this wide, and this high, as the page's
 // auto-filling grid of 100px squares was.
 const (
-	gridCellWidth  float32 = 104
-	gridCellHeight float32 = 116
+	gridCellWidth  float32 = 116
+	gridCellHeight float32 = 128
 )
 
 // gridBody shows the tab as a grid of cells, empty ones included: they are what
@@ -37,7 +37,7 @@ func (v *view) gridBody(c *ui.Context, tab *CategoryNode) {
 	}
 	ui.GridView(c, &v.grid, len(slots), gridCellWidth, gridCellHeight, func(i int) {
 		v.gridCell(c, tab, i, slots[i])
-	}).Grow(1).Padding(8)
+	}).Grow(1).Padding(16, 16, 88, 16)
 }
 
 // gridCell builds one cell: an item card, or the empty cell it may be.
@@ -52,17 +52,19 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		return
 	}
 	st := v.states[item.GUID]
-	t := c.Theme()
+	p := v.pal
 
-	card := ui.Column(c).Fill().Radius(8).Padding(6).Gap(2).Center()
+	card := ui.Column(c).Fill().Radius(12).Padding(8).Gap(8).AlignItems(ui.Center).Justify(ui.Center)
 	card.Cursor(ui.CursorPointer)
 	switch {
 	case v.isLocated(item.GUID):
-		card.Background(t.Accent.Alpha(0.18))
+		card.Background(p.accent.Alpha(0.12))
 	case st.Running:
-		card.Background(t.Danger.Alpha(0.12))
+		card.Background(p.accent.Alpha(0.07))
 	case card.Hovered():
-		card.Background(t.SurfaceHover)
+		card.Background(p.press)
+	default:
+		card.Background(p.hover)
 	}
 
 	card.Drag(dragItem{guid: item.GUID, slot: index, tab: tab.GUID})
@@ -71,7 +73,7 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		v.later(func() { v.reorderSlots(dragged.slot, index, copyItem) })
 	}
 	if _, over := ui.DragOver[dragItem](card); over {
-		card.BorderWidth(2, 0, 0, 0).BorderColor(t.Accent)
+		card.BorderWidth(0, 0, 0, 2).BorderColor(p.accent)
 	}
 	if card.Dragging() {
 		card.Opacity(0.4)
@@ -90,19 +92,13 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 
 	card.Children(func() {
 		v.runtimeField(c, item, st).Absolute().Top(2).Left(4).MaxWidth(gridCellWidth - 30)
-		more := ui.Button(c, "").Label("Item menu").Tooltip("Item menu").Padding(2).
-			PopoverMenuButton(v.itemMenu(item, index))
-		more.Absolute().Top(2).Right(2)
-		more.Children(func() { ui.Icon(c, iconDots).FontSize(13).TextColor(t.TextMuted) })
-		more.Hidden(!card.Hovered())
-		more.Opacity(0.8)
 
-		v.itemIcon(c, item, 42)
-		ui.Row(c).Gap(3).AlignItems(ui.Center).MaxWidth(gridCellWidth - 12).Children(func() {
+		v.itemIcon(c, item, 54)
+		ui.Row(c).Gap(4).AlignItems(ui.Center).MaxWidth(gridCellWidth - 12).Children(func() {
 			if item.RunAsAdmin {
-				ui.Icon(c, iconShield).FontSize(11).TextColor(t.Warning)
+				ui.Icon(c, iconShield).Size(11, 11).TextColor(c.Theme().Warning)
 			}
-			ui.Text(c, item.Name).FontSize(11).SingleLine().TextColor(t.Text)
+			ui.Text(c, item.Name).FontSize(12.5).FontWeight(500).SingleLine().TextColor(p.text)
 		})
 	})
 }
@@ -110,10 +106,10 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 // emptyCell is a cell holding nothing: it takes a dropped item, and its menu
 // adds or removes empty cells.
 func (v *view) emptyCell(c *ui.Context, index int) {
-	t := c.Theme()
-	box := ui.Box(c).Fill().Radius(8).Border(1, t.Border).BorderStyle(ui.BorderDashed)
+	p := v.pal
+	box := ui.Box(c).Fill().Radius(12).Border(1, p.hairline).BorderStyle(ui.BorderDashed)
 	if _, over := ui.DragOver[dragItem](box); over {
-		box.Border(2, t.Accent)
+		box.Border(2, p.accent)
 	}
 	if dragged, ok := ui.Drop[dragItem](box); ok {
 		v.later(func() { v.reorderSlots(dragged.slot, index, false) })
@@ -128,7 +124,7 @@ func (v *view) emptyCell(c *ui.Context, index int) {
 	})
 	box.Children(func() {
 		if box.Hovered() {
-			ui.Icon(c, iconPlus).FontSize(16).TextColor(t.TextMuted.Alpha(0.6))
+			ui.Icon(c, iconPlus).Size(16, 16).TextColor(p.faint)
 		}
 	})
 }

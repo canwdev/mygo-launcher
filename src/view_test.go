@@ -41,6 +41,15 @@ func clickMenu(tt *ui.Tester, button, item string) error {
 	return tt.Click(item)
 }
 
+// newTestSettings drives the settings window's content headlessly: openSettings
+// needs a real window, so the content is tested on its own.
+func newTestSettings(t *testing.T, v *view) *ui.Tester {
+	t.Helper()
+	tt := ui.NewTester(v.settingsView, 560, 720)
+	tt.SetFocused(true)
+	return tt
+}
+
 // TestViewShowsItems 验证列表视图把 tab 里的条目连同运行时一起画出来。
 func TestViewShowsItems(t *testing.T) {
 	_, _, tt := newTestView(t, 720, 460)
@@ -95,7 +104,7 @@ func TestViewOpensItemEditor(t *testing.T) {
 	}
 }
 
-// TestViewSwitchesToGrid 验证列表/网格切换，网格里的空槽也画出可放置的空格。
+// TestViewSwitchesToGrid 验证顶栏的列表/网格切换，网格里的空槽也画出可放置的空格。
 func TestViewSwitchesToGrid(t *testing.T) {
 	app, v, tt := newTestView(t, 720, 460)
 	app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, nil) // 空槽
@@ -104,11 +113,11 @@ func TestViewSwitchesToGrid(t *testing.T) {
 	if err := tt.Click("Switch to grid view"); err != nil {
 		t.Fatalf("switch to the grid: %v", err)
 	}
-	if !tt.HasText("Alpha") || !tt.HasText("Beta") {
-		t.Fatalf("the grid must show every item, texts %q", tt.Texts())
-	}
 	if v.prefs.ViewMode != "grid" {
 		t.Fatalf("the view mode must be remembered, got %q", v.prefs.ViewMode)
+	}
+	if !tt.HasText("Alpha") || !tt.HasText("Beta") {
+		t.Fatalf("the grid must show every item, texts %q", tt.Texts())
 	}
 	if err := tt.Click("Switch to list view"); err != nil {
 		t.Fatalf("switch back to the list: %v", err)
@@ -175,18 +184,19 @@ func TestViewTabsAddRename(t *testing.T) {
 	}
 }
 
-// TestViewAppMenuTogglesAutoHide 验证窗口菜单里的开关写回 store。
-func TestViewAppMenuTogglesAutoHide(t *testing.T) {
-	app, _, tt := newTestView(t, 720, 460)
+// TestViewSettingsTogglesAutoHide 验证设置窗口里的开关写回 store。
+func TestViewSettingsTogglesAutoHide(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
 	app.store.Settings.AutoHide = true
+	settings := newTestSettings(t, v)
 
-	if err := clickMenu(tt, "Menu", "Auto-hide Launcher"); err != nil {
+	if err := settings.Click("Toggle auto-hide"); err != nil {
 		t.Fatalf("auto-hide: %v", err)
 	}
 	if app.store.Settings.AutoHide {
 		t.Fatal("the auto-hide toggle must turn the setting off")
 	}
-	if err := clickMenu(tt, "Menu", "Auto-hide Launcher"); err != nil {
+	if err := settings.Click("Toggle auto-hide"); err != nil {
 		t.Fatalf("auto-hide again: %v", err)
 	}
 	if !app.store.Settings.AutoHide {
@@ -231,22 +241,73 @@ func TestViewRuntimeDialogAdjustsByHour(t *testing.T) {
 	}
 }
 
-// TestViewAppMenuTogglesAutoTiming 验证窗口菜单里的自动计时开关写回 store。
-func TestViewAppMenuTogglesAutoTiming(t *testing.T) {
-	app, _, tt := newTestView(t, 720, 460)
+// TestViewSettingsTogglesAutoTiming 验证设置窗口里的自动计时开关写回 store。
+func TestViewSettingsTogglesAutoTiming(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
 	app.store.Settings.AutoTime = true
+	settings := newTestSettings(t, v)
 
-	if err := clickMenu(tt, "Menu", "Auto timing"); err != nil {
+	if err := settings.Click("Toggle auto timing"); err != nil {
 		t.Fatalf("auto timing: %v", err)
 	}
 	if app.store.Settings.AutoTime {
 		t.Fatal("the auto timing toggle must turn the setting off")
 	}
-	if err := clickMenu(tt, "Menu", "Auto timing"); err != nil {
+	if err := settings.Click("Toggle auto timing"); err != nil {
 		t.Fatalf("auto timing again: %v", err)
 	}
 	if !app.store.Settings.AutoTime {
 		t.Fatal("the auto timing toggle must turn the setting back on")
+	}
+}
+
+// TestViewSettingsShowsItsChoices 验证设置窗口画出了分组与版本，并且主窗口的
+// Settings 入口存在。
+func TestViewSettingsShowsItsChoices(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+	if !tt.HasText("Settings") {
+		t.Fatalf("the window needs a Settings entry, texts %q", tt.Texts())
+	}
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatalf("click the settings entry: %v", err)
+	}
+
+	settings := newTestSettings(t, v)
+	for _, text := range []string{
+		"Settings", "Theme", "Accent color", "Auto timing", "Auto-hide the launcher",
+		"Always on top", "Absolute paths for new items", "Data directory",
+		"Version " + appVersion,
+	} {
+		if !settings.HasText(text) {
+			t.Fatalf("the settings must show %q, texts %q", text, settings.Texts())
+		}
+	}
+}
+
+// TestViewSettingsChoosesAccent 验证默认是 --bang-1，明暗各有其色，并且色板能换成
+// --bang-2。
+func TestViewSettingsChoosesAccent(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	def, ok := presetColor(defaultAccent, false)
+	if !ok {
+		t.Fatalf("no %s preset", defaultAccent)
+	}
+	if got := accentColor("", false); got != def {
+		t.Fatalf("the default accent must be %s, got %v", defaultAccent, got)
+	}
+	if accentColor(defaultAccent, false) == accentColor(defaultAccent, true) {
+		t.Fatal("the presets must have a light and a dark color")
+	}
+
+	settings := newTestSettings(t, v)
+	if err := settings.Click("Anon"); err != nil {
+		t.Fatalf("choose the second accent: %v", err)
+	}
+	if v.prefs.Accent != "bang-2" {
+		t.Fatalf("the accent must be remembered, got %q", v.prefs.Accent)
+	}
+	if got, want := accentColor(v.prefs.Accent, false), accentColor("bang-2", false); got != want {
+		t.Fatalf("the chosen accent must apply, got %v want %v", got, want)
 	}
 }
 
@@ -364,11 +425,10 @@ func TestViewListDragReorders(t *testing.T) {
 
 // TestViewGridDragReorders 验证网格里拖动一格把条目换位，空槽留在原处。
 func TestViewGridDragReorders(t *testing.T) {
-	app, _, tt := newTestView(t, 720, 520)
+	app, v, tt := newTestView(t, 720, 520)
 	app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, nil)
-	if err := tt.Click("Switch to grid view"); err != nil {
-		t.Fatalf("switch to the grid: %v", err)
-	}
+	v.prefs.ViewMode = "grid"
+	tt.Frame()
 
 	alpha, ok := tt.Find("Alpha")
 	if !ok {

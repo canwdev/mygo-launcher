@@ -55,8 +55,9 @@ type App struct {
 	// tick tells the clock goroutine that a runtime display keeps changing.
 	tick atomic.Bool
 
-	win  *mygo.Window
-	view *view
+	win         *mygo.Window
+	settingsWin *mygo.Window
+	view        *view
 
 	watchCancel func()
 }
@@ -132,14 +133,16 @@ func (a *App) save() {
 	a.refresh()
 }
 
-// refresh redraws the window after the store or a process changed; without a
+// refresh redraws the windows after the store or a process changed; without a
 // window, as in tests, the view is asked for the frame instead.
 func (a *App) refresh() {
 	if a.win != nil {
 		a.win.Invalidate()
-		return
 	}
-	if a.view != nil {
+	if a.settingsWin != nil {
+		a.settingsWin.Invalidate()
+	}
+	if a.win == nil && a.view != nil {
 		a.view.refresh()
 	}
 }

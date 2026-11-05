@@ -78,18 +78,19 @@ func (v *view) search(c *ui.Context) {
 	if !v.searchOpen {
 		return
 	}
-	t := c.Theme()
+	p := v.pal
 	hits := v.searchHits()
 	if v.searchChosen >= len(hits) {
 		v.searchChosen = max(0, len(hits)-1)
 	}
 
 	ui.Modal(c, &v.searchOpen, func() {
-		ui.Column(c).Width(560).Gap(6).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(2, 4).Children(func() {
-				ui.Icon(c, iconSearch).FontSize(15).TextColor(t.TextMuted)
+		ui.Column(c).Width(560).Gap(10).Children(func() {
+			field := ui.Row(c).Height(40).Gap(8).AlignItems(ui.Center)
+			field.Children(func() {
+				ui.Icon(c, iconSearch).Size(16, 16).TextColor(p.muted)
 				ui.TextInput(c, &v.searchQuery).Bind(&v.searchInput).AutoFocus().
-					Placeholder("Search programs…").FontSize(t.FontSize + 1).Grow(1).
+					Placeholder("Search programs…").FontSize(14).Grow(1).
 					OnTextKey(func(k ui.TextKey) bool {
 						switch k.Key {
 						case ui.KeyDown:
@@ -115,18 +116,24 @@ func (v *view) search(c *ui.Context) {
 			v.searchList.Selected = &v.searchChosen
 			v.searchList.Key = func(i int) any { return hits[i].guid }
 			v.searchList.Label = func(i int) string { return hits[i].name }
+			// The list is as tall as its rows, up to a screenful: a List's
+			// viewport must be told, or the rows below it overlap.
+			height := float32(72)
+			if len(hits) > 0 {
+				height = float32(min(320, len(hits)*40))
+			}
 			ui.List(c, &v.searchList, len(hits), func(i int) {
 				v.searchRow(c, hits[i], i)
-			}).MaxHeight(320).Children(func() {
+			}).Height(height).Children(func() {
 				msg := "No results"
 				if strings.TrimSpace(v.searchQuery) == "" {
 					msg = "Type to search…"
 				}
-				ui.Text(c, msg).FontSize(11).TextColor(t.TextMuted).Padding(10)
+				ui.Text(c, msg).FontSize(12).TextColor(p.muted).Padding(12)
 			})
 
 			ui.Text(c, "↑↓ navigate · Enter launch · ⤢ locate · Esc close").
-				FontSize(10).TextColor(t.TextMuted)
+				FontSize(11).TextColor(p.faint)
 		})
 	})
 }
@@ -134,15 +141,15 @@ func (v *view) search(c *ui.Context) {
 // searchRow is one result: the item runs when its row is clicked, and the
 // crosshair on the right brings it into view in its tab.
 func (v *view) searchRow(c *ui.Context, hit searchHit, index int) {
-	t := c.Theme()
+	p := v.pal
 	chosen := index == v.searchChosen
-	row := ui.Row(c).Padding(4, 6).Gap(8).Radius(5).AlignItems(ui.Center)
+	row := ui.Row(c).Height(40).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center)
 	if chosen {
-		row.Background(t.Accent)
+		row.Background(p.accent)
 	}
-	textColor, muted := t.Text, t.TextMuted
+	textColor, muted := p.text, p.muted
 	if chosen {
-		textColor, muted = t.AccentText, t.AccentText.Alpha(0.75)
+		textColor, muted = p.onAccent, p.onAccent.Alpha(0.75)
 	}
 	if row.Clicked() {
 		v.launchHit(v.searchHits(), index)
@@ -151,17 +158,15 @@ func (v *view) searchRow(c *ui.Context, hit searchHit, index int) {
 		if item := v.app.item(hit.guid); item != nil {
 			v.itemIcon(c, item, 18)
 		}
-		ui.Text(c, hit.name).SingleLine().FontSize(t.FontSize).TextColor(textColor).Grow(1)
+		ui.Text(c, hit.name).SingleLine().FontSize(14).TextColor(textColor).Grow(1)
 		where := hit.path
 		if where == "" {
 			where = hit.tabName
 		}
-		ui.Text(c, where).SingleLine().FontSize(10).TextColor(muted).MaxWidthPercent(35)
-		ui.Badge(c, hit.tabName)
-		locate := ui.Button(c, "").Label("Locate in tab").Padding(2)
+		ui.Text(c, where).SingleLine().FontSize(11).TextColor(muted).MaxWidthPercent(35)
+		locate := iconButton(c, iconCross, 13, textColor, "Locate in tab")
 		locate.Tooltip("Locate in " + hit.tabName)
 		locate.OnClick(func() { v.locateItem(hit.guid, hit.tabGUID) })
-		locate.Children(func() { ui.Icon(c, iconCross).FontSize(13).TextColor(textColor) })
 		locate.Hidden(!chosen && !row.Hovered())
 	})
 }

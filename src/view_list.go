@@ -7,48 +7,34 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// listBody shows the tab as rows: one per item, as the page's list view did.
+// listBody shows the tab as rows: one per item, as MyGo Music lists tracks.
 func (v *view) listBody(c *ui.Context, tab *CategoryNode) {
 	rows := v.rows(tab)
+	if len(rows) == 0 {
+		v.emptyState(c, tab)
+		return
+	}
 	v.list.Key = func(i int) any { return rows[i].item.GUID }
 	v.list.Label = func(i int) string { return rows[i].item.Name }
 	ui.List(c, &v.list, len(rows), func(i int) {
 		v.listRow(c, rows[i])
-	}).Grow(1).Padding(6).Children(func() {
-		if len(rows) == 0 {
-			v.emptyState(c, tab)
-		}
-	})
-}
-
-// emptyState says how to fill an empty tab.
-func (v *view) emptyState(c *ui.Context, tab *CategoryNode) {
-	t := c.Theme()
-	ui.Column(c).Padding(24).Gap(4).Center().Children(func() {
-		ui.Text(c, "No files added yet.").TextColor(t.TextMuted)
-		ui.Text(c, "Click + to pick files or create an item, or drop files here.").
-			FontSize(11).TextColor(t.TextMuted)
-		if tab != nil {
-			ui.Text(c, "tab: "+tab.Name).FontSize(11).TextColor(t.TextMuted)
-		}
-	})
+	}).Grow(1).Padding(16, 16, 88, 16)
 }
 
 // listRow is one item in the list.
 func (v *view) listRow(c *ui.Context, ref rowRef) {
 	item, slot := ref.item, ref.slot
 	st := v.states[item.GUID]
-	t := c.Theme()
+	p := v.pal
 
-	row := ui.Row(c).Padding(5, 8).Gap(10).Radius(6).AlignItems(ui.Center)
-	row.Cursor(ui.CursorPointer)
+	row := ui.Row(c).Height(54).Padding(0, 8).Gap(12).Radius(10).AlignItems(ui.Center)
 	switch {
 	case v.isLocated(item.GUID):
-		row.Background(t.Accent.Alpha(0.18))
+		row.Background(p.accent.Alpha(0.12))
 	case st.Running:
-		row.Background(t.Danger.Alpha(0.10))
+		row.Background(p.accent.Alpha(0.07))
 	case row.Hovered():
-		row.Background(t.SurfaceHover)
+		row.Background(p.hover)
 	}
 
 	// Dragging, and taking what is dragged: a row reorders, and takes items
@@ -59,7 +45,7 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 		v.later(func() { v.reorderSlots(dragged.slot, slot, copyItem) })
 	}
 	if _, over := ui.DragOver[dragItem](row); over {
-		row.BorderWidth(2, 0, 0, 0).BorderColor(t.Accent)
+		row.BorderWidth(0, 0, 0, 2).BorderColor(p.accent)
 	}
 	if row.Dragging() {
 		row.Opacity(0.4)
@@ -71,30 +57,56 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 	row.PopoverMenu(v.itemMenu(item, slot))
 
 	row.Children(func() {
-		v.itemIcon(c, item, 26)
-		ui.Text(c, item.Name).SingleLine().Grow(1)
-		if item.RunAsAdmin {
-			ui.Icon(c, iconShield).FontSize(13).TextColor(t.Warning).Tooltip("Runs as administrator")
-		}
+		v.itemIcon(c, item, 34)
+		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(3).Children(func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, item.Name).FontSize(14).FontWeight(500).TextColor(p.text).
+					SingleLine().Shrink(1).MinWidth(0)
+				if item.RunAsAdmin {
+					ui.Icon(c, iconShield).Size(13, 13).TextColor(c.Theme().Warning).Tooltip("Runs as administrator")
+				}
+			})
+			if item.Path != "" {
+				ui.Text(c, item.Path).FontSize(12).TextColor(p.muted).SingleLine().Shrink(1).MinWidth(0)
+			}
+		})
 		v.runtimeField(c, item, st)
-		if st.Running {
-			ui.Button(c, "Stop").OnClick(func() { v.stopItem(item.GUID) })
-		} else {
-			ui.Button(c, "Run").OnClick(func() { v.runItem(item.GUID) })
-		}
-		more := ui.Button(c, "").Label("Item menu").Tooltip("Item menu").Padding(3).
-			PopoverMenuButton(v.itemMenu(item, slot))
-		more.Children(func() { ui.Icon(c, iconDots).FontSize(14).TextColor(t.TextMuted) })
+		v.runButton(c, item, st)
 	})
+}
+
+// runButton runs an item, or stops the process it started.
+func (v *view) runButton(c *ui.Context, item *AppItem, st ItemState) {
+	p := v.pal
+	label, icon := "Run", iconPlay
+	if st.Running {
+		label, icon = "Stop", iconStop
+	}
+	b := ui.ButtonBase(c).Height(28).PaddingX(12).Gap(6).Radius(999).AlignItems(ui.Center).
+		Background(p.hover).TextColor(p.text).Label(label).FocusRing(false)
+	if b.Hovered() {
+		b.Background(p.press)
+	}
+	b.Children(func() {
+		ui.Icon(c, icon).Size(12, 12)
+		ui.Text(c, label).FontSize(12.5).FontWeight(600).SingleLine()
+	})
+	if b.Clicked() {
+		if st.Running {
+			v.stopItem(item.GUID)
+		} else {
+			v.runItem(item.GUID)
+		}
+	}
 }
 
 // runtimeField shows an item's accumulated time, with what a running process is
 // adding. Clicking it edits the runtime. It returns the field, which the grid
 // places in a cell's corner.
 func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Element {
-	t := c.Theme()
+	p := v.pal
 	guid := item.GUID
-	color := t.TextMuted
+	color := p.muted
 	// A running process locks the runtime only while its clock is moving.
 	timed := st.Running && v.app.store.Settings.AutoTime
 
@@ -105,13 +117,13 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	case st.Running:
 		hint = "Running, auto timing is off — click to edit the runtime"
 	}
-	field := ui.Row(c).Gap(3).AlignItems(ui.Center).Padding(1, 3).Radius(4)
+	field := ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 5).Radius(5)
 	field.Tooltip(hint)
 	if !timed {
 		field.Cursor(ui.CursorPointer)
 	}
 	if field.Hovered() && !timed {
-		field.Background(t.SurfaceHover)
+		field.Background(p.hover)
 	}
 	field.OnClick(func() {
 		if !timed {
@@ -119,22 +131,22 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 		}
 	})
 	field.Children(func() {
-		ui.Icon(c, iconClock).FontSize(11).TextColor(color)
-		ui.Text(c, v.runtimeText(guid)).FontSize(11).TextColor(color)
+		ui.Icon(c, iconClock).Size(11, 11).TextColor(color)
+		ui.Text(c, v.runtimeText(guid)).FontSize(11.5).FontFeatures("tnum").TextColor(color)
 	})
 	return field
 }
 
 // itemIcon shows an item's cached icon, or its initial when it has none.
 func (v *view) itemIcon(c *ui.Context, item *AppItem, size float32) {
-	t := c.Theme()
+	p := v.pal
 	if src := v.app.iconImage(item); src != nil {
 		ui.Image(c, src).Size(size, size).Fit(ui.Contain)
 		return
 	}
-	box := ui.Box(c).Size(size, size).Radius(4).Background(t.SurfaceHover).Center()
+	box := ui.Box(c).Size(size, size).Radius(size / 4).Background(p.hover).Center()
 	box.Children(func() {
-		ui.Text(c, initial(item.Name)).FontSize(size * 0.5).Bold().TextColor(t.TextMuted)
+		ui.Text(c, initial(item.Name)).FontSize(size * 0.42).FontWeight(600).TextColor(p.muted)
 	})
 }
 

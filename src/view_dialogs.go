@@ -19,9 +19,9 @@ func (v *view) dialogs(c *ui.Context) {
 }
 
 // labeled stacks a small label over a field.
-func labeled(c *ui.Context, label string, fn func()) {
-	ui.Column(c).Gap(3).Children(func() {
-		ui.Text(c, label).FontSize(11).TextColor(c.Theme().TextMuted)
+func (v *view) labeled(c *ui.Context, label string, fn func()) {
+	ui.Column(c).Gap(4).Children(func() {
+		ui.Text(c, label).FontSize(11).FontWeight(500).TextColor(v.pal.muted)
 		fn()
 	})
 }
@@ -46,19 +46,19 @@ func (v *view) itemDialog(c *ui.Context) {
 	if !v.editOpen {
 		return
 	}
-	t := c.Theme()
+	p := v.pal
 	title := "Edit item"
 	if v.editNew {
 		title = "Create item"
 	}
 	ui.Modal(c, &v.editOpen, func() {
-		ui.Column(c).Width(480).Gap(10).Children(func() {
+		ui.Column(c).Width(480).Gap(12).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, title).FontSize(t.FontSize + 4).Bold()
+				ui.Text(c, title).FontSize(17).FontWeight(700)
 				if !v.editNew {
 					// The guid identifies the item in the data file; it is
 					// not editable, so it is a caption rather than a field.
-					ui.Text(c, "id: "+v.editGUID).FontSize(10).TextColor(t.TextMuted).SingleLine()
+					ui.Text(c, "id: "+v.editGUID).FontSize(10.5).TextColor(p.faint).SingleLine()
 				}
 			})
 
@@ -87,15 +87,15 @@ func dialogBodyMax(c *ui.Context) float32 {
 
 // itemDialogFields builds the editable fields of the item dialog.
 func (v *view) itemDialogFields(c *ui.Context) {
-	t := c.Theme()
+	p := v.pal
 
-	labeled(c, "Name", func() {
+	v.labeled(c, "Name", func() {
 		if ui.TextInput(c, &v.editName).Placeholder("Shown in the list").Submitted() {
 			v.saveItemDialog()
 		}
 	})
 
-	labeled(c, "Path", func() {
+	v.labeled(c, "Path", func() {
 		ui.Row(c).Gap(6).Children(func() {
 			ui.TextInput(c, &v.editPath).Grow(1)
 			v.browseButton(c, "Browse…", func() string {
@@ -104,11 +104,11 @@ func (v *view) itemDialogFields(c *ui.Context) {
 		})
 	})
 
-	labeled(c, "Args", func() {
+	v.labeled(c, "Args", func() {
 		ui.TextInput(c, &v.editArgs).Placeholder("optional")
 	})
 
-	labeled(c, "Working directory", func() {
+	v.labeled(c, "Working directory", func() {
 		ui.Row(c).Gap(6).Children(func() {
 			ui.TextInput(c, &v.editWorkDir).Grow(1)
 			v.browseButton(c, "Browse…", func() string {
@@ -123,11 +123,11 @@ func (v *view) itemDialogFields(c *ui.Context) {
 
 	ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Checkbox(c, &v.editAdmin, "Run as administrator")
-		ui.Icon(c, iconShield).FontSize(13).TextColor(t.Warning)
-		ui.Text(c, "the system asks for UAC on launch").FontSize(11).TextColor(t.TextMuted)
+		ui.Icon(c, iconShield).FontSize(13).TextColor(c.Theme().Warning)
+		ui.Text(c, "the system asks for UAC on launch").FontSize(11).TextColor(p.muted)
 	})
 
-	labeled(c, "Icon", func() {
+	v.labeled(c, "Icon", func() {
 		ui.Row(c).Gap(6).Children(func() {
 			ui.TextInput(c, &v.editIcon).Grow(1).Placeholder("auto-generated")
 			v.browseButton(c, "Browse…", func() string {
@@ -163,7 +163,7 @@ func (v *view) runtimeDialog(c *ui.Context) {
 	if !v.runtimeOpen {
 		return
 	}
-	t := c.Theme()
+	p := v.pal
 	guid := v.runtimeGUID
 	item := v.app.item(guid)
 	if item == nil {
@@ -180,23 +180,23 @@ func (v *view) runtimeDialog(c *ui.Context) {
 
 	ui.Modal(c, &v.runtimeOpen, func() {
 		ui.Column(c).Width(460).Gap(10).Children(func() {
-			ui.Text(c, "Edit runtime").FontSize(t.FontSize + 4).Bold()
+			ui.Text(c, "Edit runtime").FontSize(17).FontWeight(700)
 
-			labeled(c, "Runtime (minutes)", func() {
+			v.labeled(c, "Runtime (minutes)", func() {
 				if ui.TextInput(c, &v.runtimeMinutes).Submitted() {
 					v.saveRuntime()
 				}
 			})
 			ui.Text(c, fmt.Sprintf("Current: %s (%dms) · input → %s",
 				formatRuntime(current), current, preview)).
-				FontSize(11).TextColor(t.TextMuted)
+				FontSize(11).TextColor(p.muted)
 
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Button(c, "-1h").Tooltip("Subtract one hour from the stored runtime").
 					OnClick(func() { v.adjustRuntime(-time.Hour) })
 				ui.Button(c, "+1h").Tooltip("Add one hour to the stored runtime").
 					OnClick(func() { v.adjustRuntime(time.Hour) })
-				ui.Text(c, "changes the saved runtime at once").FontSize(11).TextColor(t.TextMuted)
+				ui.Text(c, "changes the saved runtime at once").FontSize(11).TextColor(p.muted)
 			})
 
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
@@ -243,10 +243,9 @@ func (v *view) renameDialog(c *ui.Context) {
 	if !v.renameOpen {
 		return
 	}
-	t := c.Theme()
 	ui.Modal(c, &v.renameOpen, func() {
-		ui.Column(c).Width(380).Gap(10).Children(func() {
-			ui.Text(c, v.renameTitle).FontSize(t.FontSize + 4).Bold()
+		ui.Column(c).Width(380).Gap(12).Children(func() {
+			ui.Text(c, v.renameTitle).FontSize(17).FontWeight(700)
 			if ui.TextInput(c, &v.renameName).AutoFocus().Submitted() {
 				v.applyRename()
 			}

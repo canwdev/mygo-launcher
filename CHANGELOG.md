@@ -1,34 +1,42 @@
-# Changelog
+# 变更日志
 
-The version number lives in `mygo.json` (`version`) and `version.go` (`appVersion`); change both together at release.
+版本号保存在 `mygo.json`（`version`）和 `src/version.go`（`appVersion`）；发版时两处一起改。
 
 ## 0.2.0
 
-### Breaking
+### 破坏性变更
 
-- **Name**: the app is now MyGo Launcher, so its executable and installer are `MyGo Launcher.exe` and `mygo-launcher-setup-<version>-amd64.exe`.
-- **Data folder**: data lives in `mygo-launcher-data/` beside the executable, and the `.go-launcher-data/` folder of earlier builds is not read; rename it to keep the entries.
-- **Timers**: the manual and auto timers are gone. An executable is timed whenever it runs, and the saved runtime is corrected by ±1 hour or by typing minutes. *Auto timing* in the window menu turns the clock off.
-- **Game mode**: the toggle is gone; an executable is tracked, and can be stopped, every time.
+- **名称**：应用更名为 MyGo Launcher，可执行文件和安装包分别是 `MyGo Launcher.exe` 与 `mygo-launcher-setup-<版本>-amd64.exe`。
+- **数据目录**：数据保存在可执行文件旁的 `mygo-launcher-data/`，不再读取旧版的 `.go-launcher-data/`；需要保留条目时请手动改名。
+- **计时**：手动计时与自动计时开关的概念已简化。可执行程序每次运行都会计时，保存的时长可按 ±1 小时或按分钟修正；设置里的「自动计时」关闭后时钟不再走动。
+- **游戏模式**：该开关已移除；可执行程序每次运行都会被跟踪、可停止。
 
-### UI
+### 界面
 
-- **Native window**: the interface is drawn from Go by MyGo's native UI, with no web view and no WebView2 runtime.
-- **Drag and drop**: items move between slots in both views, can be dropped on a tab to move them there (Ctrl/Cmd copies), and tabs reorder by dragging.
-- **Runtime**: an item's accumulated time sits beside its name, or in a cell's corner in the grid, and clicking it edits it.
-- **Search**: Cmd/Ctrl+F opens the search overlay; Enter runs the chosen item, and the crosshair jumps to it in its tab.
-- **Tabs**: add, rename, duplicate, delete and drag to reorder, with the same menu on a right click.
-- **Two layouts**: a list and a grid, remembered across restarts, with empty cells in the grid as places to put items.
+- **整体外观**：窗口改为 MyGo Music 风格：顶部标签栏覆盖内容页，配浅色/深色主题、圆角行与按钮。
+- **强调色**：预设改为 MyGO!!!!! 五位成员的颜色（网站 `--bang-1` 至 `--bang-5`，Tomori、Anon、Rāna、Soyo、Taki），各带明暗两套并随主题自动切换，默认 `--bang-1`；同时支持自定义颜色。
+- **设置窗口**：右上角 ⋯ 菜单已移除，齿轮打开独立设置窗口，集中放主题、强调色、自动计时、自动隐藏、始终置顶、路径转换、数据目录与图标维护。
+- **右键菜单**：取消所有 ⋯ 按钮，条目、标签和空格子统一通过右键菜单操作。
+- **添加**：添加文件或手动创建条目改为右下角的圆形 `+` 按钮。
+- **布局切换**：列表/网格切换移到顶栏、设置按钮左侧。
+- **列表行**：去掉手型光标，因为单击不会启动条目。
+- **原生窗口**：界面由 Go 通过 MyGo 原生 UI 绘制，不需要 WebView 或 WebView2。
+- **拖放**：条目可在列表和网格中换位；拖到标签上可移动到其他标签（按住 Ctrl/Cmd 为复制）；标签可拖动排序。
+- **运行时长**：条目名称旁显示累计时长（网格中在卡片角上），点击即可编辑。
+- **搜索**：Ctrl/Cmd+F 打开搜索浮层，回车启动选中项，准星可跳转到它所在的标签。
+- **标签**：支持新建、重命名、复制、删除和拖动排序，右键打开菜单。
+- **两种视图**：列表与网格，切换结果跨重启保留；网格中的空格子可作为摆放位置。
 
-### Features
+### 功能
 
-- **Items**: edit, duplicate, insert an empty slot, open the containing folder, rename, delete, update the icon, and convert paths between absolute and relative.
-- **Administrator**: *Run as administrator* in the item editor launches the item elevated, and the row shows a shield.
-- **Data file**: still `go-launcher-data.json` with the same keys, watched while the app runs, so an edit by hand applies at once and invalid JSON is ignored instead of wiping the store.
-- **Window**: size, position and maximized state are kept in `mygo-launcher-data/window-state.json`; *Always on top* and *Auto-hide* are in the window menu.
-- **Portable**: everything the app keeps is in one folder beside the executable, and a second launch from the same folder focuses the window already open.
+- **条目**：支持编辑、复制、插入空格子、打开所在文件夹、重命名、删除、更新图标，以及在绝对/相对路径之间转换。
+- **管理员权限**：条目编辑器中的「以管理员身份运行」会以提权方式启动，列表显示盾牌。
+- **数据文件**：仍是 `go-launcher-data.json`，键名不变；运行时监听文件，手工修改立即生效，非法 JSON 会被忽略而不会清空数据。
+- **窗口**：大小、位置和最大化状态保存在 `mygo-launcher-data/window-state.json`；「始终置顶」和「自动隐藏」在设置窗口中。
+- **便携**：应用保存的所有内容都在可执行文件旁的一个目录里；从同一目录再次启动会聚焦已打开的窗口。
 
-### Engineering
+### 工程
 
-- **Build**: Wails, Vue, bun and the frontend build are gone; `go tool mygo build` produces the executable and the NSIS installer from a single Go module.
-- **Tests**: the interface is driven headlessly (`ui.NewTester`), covering tabs, dialogs, search, menus and the three drag gestures.
+- **构建**：Wails、Vue、bun 和前端构建流程已移除；`go tool mygo build` 从单个 Go 模块生成可执行文件与 NSIS 安装包。
+- **源码目录**：Go 源码与测试统一移到 `src/`，由 `mygo.json` 的 `"main": "./src"` 指定入口；文档集中在仓库根目录与 `docs/`。
+- **测试**：界面通过 `ui.NewTester` 无头驱动，覆盖标签、对话框、搜索、右键菜单、三种拖动手势和设置窗口。
