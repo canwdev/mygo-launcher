@@ -1,7 +1,9 @@
 package main
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -173,22 +175,117 @@ func TestViewTabsAddRename(t *testing.T) {
 	}
 }
 
-// TestViewAppMenuTogglesGameMode 验证窗口菜单里的开关写回 store。
-func TestViewAppMenuTogglesGameMode(t *testing.T) {
+// TestViewAppMenuTogglesAutoHide 验证窗口菜单里的开关写回 store。
+func TestViewAppMenuTogglesAutoHide(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 460)
-	app.store.Settings.GameMode = true
+	app.store.Settings.AutoHide = true
 
-	if err := clickMenu(tt, "Menu", "Game mode"); err != nil {
-		t.Fatalf("game mode: %v", err)
+	if err := clickMenu(tt, "Menu", "Auto-hide Launcher"); err != nil {
+		t.Fatalf("auto-hide: %v", err)
 	}
-	if app.store.Settings.GameMode {
-		t.Fatal("the game mode toggle must turn the setting off")
+	if app.store.Settings.AutoHide {
+		t.Fatal("the auto-hide toggle must turn the setting off")
 	}
-	if err := clickMenu(tt, "Menu", "Game mode"); err != nil {
-		t.Fatalf("game mode again: %v", err)
+	if err := clickMenu(tt, "Menu", "Auto-hide Launcher"); err != nil {
+		t.Fatalf("auto-hide again: %v", err)
 	}
-	if !app.store.Settings.GameMode {
-		t.Fatal("the game mode toggle must turn the setting back on")
+	if !app.store.Settings.AutoHide {
+		t.Fatal("the auto-hide toggle must turn the setting back on")
+	}
+}
+
+// TestViewRuntimeDialogAdjustsByHour 验证 Edit runtime 的 -1h / +1h 按钮直接改
+// 写已保存的时长，且不会减到负数。
+func TestViewRuntimeDialogAdjustsByHour(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 460)
+
+	v.runtimeGUID = "a"
+	v.runtimeOpen = true
+	tt.Frame()
+	if !tt.HasText("-1h") || !tt.HasText("+1h") {
+		t.Fatalf("the dialog must show both buttons, texts %q", tt.Texts())
+	}
+
+	if err := tt.Click("+1h"); err != nil {
+		t.Fatalf("add an hour: %v", err)
+	}
+	if got := app.store.Apps["a"].RuntimeMs; got != 7_200_000 {
+		t.Fatalf("+1h must add an hour to the stored runtime, got %dms", got)
+	}
+	if v.runtimeMinutes != "120" {
+		t.Fatalf("the minutes field must follow the buttons, got %q", v.runtimeMinutes)
+	}
+	if err := tt.Click("-1h"); err != nil {
+		t.Fatalf("subtract an hour: %v", err)
+	}
+	if got := app.store.Apps["a"].RuntimeMs; got != 3_600_000 {
+		t.Fatalf("-1h must take an hour off, got %dms", got)
+	}
+
+	app.runtimeStats["a"] = 60_000
+	app.store.Apps["a"].RuntimeMs = 60_000
+	v.states = app.state()
+	v.adjustRuntime(-time.Hour)
+	if got := app.store.Apps["a"].RuntimeMs; got != 0 {
+		t.Fatalf("the runtime must not go below zero, got %dms", got)
+	}
+}
+
+// TestViewAppMenuTogglesAutoTiming 验证窗口菜单里的自动计时开关写回 store。
+func TestViewAppMenuTogglesAutoTiming(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 460)
+	app.store.Settings.AutoTime = true
+
+	if err := clickMenu(tt, "Menu", "Auto timing"); err != nil {
+		t.Fatalf("auto timing: %v", err)
+	}
+	if app.store.Settings.AutoTime {
+		t.Fatal("the auto timing toggle must turn the setting off")
+	}
+	if err := clickMenu(tt, "Menu", "Auto timing"); err != nil {
+		t.Fatalf("auto timing again: %v", err)
+	}
+	if !app.store.Settings.AutoTime {
+		t.Fatal("the auto timing toggle must turn the setting back on")
+	}
+}
+
+// TestAutoTimingGatesRuntime 验证关掉自动计时后，运行中的进程不再显示增量。
+func TestAutoTimingGatesRuntime(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
+	app.running["a"] = &runningProc{start: time.Now().Add(-time.Hour)}
+	v.states = app.state()
+
+	if got := v.runtimeText("a"); !strings.Contains(got, "(+ ") {
+		t.Fatalf("the running time must show while auto timing is on, got %q", got)
+	}
+	app.store.Settings.AutoTime = false
+	if got := v.runtimeText("a"); got != "1h" {
+		t.Fatalf("auto timing off must leave the runtime alone, got %q", got)
+	}
+}
+
+// TestFinishProcessRespectsAutoTiming 验证进程结束时是否把这段时长记进去。
+func TestFinishProcessRespectsAutoTiming(t *testing.T) {
+	app := newTestApp(t)
+	app.store.Apps["a"] = &AppItem{GUID: "a", Name: "A"}
+	app.runtimeStats["a"] = 5_000
+	app.running["a"] = &runningProc{}
+	app.store.Settings.AutoTime = false
+
+	app.finishProcess("a", &runningProc{}, time.Hour.Milliseconds())
+	if _, ok := app.running["a"]; ok {
+		t.Fatal("the finished process must no longer be tracked")
+	}
+	if got := app.runtimeStats["a"]; got != 5_000 {
+		t.Fatalf("with auto timing off the runtime must not move, got %dms", got)
+	}
+
+	app.running["a"] = &runningProc{}
+	app.store.Settings.AutoTime = true
+	app.finishProcess("a", &runningProc{}, 60_000)
+	if got := app.runtimeStats["a"]; got != 65_000 {
+		t.Fatalf("with auto timing on the time must be added, got %dms", got)
 	}
 }
 
@@ -218,5 +315,127 @@ func TestViewConfirmsDelete(t *testing.T) {
 		if slot != nil && *slot == "a" {
 			t.Fatal("the deleted item must leave the tab's slots")
 		}
+	}
+}
+
+// drag presses at from, moves in steps to to, and releases there: the gesture
+// that drags a row, a cell or a tab.
+func drag(tt *ui.Tester, from, to ui.Rect) {
+	x1, y1 := from.X+from.W/2, from.Y+from.H/2
+	x2, y2 := to.X+to.W/2, to.Y+to.H/2
+	tt.Press(x1, y1)
+	for i := 1; i <= 8; i++ {
+		tt.Move(x1+(x2-x1)*float32(i)/8, y1+(y2-y1)*float32(i)/8)
+	}
+	tt.Release(x2, y2)
+}
+
+// tabSlots lists a tab's slots, "empty" for a nil one.
+func tabSlots(app *App, index int) []string {
+	out := make([]string, 0, len(app.store.Categories[index].Slots))
+	for _, slot := range app.store.Categories[index].Slots {
+		if slot == nil {
+			out = append(out, "empty")
+			continue
+		}
+		out = append(out, *slot)
+	}
+	return out
+}
+
+// TestViewListDragReorders 验证列表里拖动一行把条目换位。
+func TestViewListDragReorders(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta row")
+	}
+	drag(tt, alpha, beta)
+
+	if got := tabSlots(app, 0); len(got) != 2 || got[0] != "b" || got[1] != "a" {
+		t.Fatalf("slots = %v, want the dragged item first", got)
+	}
+}
+
+// TestViewGridDragReorders 验证网格里拖动一格把条目换位，空槽留在原处。
+func TestViewGridDragReorders(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, nil)
+	if err := tt.Click("Switch to grid view"); err != nil {
+		t.Fatalf("switch to the grid: %v", err)
+	}
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha cell")
+	}
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta cell")
+	}
+	drag(tt, alpha, beta)
+
+	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "a" || got[2] != "empty" {
+		t.Fatalf("slots = %v, want the dragged item first and the empty cell last", got)
+	}
+}
+
+// TestViewDragsItemToTab 验证把列表里的一行拖到另一个标签上，条目就搬过去。
+func TestViewDragsItemToTab(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	if err := tt.Click("Add tab"); err != nil {
+		t.Fatalf("add a tab: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	if err := tt.Click("Default"); err != nil {
+		t.Fatalf("show the first tab: %v", err)
+	}
+	tt.Frame()
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	chip, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second tab")
+	}
+	drag(tt, alpha, chip)
+
+	if got := tabSlots(app, 0); len(got) != 1 || got[0] != "b" {
+		t.Fatalf("the first tab = %v, want only the other item", got)
+	}
+	if got := tabSlots(app, 1); len(got) != 1 || got[0] != "a" {
+		t.Fatalf("the second tab = %v, want the dragged item", got)
+	}
+}
+
+// TestViewTabDragReorders 验证拖动标签改它们的顺序。
+func TestViewTabDragReorders(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 520)
+	if err := tt.Click("Add tab"); err != nil {
+		t.Fatalf("add a tab: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	tt.Frame()
+
+	first, ok := tt.Find("Default")
+	if !ok {
+		t.Fatal("no Default tab")
+	}
+	second, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second tab")
+	}
+	drag(tt, second, first)
+
+	if app.store.Categories[0].Name != "Second" || app.store.Categories[1].Name != "Default" {
+		t.Fatalf("tabs = %q, %q, want the dragged tab first",
+			app.store.Categories[0].Name, app.store.Categories[1].Name)
 	}
 }

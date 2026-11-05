@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// runningProc is a process the launcher started in game mode and tracks: its
-// runtime accumulates until it exits, and it can be stopped.
+// runningProc is a process the launcher started and tracks: its runtime
+// accumulates until it exits, and it can be stopped.
 type runningProc struct {
 	start   time.Time
 	wait    func() error
@@ -62,8 +62,7 @@ type App struct {
 }
 
 func NewApp() *App {
-	// Creates the data folder, carrying over the one of earlier builds.
-	prepareDataDir()
+	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
 	app := &App{
 		store:        loadStore(),
 		runtimeStats: map[string]int64{},
@@ -156,17 +155,11 @@ func (a *App) dispatch(fn func()) {
 	a.win.Update(fn)
 }
 
-// minimize and restore act on the window when there is one, following the
-// auto-hide setting.
+// minimize hides the window when there is one, as auto-hide asks after a
+// launch. Nothing brings it back on its own.
 func (a *App) minimize() {
 	if a.win != nil {
 		a.win.Minimize()
-	}
-}
-
-func (a *App) restore() {
-	if a.win != nil {
-		a.win.Restore()
 	}
 }
 
@@ -224,7 +217,7 @@ type launchPlan struct {
 	args     []string
 	workDir  string
 	elevated bool
-	track    bool // game mode accumulates the runtime of executables
+	track    bool // an executable is tracked, so it can be stopped; its runtime is kept while auto timing is on
 	hide     bool // auto-hide minimizes the window
 }
 
@@ -255,31 +248,7 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 		return plan, nil
 	}
 	plan.path = resolveLaunchPath(item.Path)
-	plan.track = a.store.Settings.GameMode && isExecutable(plan.path)
-	return plan, nil
-}
-
-// planOpen reads what opening an item without tracking takes, as items that
-// time themselves by hand are.
-func (a *App) planOpen(guid string) (launchPlan, error) {
-	item := a.item(guid)
-	if item == nil {
-		return launchPlan{}, fmt.Errorf("invalid item guid %q", guid)
-	}
-	plan := launchPlan{
-		guid:     guid,
-		hide:     a.store.Settings.AutoHide,
-		elevated: item.RunAsAdmin,
-		args:     splitArgs(item.Args),
-	}
-	if item.WorkingDir != "" {
-		plan.workDir = absPath(item.WorkingDir)
-	}
-	if item.Path == "" {
-		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
-		return plan, nil
-	}
-	plan.path = resolveLaunchPath(item.Path)
+	plan.track = isExecutable(plan.path)
 	return plan, nil
 }
 
@@ -301,7 +270,7 @@ func (a *App) runLaunch(plan launchPlan) {
 				a.minimize()
 			}
 		})
-		a.watchExit(plan.guid, p, plan.hide)
+		a.watchExit(plan.guid, p)
 		return
 	}
 	if err := openFile(plan.path, plan.args, plan.workDir, plan.elevated); err != nil {
@@ -313,24 +282,31 @@ func (a *App) runLaunch(plan launchPlan) {
 	}
 }
 
-// watchExit accumulates a tracked process' runtime once it ends, and brings the
-// launcher back when it was the last one and auto-hide asked for it.
-func (a *App) watchExit(guid string, p *runningProc, hide bool) {
+// watchExit accumulates a tracked process' runtime once it ends, when auto
+// timing is on. The window stays where the launch left it: nothing is restored
+// automatically.
+func (a *App) watchExit(guid string, p *runningProc) {
 	go func() {
 		_ = p.wait()
 		elapsed := time.Since(p.start).Milliseconds()
-		a.dispatch(func() {
-			a.runtimeStats[guid] += elapsed
-			delete(a.running, guid)
-			if p.cleanup != nil {
-				p.cleanup()
-			}
-			a.save()
-			if hide && len(a.running) == 0 {
-				a.restore()
-			}
-		})
+		a.dispatch(func() { a.finishProcess(guid, p, elapsed) })
 	}()
+}
+
+// finishProcess drops a process that ended and adds its time to the runtime,
+// unless auto timing is off: then its clock never moved and there is nothing to
+// add.
+func (a *App) finishProcess(guid string, p *runningProc, elapsed int64) {
+	delete(a.running, guid)
+	if p.cleanup != nil {
+		p.cleanup()
+	}
+	if !a.store.Settings.AutoTime {
+		a.refresh()
+		return
+	}
+	a.runtimeStats[guid] += elapsed
+	a.save()
 }
 
 func (a *App) stop(guid string) error {
@@ -344,8 +320,8 @@ func (a *App) stop(guid string) error {
 	return nil
 }
 
-// setRuntimeMs overrides an item's accumulated runtime (the runtime dialog and
-// the manual timer write through it). Negative input is clamped to 0.
+// setRuntimeMs overrides an item's accumulated runtime (the runtime dialog
+// writes through it). Negative input is clamped to 0.
 func (a *App) setRuntimeMs(guid string, ms int64) error {
 	item := a.item(guid)
 	if item == nil {

@@ -8,9 +8,12 @@ A minimal desktop launcher for Windows, written in Go with
 [MyGo](https://github.com/egoist/mygo)'s native UI — no web view, no HTML, no
 JavaScript. It shows a window listing files/programs (with icons and accumulated
 runtime), lets you run/stop them, drag & drop to add more, and manage entries via
-a per-item menu. Each item can be launched as administrator (check *Run as
-administrator* in the item editor — it is stored in the data file and shows a
-shield marker; Windows asks for UAC). Launcher data lives in
+a per-item menu. Executables are timed automatically: the runtime counts while
+the program runs and is saved when it exits (click it to correct it by ±1h or by
+typing minutes). *Auto timing* in the window menu turns that clock off, leaving
+the runtime to be edited by hand. Each item can be launched as administrator
+(check *Run as administrator* in the item editor — it is stored in the data file
+and shows a shield marker; Windows asks for UAC). Launcher data lives in
 `mygo-launcher-data/go-launcher-data.json`; edit that file by hand and the running
 app reloads it automatically (see [Data file](#data-file)).
 
@@ -57,11 +60,7 @@ Everything the launcher knows is kept in `mygo-launcher-data/go-launcher-data.js
 
 - `apps` — global item pool (`guid` / `name` / `path` / `icon` / `args` / `working_dir` / `runtime_ms` / `run_as_admin`)
 - `categories` — the tabs, each with a `slots` array of app guids (`null` = empty grid cell)
-- `settings` — `game_mode` / `auto_hide` / `always_on_top` / `absolute_paths`
-
-0.2.0 renamed the folder from `.go-launcher-data`; on startup the launcher moves
-the old one into place, cached icons and window geometry included, and rewrites
-the icon paths that name it.
+- `settings` — `auto_time` / `auto_hide` / `always_on_top` / `absolute_paths`
 
 The file is watched while the app runs (`mygo.WatchFiles`, event-driven — no
 polling): save a manual edit and the launcher applies it right away and refreshes
@@ -73,8 +72,8 @@ and the store is written back on every change.
 The window keeps its own settings in the same folder, because they belong to the
 window rather than to the launcher's data:
 
-- `mygo-launcher-data/ui-state.json` — theme, list/grid view, active tab, manual and
-  auto timers (what the previous build kept in the page's localStorage)
+- `mygo-launcher-data/ui-state.json` — theme, list/grid view and active tab (what the
+  previous build kept in the page's localStorage)
 - `mygo-launcher-data/window-state.json` — window position, size and maximized state
 - `mygo-launcher-data/cached-icons/` — icons extracted from the files items point at
 
@@ -89,7 +88,7 @@ window rather than to the launcher's data:
   reload the store
 - `view*.go` — the native UI, one file per area: `view.go` (window, header, theme),
   `view_tabs.go` (tab strip), `view_list.go` / `view_grid.go` (the two layouts),
-  `view_dialogs.go` (item/runtime/rename/help/confirm dialogs), `view_search.go`
+  `view_dialogs.go` (item/runtime/rename/confirm dialogs), `view_search.go`
   (search overlay), with `items.go` and `commands.go` for what the UI does
 - `icons.go`, `icons_svg.go` — item icons (`mygo.Shell.FileIcon`) and the SVGs the
   window draws

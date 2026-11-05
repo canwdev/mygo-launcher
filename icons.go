@@ -68,15 +68,12 @@ func iconSource(rel string) ui.ImageSource {
 }
 
 // isAutoIcon reports whether an item's icon is one the launcher extracted
-// itself, and can extract again ("Update icon"). Icons of builds before 0.2.0
-// name the old data folder, and are the launcher's own too.
+// itself, and can extract again ("Update icon").
 func isAutoIcon(icon string) bool {
 	if icon == "" {
 		return true
 	}
-	slashed := strings.ReplaceAll(icon, "\\", "/")
-	return strings.Contains(slashed, dataDir+"/cached-icons/") ||
-		strings.Contains(slashed, legacyDataDir+"/cached-icons/")
+	return strings.Contains(strings.ReplaceAll(icon, "\\", "/"), dataDir+"/cached-icons/")
 }
 
 // pruneIconFiles removes cached icons no item refers to any more.

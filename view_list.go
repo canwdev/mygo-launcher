@@ -88,49 +88,38 @@ func (v *view) listRow(c *ui.Context, ref rowRef) {
 	})
 }
 
-// runtimeField shows an item's accumulated time, and the time a manual or auto
-// timer is adding. Clicking it edits the runtime, or stops a running timer. It
-// returns the field, which the grid places in a cell's corner.
+// runtimeField shows an item's accumulated time, with what a running process is
+// adding. Clicking it edits the runtime. It returns the field, which the grid
+// places in a cell's corner.
 func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Element {
 	t := c.Theme()
 	guid := item.GUID
-	active := v.timerActive(guid)
 	color := t.TextMuted
-	icon := iconClock
-	if v.prefs.AutoTimers[guid] {
-		icon = iconTimer
-	}
-	if active {
-		color = t.Danger
-	}
+	// A running process locks the runtime only while its clock is moving.
+	timed := st.Running && v.app.store.Settings.AutoTime
 
 	hint := "Click to edit runtime"
 	switch {
-	case active:
-		hint = "Click to stop the timer and save"
-	case st.Running:
+	case timed:
 		hint = "Running — stop the program to edit its runtime"
+	case st.Running:
+		hint = "Running, auto timing is off — click to edit the runtime"
 	}
 	field := ui.Row(c).Gap(3).AlignItems(ui.Center).Padding(1, 3).Radius(4)
 	field.Tooltip(hint)
-	if active || !st.Running {
+	if !timed {
 		field.Cursor(ui.CursorPointer)
 	}
-	if field.Hovered() && !active && !st.Running {
+	if field.Hovered() && !timed {
 		field.Background(t.SurfaceHover)
 	}
 	field.OnClick(func() {
-		switch {
-		case active:
-			v.stopTimer(guid)
-		case st.Running:
-			// Nothing to do: the process reports its own time.
-		default:
+		if !timed {
 			v.openRuntime(guid)
 		}
 	})
 	field.Children(func() {
-		ui.Icon(c, icon).FontSize(11).TextColor(color)
+		ui.Icon(c, iconClock).FontSize(11).TextColor(color)
 		ui.Text(c, v.runtimeText(guid)).FontSize(11).TextColor(color)
 	})
 	return field

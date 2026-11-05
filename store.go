@@ -15,11 +15,7 @@ import (
 // names are part of the on-disk format, and the folder is what "Open data
 // directory…" shows.
 const (
-	dataDir = "mygo-launcher-data"
-	// legacyDataDir is where builds before 0.2.0 kept it. prepareDataDir moves
-	// it into place, and parseStore rewrites the icon paths that name it.
-	legacyDataDir = ".go-launcher-data"
-
+	dataDir     = "mygo-launcher-data"
 	saveFile    = dataDir + "/go-launcher-data.json"
 	iconsDir    = dataDir + "/cached-icons"
 	uiStateFile = dataDir + "/ui-state.json"
@@ -52,11 +48,14 @@ type CategoryNode struct {
 }
 
 type Settings struct {
-	GameMode      bool `json:"game_mode"`
 	AbsolutePaths bool `json:"absolute_paths"`
-	// AutoHide is the master switch of the launcher's window hiding: launching
-	// an item minimizes it (game mode restores it once its processes end), and
-	// with it off nothing is minimized at all.
+	// AutoTime accumulates an item's runtime while its process runs. With it
+	// off the item still starts and stops, but the clock does not move: the
+	// runtime only changes when it is edited by hand.
+	AutoTime bool `json:"auto_time"`
+	// AutoHide minimizes the launcher when an item is launched. It is the
+	// master switch of the window hiding: with it off nothing is minimized at
+	// all, and nothing brings the window back either way.
 	AutoHide bool `json:"auto_hide"`
 	// AlwaysOnTop keeps the window above the others (the app menu's "Always on
 	// top"), restored at startup and applied as it is toggled.
@@ -99,23 +98,13 @@ func resolveLaunchPath(p string) string {
 	return absPath(p)
 }
 
-// migrateIconPath points an icon of an earlier build at the data folder of this
-// one: icon paths are relative, so the folder's rename would leave every cached
-// icon unreachable. Both separators appear in stored paths.
-func migrateIconPath(icon string) string {
-	if icon == "" || !strings.Contains(icon, legacyDataDir) {
-		return icon
-	}
-	return strings.ReplaceAll(icon, legacyDataDir, dataDir)
-}
-
 func defaultStore() AppStore {
 	return AppStore{
 		Apps: map[string]*AppItem{},
 		Categories: []CategoryNode{
 			{GUID: uuid.NewString(), Name: "Default", Slots: []*string{}},
 		},
-		Settings: Settings{GameMode: true, AbsolutePaths: true, AutoHide: true, AlwaysOnTop: false},
+		Settings: Settings{AbsolutePaths: true, AutoTime: true, AutoHide: true, AlwaysOnTop: false},
 	}
 }
 
@@ -136,18 +125,17 @@ func settingsMissingKey(data []byte, key string) bool {
 	return !ok
 }
 
-// parseStore reads the store JSON and fills in defaults and migrations (the
-// game_mode and auto_hide keys of older files, missing guids and names, path
-// normalization, icon paths that name the folder of earlier builds). ok=false
-// means the content is not valid JSON: a file caught mid-edit must not be taken
-// as an empty store.
+// parseStore reads the store JSON and fills in defaults (the auto_time and
+// auto_hide keys of older files, missing guids and names, path normalization).
+// ok=false means the content is not valid JSON: a file caught mid-edit must not
+// be taken as an empty store.
 func parseStore(data []byte) (AppStore, bool) {
 	var store AppStore
 	if err := json.Unmarshal(data, &store); err != nil {
 		return AppStore{}, false
 	}
-	if settingsMissingKey(data, "game_mode") {
-		store.Settings.GameMode = true
+	if settingsMissingKey(data, "auto_time") {
+		store.Settings.AutoTime = true
 	}
 	if settingsMissingKey(data, "auto_hide") {
 		store.Settings.AutoHide = true
@@ -163,7 +151,6 @@ func parseStore(data []byte) (AppStore, bool) {
 			continue
 		}
 		app.Path = normalizePath(app.Path)
-		app.Icon = migrateIconPath(app.Icon)
 		if app.GUID == "" {
 			app.GUID = guid
 		}

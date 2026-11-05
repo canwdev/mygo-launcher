@@ -157,10 +157,11 @@ func TestRuntimeText(t *testing.T) {
 		t.Fatalf("an item without runtime should show the placeholder, got %q", got)
 	}
 
-	v.prefs.Timers["a"] = time.Now().Add(-65 * time.Second).UnixMilli()
+	app.running["a"] = &runningProc{start: time.Now().Add(-65 * time.Second)}
+	v.states = app.state()
 	got := v.runtimeText("a")
 	if len(got) <= len("1m") || got[:len("1m")] != "1m" {
-		t.Fatalf("a running timer must be added to the runtime, got %q", got)
+		t.Fatalf("a running process must add its time to the runtime, got %q", got)
 	}
 }
 

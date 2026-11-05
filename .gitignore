@@ -2,7 +2,6 @@
 *.exe~
 /go-launcher
 /mygo-launcher-data/
-/.go-launcher-data/
 /build/
 /resources/.render/
 mygo_windows_*.syso

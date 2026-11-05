@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -14,7 +15,6 @@ func (v *view) dialogs(c *ui.Context) {
 	v.itemDialog(c)
 	v.runtimeDialog(c)
 	v.renameDialog(c)
-	v.helpDialog(c)
 	v.confirmDialog(c)
 }
 
@@ -157,8 +157,8 @@ func dirname(p string) string {
 	return filepath.Dir(p)
 }
 
-// runtimeDialog edits an item's runtime, and starts or configures its manual
-// timer.
+// runtimeDialog edits an item's accumulated runtime: exactly, in minutes, or an
+// hour at a time with the buttons under the field.
 func (v *view) runtimeDialog(c *ui.Context) {
 	if !v.runtimeOpen {
 		return
@@ -170,8 +170,6 @@ func (v *view) runtimeDialog(c *ui.Context) {
 		v.runtimeOpen = false
 		return
 	}
-	active := v.timerActive(guid)
-	auto := v.prefs.AutoTimers[guid]
 	current := v.baseline(guid)
 
 	minutes := 0
@@ -193,32 +191,12 @@ func (v *view) runtimeDialog(c *ui.Context) {
 				formatRuntime(current), current, preview)).
 				FontSize(11).TextColor(t.TextMuted)
 
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				timer := ui.Button(c, "Manual timer")
-				timer.Disabled(active)
-				if active {
-					timer.Tooltip("A timer already runs for this item")
-				} else {
-					timer.Tooltip("Start a manual timer for this item")
-					timer.OnClick(func() {
-						v.startTimer(guid)
-						v.runtimeOpen = false
-					})
-				}
-				on := auto
-				ui.Switch(c, &on)
-				ui.Text(c, "Auto").FontSize(11).TextColor(t.TextMuted).Tooltip(
-					"Launching this item starts the manual timer, and the timer keeps running after it exits")
-				if on != auto {
-					v.later(func() {
-						v.prefs.AutoTimers[guid] = on
-						v.savePrefs()
-					})
-				}
-				help := ui.Button(c, "").Label("About the manual timer").Padding(2)
-				help.Tooltip("What is the manual timer?")
-				help.OnClick(func() { v.helpOpen = true })
-				help.Children(func() { ui.Icon(c, iconHelp).FontSize(14).TextColor(t.TextMuted) })
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Button(c, "-1h").Tooltip("Subtract one hour from the stored runtime").
+					OnClick(func() { v.adjustRuntime(-time.Hour) })
+				ui.Button(c, "+1h").Tooltip("Add one hour to the stored runtime").
+					OnClick(func() { v.adjustRuntime(time.Hour) })
+				ui.Text(c, "changes the saved runtime at once").FontSize(11).TextColor(t.TextMuted)
 			})
 
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
@@ -227,6 +205,24 @@ func (v *view) runtimeDialog(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// adjustRuntime moves an item's stored runtime by d, never below zero. The
+// dialog stays open, so the buttons can be pressed repeatedly, and the minutes
+// field follows the saved value: pressing Save afterwards cannot undo them.
+func (v *view) adjustRuntime(d time.Duration) {
+	guid := v.runtimeGUID
+	if v.app.item(guid) == nil {
+		v.runtimeOpen = false
+		return
+	}
+	ms := max(0, v.baseline(guid)+d.Milliseconds())
+	if err := v.app.setRuntimeMs(guid, ms); err != nil {
+		v.app.notify(err.Error())
+		return
+	}
+	v.runtimeMinutes = strconv.FormatInt(ms/60000, 10)
+	v.refresh()
 }
 
 func (v *view) saveRuntime() {
@@ -257,28 +253,6 @@ func (v *view) renameDialog(c *ui.Context) {
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				ui.Button(c, "Cancel").OnClick(func() { v.renameOpen = false; v.refresh() })
 				ui.PrimaryButton(c, "OK").OnClick(v.applyRename)
-			})
-		})
-	})
-}
-
-// helpDialog explains the manual timer.
-func (v *view) helpDialog(c *ui.Context) {
-	if !v.helpOpen {
-		return
-	}
-	t := c.Theme()
-	ui.Modal(c, &v.helpOpen, func() {
-		ui.Column(c).Width(440).Gap(10).Children(func() {
-			ui.Text(c, "Manual timer").FontSize(t.FontSize + 4).Bold()
-			ui.Text(c, "Manual timer — starts a manual timer for this item and closes the dialog. "+
-				"The running time shows in red beside the runtime; click it again to stop and save it.").
-				TextColor(t.Text)
-			ui.Text(c, "Auto — when on, launching this item starts the manual timer. Process tracking is "+
-				"skipped and the timer keeps running after the program exits, for programs the launcher "+
-				"cannot track.").TextColor(t.Text)
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				ui.PrimaryButton(c, "OK").OnClick(func() { v.helpOpen = false; v.refresh() })
 			})
 		})
 	})

@@ -25,42 +25,16 @@ type windowStatesFile struct {
 	Windows map[string]mygo.WindowState `json:"windows"`
 }
 
-// legacyWindowState is the geometry the Wails build saved: a single window, and
-// "maximised" spelled the way it was.
-type legacyWindowState struct {
-	Width     int  `json:"width"`
-	Height    int  `json:"height"`
-	X         int  `json:"x"`
-	Y         int  `json:"y"`
-	Maximised bool `json:"maximised"`
-}
-
 func (windowStateStore) LoadWindowStates() (map[string]mygo.WindowState, error) {
 	data, err := os.ReadFile(filepath.Join(absBase, windowStateFile))
 	if err != nil {
 		return nil, nil // first run: the window's options apply
 	}
 	var file windowStatesFile
-	if err := json.Unmarshal(data, &file); err == nil && len(file.Windows) > 0 {
-		return file.Windows, nil
+	if err := json.Unmarshal(data, &file); err != nil {
+		return nil, nil // an unreadable file: the window's options apply
 	}
-	// The window-state.json of the Wails build: one window, other key names.
-	var legacy legacyWindowState
-	if err := json.Unmarshal(data, &legacy); err != nil {
-		return nil, nil
-	}
-	if legacy.Width <= 0 || legacy.Height <= 0 {
-		return nil, nil
-	}
-	return map[string]mygo.WindowState{
-		windowStateKey: {
-			X:         legacy.X,
-			Y:         legacy.Y,
-			Width:     legacy.Width,
-			Height:    legacy.Height,
-			Maximized: legacy.Maximised,
-		},
-	}, nil
+	return file.Windows, nil
 }
 
 func (windowStateStore) SaveWindowStates(states map[string]mygo.WindowState) error {

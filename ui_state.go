@@ -11,19 +11,15 @@ import (
 // kept them in the page's localStorage. They live in ui-state.json beside the
 // store.
 type uiPrefs struct {
-	Theme      string           `json:"theme"`       // auto, light or dark
-	ViewMode   string           `json:"view_mode"`   // list or grid
-	ActiveTab  string           `json:"active_tab"`  // guid of the tab shown
-	Timers     map[string]int64 `json:"timers"`      // item guid → timer start, unix ms
-	AutoTimers map[string]bool  `json:"auto_timers"` // item guid → timer starts on launch
+	Theme     string `json:"theme"`      // auto, light or dark
+	ViewMode  string `json:"view_mode"`  // list or grid
+	ActiveTab string `json:"active_tab"` // guid of the tab shown
 }
 
 func defaultPrefs() uiPrefs {
 	return uiPrefs{
-		Theme:      "auto",
-		ViewMode:   "list",
-		Timers:     map[string]int64{},
-		AutoTimers: map[string]bool{},
+		Theme:    "auto",
+		ViewMode: "list",
 	}
 }
 
@@ -43,12 +39,6 @@ func loadPrefs() uiPrefs {
 	}
 	if p.ViewMode != "grid" {
 		p.ViewMode = "list"
-	}
-	if p.Timers == nil {
-		p.Timers = map[string]int64{}
-	}
-	if p.AutoTimers == nil {
-		p.AutoTimers = map[string]bool{}
 	}
 	return p
 }

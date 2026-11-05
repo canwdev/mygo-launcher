@@ -66,8 +66,6 @@ type view struct {
 	renameGUID    string // an item, when set
 	renameTabGUID string // a tab, when set
 
-	helpOpen bool
-
 	confirmOpen   bool
 	confirmMsg    string
 	confirmAction func()
@@ -132,7 +130,7 @@ func (v *view) view(c *ui.Context) {
 
 	// A runtime display that counts up needs a frame now and then; the clock
 	// goroutine redraws while this says so.
-	v.app.tick.Store(v.anyRunning() || v.anyTimer())
+	v.app.tick.Store(v.anyRunning() && v.app.store.Settings.AutoTime)
 
 	if !c.FocusTakesText() && c.Shortcut(ui.Cmd, ui.KeyF) {
 		v.openSearch()
@@ -284,8 +282,8 @@ func (v *view) appMenuButton(c *ui.Context) {
 		ui.Icon(c, iconDots).FontSize(16).TextColor(c.Theme().TextMuted)
 	}).PopoverMenuButton(func(m *ui.Menu) {
 		s := &v.app.store.Settings
-		if m.Item("Game mode").Checked(s.GameMode).Chosen() {
-			s.GameMode = !s.GameMode
+		if m.Item("Auto timing").Checked(s.AutoTime).Chosen() {
+			s.AutoTime = !s.AutoTime
 			v.app.save()
 		}
 		if m.Item("Auto-hide Launcher").Checked(s.AutoHide).Chosen() {
@@ -344,10 +342,6 @@ func (v *view) anyRunning() bool {
 		}
 	}
 	return false
-}
-
-func (v *view) anyTimer() bool {
-	return len(v.prefs.Timers) > 0
 }
 
 // savePrefs writes the view's own settings.

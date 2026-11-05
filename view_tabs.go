@@ -11,63 +11,71 @@ func (v *view) tabChip(c *ui.Context, index int) {
 	selected := guid == v.prefs.ActiveTab
 	t := c.Theme()
 
-	chip := ui.Row(c).Key(guid).Padding(3, 10).Radius(6).Gap(4).AlignItems(ui.Center)
-	chip.Cursor(ui.CursorPointer)
-	if selected {
-		chip.Background(t.Accent)
-	} else if chip.Hovered() {
-		chip.Background(t.SurfaceHover)
-	}
-
-	// An item dragged over the tab: dropping moves it there, Cmd/Ctrl copies.
-	if _, over := ui.DragOver[dragItem](chip); over {
-		chip.Border(2, t.Accent)
-	}
-	if dragged, ok := ui.Drop[dragItem](chip); ok {
-		copyItem := c.Modifiers()&ui.Cmd != 0
-		v.later(func() { v.moveItemToTab(dragged.guid, guid, copyItem) })
-	}
-
-	// Tabs themselves reorder by dragging.
-	chip.Drag(dragTab{index: index})
-	if dragged, ok := ui.Drop[dragTab](chip); ok && dragged.index != index {
+	// An element takes one type of dragged value, so the chip inside takes the
+	// items and this wrapper, its place in the strip, takes the tabs dragged
+	// over it.
+	slot := ui.Row(c).AlignItems(ui.Center)
+	if dragged, ok := ui.Drop[dragTab](slot); ok && dragged.index != index {
 		v.later(func() { v.moveTab(dragged.index, index) })
 	}
-	if chip.Dragging() {
-		chip.Opacity(0.4)
-	}
 
-	if chip.Clicked() {
-		v.setActiveTab(guid)
-	}
+	slot.Children(func() {
+		chip := ui.Row(c).Key(guid).Padding(3, 10).Radius(6).Gap(4).AlignItems(ui.Center)
+		chip.Cursor(ui.CursorPointer)
+		if selected {
+			chip.Background(t.Accent)
+		} else if chip.Hovered() {
+			chip.Background(t.SurfaceHover)
+		}
 
-	menu := func(m *ui.Menu) {
-		if m.Item("Rename").Chosen() {
-			v.later(func() { v.openTabRename(guid, name) })
+		// An item dragged over the tab: dropping moves it there, Cmd/Ctrl
+		// copies.
+		if _, over := ui.DragOver[dragItem](chip); over {
+			chip.Border(2, t.Accent)
 		}
-		if m.Item("Duplicate").Chosen() {
-			v.later(func() { v.duplicateTab(guid) })
+		if dragged, ok := ui.Drop[dragItem](chip); ok {
+			copyItem := c.Modifiers()&ui.Cmd != 0
+			v.later(func() { v.moveItemToTab(dragged.guid, guid, copyItem) })
 		}
-		m.Separator()
-		if m.Item("Delete").Chosen() {
-			v.later(func() { v.requestDeleteTab(guid, name) })
-		}
-	}
-	chip.PopoverMenu(menu)
 
-	label := t.Text
-	if selected {
-		label = t.AccentText
-	}
-	chip.Children(func() {
-		ui.Text(c, name).SingleLine().TextColor(label).FontSize(t.FontSize)
-		more := ui.Button(c, "").Label("Tab menu").Tooltip("Tab menu").Padding(1).
-			PopoverMenuButton(menu)
-		more.Children(func() {
-			ui.Icon(c, iconDots).FontSize(12).TextColor(label)
+		// Tabs themselves reorder by dragging.
+		chip.Drag(dragTab{index: index})
+		if chip.Dragging() {
+			chip.Opacity(0.4)
+		}
+
+		if chip.Clicked() {
+			v.setActiveTab(guid)
+		}
+
+		menu := func(m *ui.Menu) {
+			if m.Item("Rename").Chosen() {
+				v.later(func() { v.openTabRename(guid, name) })
+			}
+			if m.Item("Duplicate").Chosen() {
+				v.later(func() { v.duplicateTab(guid) })
+			}
+			m.Separator()
+			if m.Item("Delete").Chosen() {
+				v.later(func() { v.requestDeleteTab(guid, name) })
+			}
+		}
+		chip.PopoverMenu(menu)
+
+		label := t.Text
+		if selected {
+			label = t.AccentText
+		}
+		chip.Children(func() {
+			ui.Text(c, name).SingleLine().TextColor(label).FontSize(t.FontSize)
+			more := ui.Button(c, "").Label("Tab menu").Tooltip("Tab menu").Padding(1).
+				PopoverMenuButton(menu)
+			more.Children(func() {
+				ui.Icon(c, iconDots).FontSize(12).TextColor(label)
+			})
+			more.Hidden(!selected && !chip.Hovered())
+			more.Opacity(0.7)
 		})
-		more.Hidden(!selected && !chip.Hovered())
-		more.Opacity(0.7)
 	})
 }
 

@@ -89,10 +89,7 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 	card.PopoverMenu(v.itemMenu(item, index))
 
 	card.Children(func() {
-		if v.app.store.Settings.GameMode {
-			field := v.runtimeField(c, item, st)
-			field.Absolute().Top(2).Left(4).MaxWidth(gridCellWidth - 30)
-		}
+		v.runtimeField(c, item, st).Absolute().Top(2).Left(4).MaxWidth(gridCellWidth - 30)
 		more := ui.Button(c, "").Label("Item menu").Tooltip("Item menu").Padding(2).
 			PopoverMenuButton(v.itemMenu(item, index))
 		more.Absolute().Top(2).Right(2)

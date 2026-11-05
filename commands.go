@@ -54,9 +54,10 @@ func (v *view) itemMenu(item *AppItem, slot int) func(m *ui.Menu) {
 	}
 }
 
-// runItem runs an item: tracked in game mode, or opened without tracking when it
-// times itself. A launch may wait on an elevation prompt, so it runs on a
-// goroutine; what it changes comes back through the window.
+// runItem runs an item: executables are tracked, so their runtime accumulates
+// until they exit and they can be stopped. A launch may wait on an elevation
+// prompt, so it runs on a goroutine; what it changes comes back through the
+// window.
 func (v *view) runItem(guid string) {
 	if at, ok := v.launchAt[guid]; ok && time.Since(at) < launchCooldown {
 		return
@@ -66,25 +67,14 @@ func (v *view) runItem(guid string) {
 		return
 	}
 	v.launchAt[guid] = time.Now()
-	autoTimer := v.prefs.AutoTimers[guid]
-	plan, err := func() (launchPlan, error) {
-		if autoTimer {
-			return v.app.planOpen(guid)
-		}
-		return v.app.planLaunch(guid)
-	}()
+	plan, err := v.app.planLaunch(guid)
 	if err != nil {
 		if err != errAlreadyRunning {
 			v.app.notify(err.Error())
 		}
 		return
 	}
-	go func() {
-		v.app.runLaunch(plan)
-		if autoTimer && plan.path != "" {
-			v.app.dispatch(func() { v.startTimer(guid) })
-		}
-	}()
+	go v.app.runLaunch(plan)
 }
 
 func (v *view) stopItem(guid string) {
@@ -93,54 +83,10 @@ func (v *view) stopItem(guid string) {
 	}
 }
 
-// === Timers ===
+// === Runtime ===
 
-func (v *view) timerActive(guid string) bool {
-	_, ok := v.prefs.Timers[guid]
-	return ok
-}
-
-func (v *view) elapsed(guid string) int64 {
-	start, ok := v.prefs.Timers[guid]
-	if !ok || start <= 0 {
-		return 0
-	}
-	return max(0, time.Now().UnixMilli()-start)
-}
-
-// startTimer starts a manual timer for an item; one already running keeps
-// going, so an auto timer does not reset it.
-func (v *view) startTimer(guid string) {
-	if v.timerActive(guid) {
-		return
-	}
-	v.prefs.Timers[guid] = time.Now().UnixMilli()
-	v.savePrefs()
-	v.app.refresh()
-}
-
-// stopTimer stops an item's timer and adds what it counted to the runtime the
-// store keeps.
-func (v *view) stopTimer(guid string) {
-	if !v.timerActive(guid) {
-		return
-	}
-	ms := v.elapsed(guid)
-	delete(v.prefs.Timers, guid)
-	v.savePrefs()
-	if ms <= 0 {
-		v.app.notify("Timer stopped")
-		return
-	}
-	if err := v.app.setRuntimeMs(guid, v.baseline(guid)+ms); err != nil {
-		v.app.notify(err.Error())
-		return
-	}
-	v.app.notify("Runtime saved")
-}
-
-// baseline is an item's accumulated runtime, without what a running process or
-// a timer is adding now.
+// baseline is an item's accumulated runtime, without what a running process is
+// adding now.
 func (v *view) baseline(guid string) int64 {
 	if st, ok := v.states[guid]; ok {
 		return st.RuntimeMs
@@ -151,11 +97,11 @@ func (v *view) baseline(guid string) int64 {
 	return 0
 }
 
-// liveMs is what this session adds to the runtime: a timer's count, or a
-// running process' time since it started.
+// liveMs is what this session adds to the runtime: the time the tracked process
+// has been running, while auto timing is on.
 func (v *view) liveMs(guid string) int64 {
-	if v.timerActive(guid) {
-		return v.elapsed(guid)
+	if !v.app.store.Settings.AutoTime {
+		return 0
 	}
 	st, ok := v.states[guid]
 	if !ok || !st.Running || st.StartAt <= 0 {
