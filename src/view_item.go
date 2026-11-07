@@ -22,6 +22,12 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	if timed {
 		hint = m.RuntimeRunningHint()
 	}
+	// An item with no time yet shows the clock alone: the placeholder would
+	// only add dashes to a cell that has nothing to say.
+	text := ""
+	if v.baseline(guid) > 0 || v.liveMs(guid) > 0 {
+		text = v.runtimeText(guid)
+	}
 	field := ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 5).Radius(5)
 	field.Tooltip(hint)
 	if !timed {
@@ -37,7 +43,9 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	})
 	field.Children(func() {
 		ui.Icon(c, iconClock).Size(11, 11).TextColor(color)
-		ui.Text(c, v.runtimeText(guid)).FontSize(11.5).FontFeatures("tnum").TextColor(color)
+		if text != "" {
+			ui.Text(c, text).FontSize(11.5).FontFeatures("tnum").TextColor(color)
+		}
 	})
 	return field
 }

@@ -5,53 +5,75 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/egoist/mygo/ui"
 )
 
 // launchCooldown keeps a double click from running an item twice.
 const launchCooldown = time.Second
 
 // itemMenu is an item's menu, opened by a right click on its cell.
-func (v *view) itemMenu(item *AppItem, slot int) func(m *ui.Menu) {
+func (v *view) itemMenu(item *AppItem, tabGUID string, slot int) []menuEntry {
 	guid, name := item.GUID, item.Name
-	tabGUID := v.prefs.ActiveTab
-	// An icon outside the app's folders is offered too: updating takes it in.
-	autoIcon := isAutoIcon(item.Icon) || !allowedIcon(item.Icon)
 	msgs := v.msgs()
-	return func(m *ui.Menu) {
-		if m.Item(msgs.Edit()).Chosen() {
+	// A shell folder or a URL has no file to show in Explorer, so its entry
+	// opens it instead.
+	open := menuEntry{icon: iconFolderOpen, label: msgs.RevealInFolder(), action: func() {
+		v.later(func() { v.app.notifyErr(v.app.reveal(guid)) })
+	}}
+	if isShellTarget(item.Path) {
+		open = menuEntry{icon: iconArrowUpRight, label: msgs.OpenMain(), action: func() {
+			v.later(func() { v.runItem(guid) })
+		}}
+	}
+	entries := []menuEntry{
+		{icon: iconEdit, label: msgs.Edit(), action: func() {
 			v.later(func() { v.openEdit(guid) })
-		}
-		if m.Item(msgs.Duplicate()).Chosen() {
+		}},
+		{icon: iconCopy, label: msgs.Duplicate(), action: func() {
 			v.later(func() { v.duplicateItem(guid, tabGUID, slot) })
-		}
-		if m.Item(msgs.InsertEmpty()).Chosen() {
+		}},
+		{icon: iconSquarePlus, label: msgs.InsertEmpty(), action: func() {
 			v.later(func() { v.insertEmptyAt(slot) })
-		}
-		if m.Item(msgs.RevealInFolder()).Chosen() {
-			v.later(func() { v.app.notifyErr(v.app.reveal(guid)) })
-		}
-		m.Separator()
-		if m.Item(msgs.Rename()).Chosen() {
+		}},
+		open,
+		{},
+		{icon: iconRename, label: msgs.Rename(), action: func() {
 			v.later(func() { v.openItemRename(guid, name) })
-		}
-		if m.Item(msgs.Remove()).Chosen() {
+		}},
+		{icon: iconTrash, label: msgs.Remove(), action: func() {
 			v.later(func() { v.ask(msgs.RemoveItemConfirm(name), func() { v.removeItem(guid) }) })
-		}
-		m.Separator()
-		if autoIcon {
-			if m.Item(msgs.UpdateIcon()).Chosen() {
-				v.later(func() { v.app.notifyErr(v.app.updateIcon(guid)) })
-			}
-		}
-		if m.Item(msgs.ConvertToAbsolute()).Chosen() {
-			v.later(func() { v.app.notifyErr(v.app.convertItemPath(guid, true)) })
-		}
-		if m.Item(msgs.ConvertToRelative()).Chosen() {
-			v.later(func() { v.app.notifyErr(v.app.convertItemPath(guid, false)) })
+		}},
+	}
+	// The shell's own context menu, for files, folders and shell folders.
+	// Packaged apps and URLs have none. Stored paths may be relative to the
+	// data base, as launching resolves them.
+	shellPath := item.Path
+	if shellPath != "" && !isShellTarget(shellPath) {
+		shellPath = absPath(shellPath)
+	}
+	shellActions := canUseShellActions(shellPath)
+	if shellActions {
+		entries = append(entries, menuEntry{}, menuEntry{icon: iconMenu, label: msgs.SystemMenu(), action: func() {
+			// The native menu pumps its own messages; show it after this frame.
+			v.app.dispatch(func() {
+				v.app.notifyErr(showShellMenu(shellPath))
+				v.app.refresh()
+			})
+		}})
+	}
+	// A special object's own entries, as emptying the Recycle Bin. They read
+	// the shell, so they are built only while the menu shows.
+	if isOpen := v.menus[itemMenuKey(tabGUID, guid, slot)]; isOpen != nil && *isOpen {
+		if sp := specialItemFor(item.Path); sp != nil && sp.Menu != nil {
+			entries = append(entries, sp.Menu(v, item)...)
 		}
 	}
+	// The shell's properties page is the last entry, as in Explorer's menu.
+	if shellActions {
+		entries = append(entries, menuEntry{icon: iconProperties, label: msgs.Properties(), action: func() {
+			v.app.dispatch(func() { v.app.notifyErr(showItemProperties(shellPath)) })
+		}})
+	}
+	return entries
 }
 
 // runItem runs an item: executables are tracked, so their runtime accumulates
@@ -126,7 +148,13 @@ func (v *view) runtimeText(guid string) string {
 
 // === Dialogs ===
 
+// openRuntime opens the dialog that edits an item's runtime. Only a program
+// that is timed has one; a folder's or a file's cell shows no timer to open it
+// from.
 func (v *view) openRuntime(guid string) {
+	if !timeableItem(v.app.item(guid)) {
+		return
+	}
 	v.runtimeGUID = guid
 	v.runtimeMinutes = strconv.FormatInt(v.baseline(guid)/60000, 10)
 	v.runtimeOpen = true
@@ -145,6 +173,41 @@ func (v *view) openEdit(guid string) {
 	v.editIcon = item.Icon
 	v.editIconIndex = "0"
 	v.editAdmin = item.RunAsAdmin
+}
+
+// updateIconFromDialog redraws the edited item's icon and shows the stored
+// icon in the dialog.
+func (v *view) updateIconFromDialog() {
+	if v.editGUID == "" {
+		return
+	}
+	if err := v.app.updateIcon(v.editGUID); err != nil {
+		v.app.notify(err.Error())
+		return
+	}
+	if item := v.app.item(v.editGUID); item != nil {
+		v.editIcon = item.Icon
+		v.editIconIndex = "0"
+	}
+	v.refresh()
+}
+
+// convertFromDialog stores the edited item's paths absolute or relative, and
+// shows the stored forms in the dialog.
+func (v *view) convertFromDialog(absolute bool) {
+	if v.editGUID == "" {
+		return
+	}
+	if err := v.app.convertItemPath(v.editGUID, absolute); err != nil {
+		v.app.notify(err.Error())
+		return
+	}
+	if item := v.app.item(v.editGUID); item != nil {
+		v.editPath = item.Path
+		v.editWorkDir = item.WorkingDir
+		v.editIcon = item.Icon
+	}
+	v.refresh()
 }
 
 func (v *view) openCreate() {

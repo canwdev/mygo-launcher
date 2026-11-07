@@ -13,7 +13,7 @@ import (
 // TestAppIconTintsAccent 验证应用图标用强调色重绘，且半透明箭头仍是淡淡的一层。
 func TestAppIconTintsAccent(t *testing.T) {
 	red := ui.RGB(255, 0, 0)
-	icon := appIcon(red, false)
+	icon := appIcon(red, false, false)
 	if icon == nil {
 		t.Fatal("the icon assets must compose")
 	}
@@ -87,7 +87,7 @@ func TestSettingsIconCarriesGear(t *testing.T) {
 		}
 		return n, sample
 	}
-	plain, geared := appIcon(red, false), appIcon(red, true)
+	plain, geared := appIcon(red, false, false), appIcon(red, false, true)
 	if plain == nil || geared == nil {
 		t.Fatal("the icon assets must compose")
 	}
@@ -96,5 +96,39 @@ func TestSettingsIconCarriesGear(t *testing.T) {
 	}
 	if n, _ := dark(geared, true); n == 0 {
 		t.Fatal("the settings icon must carry a dark gear in its corner")
+	}
+}
+
+// TestAppIconFollowsDarkAppearance 验证暗色外观下图标改用深色底，齿轮改用浅色。
+func TestAppIconFollowsDarkAppearance(t *testing.T) {
+	red := ui.RGB(255, 0, 0)
+	light, dark := appIcon(red, false, true), appIcon(red, true, true)
+	if light == nil || dark == nil {
+		t.Fatal("the icon assets must compose")
+	}
+	lr, lg, lb, _ := light.At(40, 40).RGBA()
+	if lr>>8 < 250 || lg>>8 < 250 || lb>>8 < 250 {
+		t.Fatalf("the light icon must keep a white background, got %d,%d,%d", lr>>8, lg>>8, lb>>8)
+	}
+	dr, dg, db, da := dark.At(40, 40).RGBA()
+	if da>>8 < 250 || dr>>8 > 60 || dg>>8 > 60 || db>>8 > 60 {
+		t.Fatalf("the dark icon must have a dark background, got %d,%d,%d a=%d", dr>>8, dg>>8, db>>8, da>>8)
+	}
+
+	// The gear must turn light where the light icon draws it dark.
+	lightGear, darkGear := 0, 0
+	b := dark.Bounds()
+	for y := b.Min.Y + b.Dy()*3/4; y < b.Max.Y; y++ {
+		for x := b.Min.X + b.Dx()*3/4; x < b.Max.X; x++ {
+			if r, g, bl, a := light.At(x, y).RGBA(); a>>8 > 128 && r>>8 < 80 && g>>8 < 80 && bl>>8 < 80 {
+				lightGear++
+			}
+			if r, g, bl, a := dark.At(x, y).RGBA(); a>>8 > 128 && r>>8 > 200 && g>>8 > 200 && bl>>8 > 200 {
+				darkGear++
+			}
+		}
+	}
+	if lightGear == 0 || darkGear == 0 {
+		t.Fatalf("the gear must follow the appearance, got %d light and %d dark pixels", lightGear, darkGear)
 	}
 }

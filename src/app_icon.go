@@ -28,10 +28,11 @@ const (
 	gearMarginPx = 16
 )
 
-// iconAssets are the parts the app icons are drawn from: the background, the
-// accent shapes, and the gear badge of the settings window.
+// iconAssets are the parts the app icons are drawn from: the light and the
+// dark background, the accent shapes, and the gear badge of the settings
+// window.
 type iconAssets struct {
-	base, accent, gear *image.NRGBA
+	base, baseDark, accent, gear *image.NRGBA
 }
 
 var (
@@ -39,9 +40,17 @@ var (
 	iconsParts iconAssets
 )
 
+// gearInk is the gear badge's stroke: dark on the light background, light on
+// the dark one.
+var (
+	gearInkLight = ui.Hex("#1d1d1f")
+	gearInkDark  = ui.Hex("#f5f5f7")
+)
+
 func loadIconAssets() iconAssets {
 	iconsOnce.Do(func() {
 		iconsParts.base = decodeIconPNG(resources.IconBasePNG)
+		iconsParts.baseDark = decodeIconPNG(resources.IconBaseDarkPNG)
 		iconsParts.accent = decodeIconPNG(resources.IconAccentPNG)
 		iconsParts.gear = decodeIconPNG(resources.IconGearPNG)
 	})
@@ -60,40 +69,53 @@ func decodeIconPNG(data []byte) *image.NRGBA {
 	return dst
 }
 
-// appIcon draws the app's icon in accent at the assets' size, with the
-// settings gear in the corner when gear is true. The accent mask keeps the
-// arrow's own translucency, so it stays a tint of the background rather than
-// a solid shape.
-func appIcon(accent ui.Color, gear bool) *image.NRGBA {
-	parts := loadIconAssets()
-	if parts.base.Bounds().Empty() || parts.accent.Bounds().Empty() {
-		return nil
-	}
-	dst := image.NewNRGBA(parts.base.Bounds())
-	copy(dst.Pix, parts.base.Pix)
-
-	tinted := image.NewNRGBA(parts.accent.Bounds())
-	for i := 0; i < len(parts.accent.Pix); i += 4 {
-		alpha := parts.accent.Pix[i+3]
+// tintMask colors a white mask in c, keeping the mask's alpha.
+func tintMask(mask *image.NRGBA, c ui.Color) *image.NRGBA {
+	out := image.NewNRGBA(mask.Bounds())
+	for i := 0; i < len(mask.Pix); i += 4 {
+		alpha := mask.Pix[i+3]
 		if alpha == 0 {
 			continue
 		}
-		tinted.Pix[i] = accent.R
-		tinted.Pix[i+1] = accent.G
-		tinted.Pix[i+2] = accent.B
-		tinted.Pix[i+3] = alpha
+		out.Pix[i] = c.R
+		out.Pix[i+1] = c.G
+		out.Pix[i+2] = c.B
+		out.Pix[i+3] = alpha
 	}
-	draw.Draw(dst, dst.Bounds(), tinted, image.Point{}, draw.Over)
+	return out
+}
+
+// appIcon draws the app's icon in accent at the assets' size, on the light or
+// the dark background, with the settings gear in the corner when gear is
+// true. The accent mask keeps the arrow's own translucency, so it stays a tint
+// of the background rather than a solid shape.
+func appIcon(accent ui.Color, dark, gear bool) *image.NRGBA {
+	parts := loadIconAssets()
+	base := parts.base
+	if dark {
+		base = parts.baseDark
+	}
+	if base.Bounds().Empty() || parts.accent.Bounds().Empty() {
+		return nil
+	}
+	dst := image.NewNRGBA(base.Bounds())
+	copy(dst.Pix, base.Pix)
+	draw.Draw(dst, dst.Bounds(), tintMask(parts.accent, accent), image.Point{}, draw.Over)
 
 	if gear {
+		ink := gearInkLight
+		if dark {
+			ink = gearInkDark
+		}
+		mask := tintMask(parts.gear, ink)
 		badge := image.NewNRGBA(image.Rect(0, 0, gearBadgePx, gearBadgePx))
-		xdraw.CatmullRom.Scale(badge, badge.Bounds(), parts.gear, parts.gear.Bounds(), draw.Over, nil)
+		xdraw.CatmullRom.Scale(badge, badge.Bounds(), mask, mask.Bounds(), draw.Over, nil)
 		x := dst.Bounds().Dx() - gearBadgePx - gearMarginPx
 		y := dst.Bounds().Dy() - gearBadgePx - gearMarginPx
 		draw.Draw(dst, image.Rect(x, y, x+gearBadgePx, y+gearBadgePx), badge, image.Point{}, draw.Over)
 		// The badge may reach past the rounded corner: clip it to the icon.
 		for i := 3; i < len(dst.Pix); i += 4 {
-			if parts.base.Pix[i] == 0 {
+			if base.Pix[i] == 0 {
 				dst.Pix[i] = 0
 			}
 		}
@@ -120,25 +142,30 @@ func encodeIcon(src *image.NRGBA, px int) []byte {
 	return buf.Bytes()
 }
 
+// iconDark is whether the app icons are drawn for the dark appearance.
+func (v *view) iconDark() bool {
+	return mygo.Theme.IsDark()
+}
+
 // iconAccent is the accent the app icons are drawn in for the current
 // appearance.
 func (v *view) iconAccent() ui.Color {
-	return accentColor(v.prefs.Accent, mygo.Theme.IsDark())
+	return accentColor(v.prefs.Accent, v.iconDark())
 }
 
 // updateAppIcons redraws the window, the settings window and the tray in the
-// accent color.
+// accent color, on the background of the current appearance.
 func (v *view) updateAppIcons() {
 	if v.app.win == nil {
 		return // not ready, or a test: there is no icon to set
 	}
-	accent := v.iconAccent()
-	plain := appIcon(accent, false)
+	accent, dark := v.iconAccent(), v.iconDark()
+	plain := appIcon(accent, dark, false)
 	if data := encodeIcon(plain, windowIconPx); data != nil {
 		_ = v.app.win.SetIcon(data)
 	}
 	if w := v.app.settingsWin; w != nil {
-		if data := encodeIcon(appIcon(accent, true), windowIconPx); data != nil {
+		if data := encodeIcon(appIcon(accent, dark, true), windowIconPx); data != nil {
 			_ = w.SetIcon(data)
 		}
 	}
@@ -151,7 +178,7 @@ func (v *view) updateAppIcons() {
 
 // trayIcon is the tray's icon in the accent color.
 func (v *view) trayIcon() []byte {
-	return encodeIcon(appIcon(v.iconAccent(), false), trayIconPx)
+	return encodeIcon(appIcon(v.iconAccent(), v.iconDark(), false), trayIconPx)
 }
 
 // aboutIconImage is the app's icon in the appearance the settings window
@@ -162,7 +189,7 @@ func (v *view) aboutIconImage() ui.ImageSource {
 	if v.aboutIcon != nil && v.aboutIconKey == key {
 		return v.aboutIcon
 	}
-	src := appIcon(accentColor(v.prefs.Accent, v.pal.dark), false)
+	src := appIcon(accentColor(v.prefs.Accent, v.pal.dark), v.pal.dark, false)
 	if src == nil {
 		return nil
 	}

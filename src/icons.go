@@ -40,7 +40,7 @@ func iconPixelsFor(dip float32) int {
 }
 
 // saveIcon writes image bytes into the cache folder under their own extension,
-// and returns the path the store keeps (relative to absBase, as icons always
+// and returns the path the store keeps (relative to dataBase, as icons always
 // have been).
 func saveIcon(data []byte, ext, nameBase string) string {
 	return saveIconIn(iconsDir, data, ext, nameBase)
@@ -52,7 +52,7 @@ func saveCustomIcon(data []byte, ext, nameBase string) string {
 }
 
 func saveIconIn(dir string, data []byte, ext, nameBase string) string {
-	full := filepath.Join(absBase, dir)
+	full := filepath.Join(dataBase(), dir)
 	if err := os.MkdirAll(full, 0o755); err != nil {
 		return ""
 	}
@@ -234,7 +234,7 @@ func iconSource(rel string) ui.ImageSource {
 	if rel == "" {
 		return nil
 	}
-	data, err := os.ReadFile(absPath(rel))
+	data, err := os.ReadFile(dataPath(rel))
 	if err != nil {
 		return nil
 	}
@@ -275,7 +275,7 @@ func (a *App) pruneIcons() {
 		}
 	}
 	for _, dir := range []string{iconsDir, customIconsDir} {
-		full := filepath.Join(absBase, dir)
+		full := filepath.Join(dataBase(), dir)
 		entries, err := os.ReadDir(full)
 		if err != nil {
 			continue

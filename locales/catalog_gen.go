@@ -144,6 +144,216 @@ func (msgs Messages) NoRunningWindows() string {
 	return Catalog.Format(msgs.locale, "noRunningWindows", nil)
 }
 
+// SystemLocations says "System locations"
+// in the language the app shows.
+func SystemLocations() string { return In(i18n.Locale()).SystemLocations() }
+
+// SystemLocations says "System locations"
+// in the language of msgs.
+func (msgs Messages) SystemLocations() string {
+	return Catalog.Format(msgs.locale, "systemLocations", nil)
+}
+
+// RecycleBin says "Recycle Bin"
+// in the language the app shows.
+func RecycleBin() string { return In(i18n.Locale()).RecycleBin() }
+
+// RecycleBin says "Recycle Bin"
+// in the language of msgs.
+func (msgs Messages) RecycleBin() string {
+	return Catalog.Format(msgs.locale, "recycleBin", nil)
+}
+
+// ThisPC says "This PC"
+// in the language the app shows.
+func ThisPC() string { return In(i18n.Locale()).ThisPC() }
+
+// ThisPC says "This PC"
+// in the language of msgs.
+func (msgs Messages) ThisPC() string {
+	return Catalog.Format(msgs.locale, "thisPC", nil)
+}
+
+// ControlPanel says "Control Panel"
+// in the language the app shows.
+func ControlPanel() string { return In(i18n.Locale()).ControlPanel() }
+
+// ControlPanel says "Control Panel"
+// in the language of msgs.
+func (msgs Messages) ControlPanel() string {
+	return Catalog.Format(msgs.locale, "controlPanel", nil)
+}
+
+// AddingLocation says "Adding location…"
+// in the language the app shows.
+func AddingLocation() string { return In(i18n.Locale()).AddingLocation() }
+
+// AddingLocation says "Adding location…"
+// in the language of msgs.
+func (msgs Messages) AddingLocation() string {
+	return Catalog.Format(msgs.locale, "addingLocation", nil)
+}
+
+// LocationUser says "User folder"
+// in the language the app shows.
+func LocationUser() string { return In(i18n.Locale()).LocationUser() }
+
+// LocationUser says "User folder"
+// in the language of msgs.
+func (msgs Messages) LocationUser() string {
+	return Catalog.Format(msgs.locale, "locationUser", nil)
+}
+
+// LocationNetwork says "Network"
+// in the language the app shows.
+func LocationNetwork() string { return In(i18n.Locale()).LocationNetwork() }
+
+// LocationNetwork says "Network"
+// in the language of msgs.
+func (msgs Messages) LocationNetwork() string {
+	return Catalog.Format(msgs.locale, "locationNetwork", nil)
+}
+
+// LocationStartup says "Startup"
+// in the language the app shows.
+func LocationStartup() string { return In(i18n.Locale()).LocationStartup() }
+
+// LocationStartup says "Startup"
+// in the language of msgs.
+func (msgs Messages) LocationStartup() string {
+	return Catalog.Format(msgs.locale, "locationStartup", nil)
+}
+
+// LocationRecent says "Recent"
+// in the language the app shows.
+func LocationRecent() string { return In(i18n.Locale()).LocationRecent() }
+
+// LocationRecent says "Recent"
+// in the language of msgs.
+func (msgs Messages) LocationRecent() string {
+	return Catalog.Format(msgs.locale, "locationRecent", nil)
+}
+
+// LocationDesktop says "Desktop"
+// in the language the app shows.
+func LocationDesktop() string { return In(i18n.Locale()).LocationDesktop() }
+
+// LocationDesktop says "Desktop"
+// in the language of msgs.
+func (msgs Messages) LocationDesktop() string {
+	return Catalog.Format(msgs.locale, "locationDesktop", nil)
+}
+
+// LocationDownloads says "Downloads"
+// in the language the app shows.
+func LocationDownloads() string { return In(i18n.Locale()).LocationDownloads() }
+
+// LocationDownloads says "Downloads"
+// in the language of msgs.
+func (msgs Messages) LocationDownloads() string {
+	return Catalog.Format(msgs.locale, "locationDownloads", nil)
+}
+
+// LocationDocuments says "Documents"
+// in the language the app shows.
+func LocationDocuments() string { return In(i18n.Locale()).LocationDocuments() }
+
+// LocationDocuments says "Documents"
+// in the language of msgs.
+func (msgs Messages) LocationDocuments() string {
+	return Catalog.Format(msgs.locale, "locationDocuments", nil)
+}
+
+// LocationPictures says "Pictures"
+// in the language the app shows.
+func LocationPictures() string { return In(i18n.Locale()).LocationPictures() }
+
+// LocationPictures says "Pictures"
+// in the language of msgs.
+func (msgs Messages) LocationPictures() string {
+	return Catalog.Format(msgs.locale, "locationPictures", nil)
+}
+
+// LocationMusic says "Music"
+// in the language the app shows.
+func LocationMusic() string { return In(i18n.Locale()).LocationMusic() }
+
+// LocationMusic says "Music"
+// in the language of msgs.
+func (msgs Messages) LocationMusic() string {
+	return Catalog.Format(msgs.locale, "locationMusic", nil)
+}
+
+// LocationVideos says "Videos"
+// in the language the app shows.
+func LocationVideos() string { return In(i18n.Locale()).LocationVideos() }
+
+// LocationVideos says "Videos"
+// in the language of msgs.
+func (msgs Messages) LocationVideos() string {
+	return Catalog.Format(msgs.locale, "locationVideos", nil)
+}
+
+// Properties says "Properties"
+// in the language the app shows.
+func Properties() string { return In(i18n.Locale()).Properties() }
+
+// Properties says "Properties"
+// in the language of msgs.
+func (msgs Messages) Properties() string {
+	return Catalog.Format(msgs.locale, "properties", nil)
+}
+
+// SystemMenu says "System menu…"
+// in the language the app shows.
+func SystemMenu() string { return In(i18n.Locale()).SystemMenu() }
+
+// SystemMenu says "System menu…"
+// in the language of msgs.
+func (msgs Messages) SystemMenu() string {
+	return Catalog.Format(msgs.locale, "systemMenu", nil)
+}
+
+// EmptyRecycleBin says "Empty Recycle Bin"
+// in the language the app shows.
+func EmptyRecycleBin() string { return In(i18n.Locale()).EmptyRecycleBin() }
+
+// EmptyRecycleBin says "Empty Recycle Bin"
+// in the language of msgs.
+func (msgs Messages) EmptyRecycleBin() string {
+	return Catalog.Format(msgs.locale, "emptyRecycleBin", nil)
+}
+
+// EmptyRecycleBinConfirm says "Empty the Recycle Bin? This cannot be undone."
+// in the language the app shows.
+func EmptyRecycleBinConfirm() string { return In(i18n.Locale()).EmptyRecycleBinConfirm() }
+
+// EmptyRecycleBinConfirm says "Empty the Recycle Bin? This cannot be undone."
+// in the language of msgs.
+func (msgs Messages) EmptyRecycleBinConfirm() string {
+	return Catalog.Format(msgs.locale, "emptyRecycleBinConfirm", nil)
+}
+
+// EmptyingRecycleBin says "Emptying the Recycle Bin…"
+// in the language the app shows.
+func EmptyingRecycleBin() string { return In(i18n.Locale()).EmptyingRecycleBin() }
+
+// EmptyingRecycleBin says "Emptying the Recycle Bin…"
+// in the language of msgs.
+func (msgs Messages) EmptyingRecycleBin() string {
+	return Catalog.Format(msgs.locale, "emptyingRecycleBin", nil)
+}
+
+// RecycleBinEmptied says "Recycle Bin emptied"
+// in the language the app shows.
+func RecycleBinEmptied() string { return In(i18n.Locale()).RecycleBinEmptied() }
+
+// RecycleBinEmptied says "Recycle Bin emptied"
+// in the language of msgs.
+func (msgs Messages) RecycleBinEmptied() string {
+	return Catalog.Format(msgs.locale, "recycleBinEmptied", nil)
+}
+
 // GlobalShortcut says "Global shortcut"
 // in the language the app shows.
 func GlobalShortcut() string { return In(i18n.Locale()).GlobalShortcut() }
@@ -354,6 +564,66 @@ func RevealInFolder() string { return In(i18n.Locale()).RevealInFolder() }
 // in the language of msgs.
 func (msgs Messages) RevealInFolder() string {
 	return Catalog.Format(msgs.locale, "revealInFolder", nil)
+}
+
+// OpenFolderInExplorer says "Open in Explorer"
+// in the language the app shows.
+func OpenFolderInExplorer() string { return In(i18n.Locale()).OpenFolderInExplorer() }
+
+// OpenFolderInExplorer says "Open in Explorer"
+// in the language of msgs.
+func (msgs Messages) OpenFolderInExplorer() string {
+	return Catalog.Format(msgs.locale, "openFolderInExplorer", nil)
+}
+
+// FolderContents says "Folder contents"
+// in the language the app shows.
+func FolderContents() string { return In(i18n.Locale()).FolderContents() }
+
+// FolderContents says "Folder contents"
+// in the language of msgs.
+func (msgs Messages) FolderContents() string {
+	return Catalog.Format(msgs.locale, "folderContents", nil)
+}
+
+// ParentFolder says "Parent folder"
+// in the language the app shows.
+func ParentFolder() string { return In(i18n.Locale()).ParentFolder() }
+
+// ParentFolder says "Parent folder"
+// in the language of msgs.
+func (msgs Messages) ParentFolder() string {
+	return Catalog.Format(msgs.locale, "parentFolder", nil)
+}
+
+// EmptyFolder says "This folder is empty"
+// in the language the app shows.
+func EmptyFolder() string { return In(i18n.Locale()).EmptyFolder() }
+
+// EmptyFolder says "This folder is empty"
+// in the language of msgs.
+func (msgs Messages) EmptyFolder() string {
+	return Catalog.Format(msgs.locale, "emptyFolder", nil)
+}
+
+// FolderUnreadable says "Cannot read this folder"
+// in the language the app shows.
+func FolderUnreadable() string { return In(i18n.Locale()).FolderUnreadable() }
+
+// FolderUnreadable says "Cannot read this folder"
+// in the language of msgs.
+func (msgs Messages) FolderUnreadable() string {
+	return Catalog.Format(msgs.locale, "folderUnreadable", nil)
+}
+
+// FolderLoading says "Reading…"
+// in the language the app shows.
+func FolderLoading() string { return In(i18n.Locale()).FolderLoading() }
+
+// FolderLoading says "Reading…"
+// in the language of msgs.
+func (msgs Messages) FolderLoading() string {
+	return Catalog.Format(msgs.locale, "folderLoading", nil)
 }
 
 // UpdateIcon says "Update icon"

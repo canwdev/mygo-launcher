@@ -11,10 +11,11 @@ import (
 	"go-launcher/locales"
 )
 
-// The launcher keeps its data next to the executable's working directory, in a
-// folder of its own: the store, the icon cache and the window's settings. The
-// names are part of the on-disk format, and the folder is what "Open data
-// directory…" shows.
+// The launcher keeps its data in a folder of its own: the store, the icon cache
+// and the window's settings. The names are part of the on-disk format, and the
+// folder is what "Open data directory…" shows. It sits in dataBase: beside the
+// executable's working directory for a portable copy, in the user's local
+// application data for an installed one.
 const (
 	dataDir        = "mygo-launcher-data"
 	saveFile       = dataDir + "/go-launcher-data.json"
@@ -23,7 +24,8 @@ const (
 	uiStateFile    = dataDir + "/ui-state.json"
 )
 
-// absBase is the directory stored paths are relative to.
+// absBase is the directory stored paths are relative to, and dataBase the
+// folder holding mygo-launcher-data.
 var absBase, _ = filepath.Abs(".")
 
 // AppItem is one entry of the launcher: a program, a file or a folder.
@@ -188,7 +190,7 @@ func parseStore(data []byte) (AppStore, bool) {
 }
 
 func loadStore() AppStore {
-	data, err := os.ReadFile(filepath.Join(absBase, saveFile))
+	data, err := os.ReadFile(filepath.Join(dataBase(), saveFile))
 	if err != nil {
 		return defaultStore()
 	}
@@ -207,11 +209,11 @@ func writeStoreAtomic(store AppStore) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(absBase, dataDir)
+	dir := filepath.Join(dataBase(), dataDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(absBase, saveFile)
+	path := filepath.Join(dataBase(), saveFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return nil, err
@@ -223,6 +225,8 @@ func writeStoreAtomic(store AppStore) ([]byte, error) {
 }
 
 // convertItemPaths rewrites an item's paths as absolute or relative to absBase.
+// Icons are left as they are: an icon path is kept relative to the data folder
+// and does not follow the item's target.
 func convertItemPaths(item *AppItem, absolute bool) {
 	if item == nil {
 		return
@@ -234,9 +238,6 @@ func convertItemPaths(item *AppItem, absolute bool) {
 		if item.WorkingDir != "" {
 			item.WorkingDir = absPath(item.WorkingDir)
 		}
-		if item.Icon != "" {
-			item.Icon = absPath(item.Icon)
-		}
 		if item.Link != "" {
 			item.Link = absPath(item.Link)
 		}
@@ -247,9 +248,6 @@ func convertItemPaths(item *AppItem, absolute bool) {
 	}
 	if item.WorkingDir != "" {
 		item.WorkingDir = toStoredPath(absPath(item.WorkingDir))
-	}
-	if item.Icon != "" {
-		item.Icon = toStoredPath(absPath(item.Icon))
 	}
 	if item.Link != "" {
 		item.Link = toStoredPath(absPath(item.Link))

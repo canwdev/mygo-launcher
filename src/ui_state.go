@@ -39,7 +39,7 @@ func defaultPrefs() uiPrefs {
 
 func loadPrefs() uiPrefs {
 	p := defaultPrefs()
-	data, err := os.ReadFile(filepath.Join(absBase, uiStateFile))
+	data, err := os.ReadFile(filepath.Join(dataBase(), uiStateFile))
 	if err != nil {
 		return p
 	}
@@ -73,10 +73,10 @@ func savePrefs(p uiPrefs) {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Join(absBase, dataDir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dataBase(), dataDir), 0o755); err != nil {
 		return
 	}
-	path := filepath.Join(absBase, uiStateFile)
+	path := filepath.Join(dataBase(), uiStateFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return

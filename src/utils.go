@@ -54,6 +54,19 @@ func isShellTarget(path string) bool {
 	return true
 }
 
+// isShellNamespace reports whether path names a shell folder, as "::{CLSID}"
+// or "shell:...", rather than a file or a URL. The shell draws its icon.
+func isShellNamespace(path string) bool {
+	return strings.HasPrefix(path, "::") || strings.HasPrefix(strings.ToLower(path), "shell:")
+}
+
+// isPackagedApp reports whether path names a packaged (UWP) app, which has no
+// file system properties or shell context menu of the kinds the launcher
+// offers.
+func isPackagedApp(path string) bool {
+	return strings.HasPrefix(strings.ToLower(path), `shell:appsfolder\`)
+}
+
 func normalizePath(path string) string {
 	if runtime.GOOS != "windows" || isShellTarget(path) {
 		return path
@@ -127,16 +140,34 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// executableExts are the extensions Windows starts as a program: launching one
+// is a tracked process, so its item has a runtime.
+var executableExts = map[string]bool{".exe": true, ".bat": true, ".cmd": true, ".com": true}
+
+// executableExt reports whether path has the extension of a program. It reads
+// no disk, so a program that is missing for now still counts as one.
+func executableExt(path string) bool {
+	return executableExts[strings.ToLower(filepath.Ext(path))]
+}
+
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		return false
 	}
 	if runtime.GOOS == "windows" {
-		ext := strings.ToLower(filepath.Ext(path))
-		return ext == ".exe" || ext == ".bat" || ext == ".cmd" || ext == ".com"
+		return executableExt(path)
 	}
 	return info.Mode()&0111 != 0
+}
+
+// timeableItem reports whether an item has a runtime: only a program started as
+// a process is tracked, so only its cell shows a timer. A folder, a file, a URL
+// or a shell target is opened by the shell, and an item run elevated starts
+// untracked, so none of them counts time. It reads the path, not the disk, so an
+// item whose file is missing for now keeps its timer.
+func timeableItem(item *AppItem) bool {
+	return item != nil && item.Path != "" && !isShellTarget(item.Path) && executableExt(item.Path)
 }
 
 func splitArgs(s string) []string {

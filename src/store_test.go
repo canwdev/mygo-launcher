@@ -130,8 +130,8 @@ func TestParseStore(t *testing.T) {
 	}
 }
 
-// TestConvertItemPathsRoundTrip 固定绝对路径与相对路径之间的往返：两种设置切换
-// 后 store 里的三个路径字段都要能还原。
+// TestConvertItemPathsRoundTrip 固定绝对路径与相对路径之间的往返：切换设置后
+// store 里的路径还原，图标路径保持原样。
 func TestConvertItemPathsRoundTrip(t *testing.T) {
 	old := absBase
 	absBase = t.TempDir()
@@ -143,11 +143,14 @@ func TestConvertItemPathsRoundTrip(t *testing.T) {
 		Icon:       filepath.Join(iconsDir, "app.png"),
 		Link:       filepath.Join("tools", "app.lnk"),
 	}
-	relative, relativeLink := item.Path, item.Link
+	relative, relativeLink, icon := item.Path, item.Link, item.Icon
 
 	convertItemPaths(item, true)
-	if !filepath.IsAbs(item.Path) || !filepath.IsAbs(item.Icon) || !filepath.IsAbs(item.Link) {
+	if !filepath.IsAbs(item.Path) || !filepath.IsAbs(item.Link) {
 		t.Fatalf("absolute conversion failed: %+v", item)
+	}
+	if item.Icon != icon {
+		t.Fatalf("conversion must keep the icon path: got %q, want %q", item.Icon, icon)
 	}
 	convertItemPaths(item, false)
 	if item.Path != relative {
@@ -155,6 +158,9 @@ func TestConvertItemPathsRoundTrip(t *testing.T) {
 	}
 	if item.Link != relativeLink {
 		t.Fatalf("relative conversion did not restore the link: got %q, want %q", item.Link, relativeLink)
+	}
+	if item.Icon != icon {
+		t.Fatalf("conversion must keep the icon path: got %q, want %q", item.Icon, icon)
 	}
 	if filepath.IsAbs(item.WorkingDir) {
 		t.Fatalf("working directory must be relative again: %q", item.WorkingDir)

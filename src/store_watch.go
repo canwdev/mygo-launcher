@@ -51,7 +51,7 @@ const (
 
 // syncStoreFileState records the file as it is on disk, as the app starts.
 func (a *App) syncStoreFileState() {
-	data, err := os.ReadFile(filepath.Join(absBase, saveFile))
+	data, err := os.ReadFile(filepath.Join(dataBase(), saveFile))
 	if err != nil {
 		return
 	}
@@ -64,7 +64,7 @@ func (a *App) syncStoreFileState() {
 // The caller holds fileMu.
 func (a *App) rememberStoreFile(data []byte) {
 	state := storeFileState{hash: contentHash(data)}
-	if info, err := os.Stat(filepath.Join(absBase, saveFile)); err == nil {
+	if info, err := os.Stat(filepath.Join(dataBase(), saveFile)); err == nil {
 		state.modTime = info.ModTime()
 		state.size = info.Size()
 	}
@@ -74,7 +74,7 @@ func (a *App) rememberStoreFile(data []byte) {
 // reloadStoreIfChanged applies an edit made by hand, if the file changed since
 // the last write. It runs on the main thread, and does not redraw.
 func (a *App) reloadStoreIfChanged() storeReloadResult {
-	path := filepath.Join(absBase, saveFile)
+	path := filepath.Join(dataBase(), saveFile)
 	info, err := os.Stat(path)
 	if err != nil {
 		return storeReloadNone // being replaced, or gone: the next event tells
@@ -149,7 +149,7 @@ func (a *App) handleStoreFileEvent() {
 func (a *App) startStoreWatcher() {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.watchCancel = cancel
-	path := filepath.Join(absBase, saveFile)
+	path := filepath.Join(dataBase(), saveFile)
 	go func() {
 		for ctx.Err() == nil {
 			w, err := mygo.WatchFiles(ctx, path, mygo.FileWatchOptions{})

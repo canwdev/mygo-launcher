@@ -64,8 +64,11 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 
 	card.Drag(dragItem{guid: item.GUID, slot: index, tab: tab.GUID})
 	// The line shows where the drop lands: at the left edge of the cell when
-	// the pointer aims before it, at the right edge when after it.
-	if _, over := ui.DragOver[dragItem](card); over {
+	// the pointer aims before it, at the right edge when after it. The cell
+	// dragging draws no line: the copy following the pointer would carry it,
+	// and a drop on the cell it came from moves nothing.
+	dragging := card.Dragging()
+	if _, over := ui.DragOver[dragItem](card); over && !dragging {
 		insertLine(card, true, dropAfter(card, true), p)
 	}
 	if dragged, ok := ui.Drop[dragItem](card); ok {
@@ -78,21 +81,32 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		}
 		v.dropDragged(dragged, tab, at, copyItem)
 	}
-	if card.Dragging() {
+	if dragging {
 		card.Opacity(0.4)
 		v.itemDraggingNow = true
 	}
 
 	if card.Clicked() {
-		// A click runs the item; a running one asks before it stops.
-		if st.Running {
+		// A click runs the item; a running one asks before it stops. A folder
+		// lists its contents instead, in a panel centered on the pointer.
+		dir := folderOfItem(item)
+		switch {
+		case st.Running:
 			name := item.Name
 			v.ask(v.msgs().StopConfirm(name), func() { v.stopItem(item.GUID) })
-		} else {
+		case dir != "":
+			x, y, _ := card.PointerPosition()
+			atX, atY := card.LocalToWindow(x, y)
+			v.openFolderMenu(item.GUID, dir, atX, atY)
+		default:
 			v.runItem(item.GUID)
 		}
 	}
-	card.PopoverMenu(v.itemMenu(item, index))
+	// The panel goes with the cell of the item it lists, which this frame built.
+	if item.GUID == v.folderGUID {
+		v.folderAnchored = true
+	}
+	v.contextMenu(c, card, itemMenuKey(tab.GUID, item.GUID, index), v.itemMenu(item, tab.GUID, index))
 
 	card.Children(func() {
 		v.itemIcon(c, item, m.gridIcon)
@@ -110,11 +124,13 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		v.fileDropHalf(card, right, tab.GUID, index+1, true, true, p)
 
 		// The runtime shows in a cell's corner only while the pointer is over
-		// it, or while the process behind it runs. It is built after the drop
-		// halves, so a click on it reaches it, and always, hidden or not, so
-		// the halves keep their places from frame to frame: a native drop
-		// names the element it lands on by its ID.
-		showRuntime := v.app.store.Settings.AutoTime && (st.Running || card.Hovered())
+		// it, or while the process behind it runs, and only for an item that is
+		// timed at all: a folder or a file has no runtime to show. It is built
+		// after the drop halves, so a click on it reaches it, and always, hidden
+		// or not, so the halves keep their places from frame to frame: a native
+		// drop names the element it lands on by its ID.
+		showRuntime := timeableItem(item) && v.app.store.Settings.AutoTime &&
+			(st.Running || card.Hovered())
 		runtime := v.runtimeField(c, item, st).Absolute().Top(2).Left(4).
 			Hidden(!showRuntime)
 		v.fileDropHalf(card, runtime, tab.GUID, index, true, false, p)
@@ -145,13 +161,5 @@ func (v *view) emptyCell(c *ui.Context, index int, m iconMetrics) {
 		v.fileDropHalf(box, left, v.tabGUID(), index, true, false, p)
 		v.fileDropHalf(box, right, v.tabGUID(), index+1, true, true, p)
 	})
-	box.PopoverMenu(func(menu *ui.Menu) {
-		msgs := v.msgs()
-		if menu.Item(msgs.InsertEmpty()).Chosen() {
-			v.later(func() { v.insertEmptyAt(index) })
-		}
-		if menu.Item(msgs.RemoveEmpty()).Chosen() {
-			v.later(func() { v.deleteSlotAt(index) })
-		}
-	})
+	v.contextMenu(c, box, emptyMenuKey(v.tabGUID(), index), v.emptyMenu(index))
 }

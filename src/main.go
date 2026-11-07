@@ -20,6 +20,11 @@ const (
 )
 
 func main() {
+	// Where the store, the icon cache and the window's preferences live: in
+	// the user's folder for an installed copy, beside the executable for a
+	// portable one. Everything below reads the data.
+	prepareDataBase()
+
 	// The renderer is chosen when the window opens: draw in memory unless the
 	// GPU drawing preference, off by default, asks for the GPU. MYGO_GPU still
 	// overrides the preference for development.
@@ -49,7 +54,7 @@ func main() {
 	mygo.App.SetName(appName)
 	mygo.App.SetVersion(appVersion)
 	// The window's geometry is kept beside the store, in mygo-launcher-data,
-	// rather than in the user's config folder: the launcher is portable.
+	// rather than in MyGo's own file in the user's config folder.
 	mygo.App.SetWindowStateStore(windowStateStore{})
 
 	mygo.App.WhenReady(func() {
@@ -101,6 +106,7 @@ func main() {
 		v.registerSavedShortcut()
 
 		app.startClock()
+		app.startSpecialPoll()
 		app.startStoreWatcher()
 	})
 

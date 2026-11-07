@@ -223,6 +223,9 @@ func TestItemMenuReportsMissingFileActions(t *testing.T) {
 	if err := tt.RightClick("Alpha"); err != nil {
 		t.Fatalf("open the item menu again: %v", err)
 	}
+	if err := tt.Click("Edit"); err != nil {
+		t.Fatalf("open the editor: %v", err)
+	}
 	if err := tt.Click("Update icon"); err != nil {
 		t.Fatalf("choose Update icon: %v", err)
 	}
@@ -311,6 +314,48 @@ func TestViewRuntimeFieldIsClickable(t *testing.T) {
 	}
 }
 
+// TestViewHidesRuntimeForNonPrograms 验证文件夹、文件和 shell 目标不显示计时器：只
+// 有会被跟踪启动的程序才有运行时长，它们的旧时长也不画。
+func TestViewHidesRuntimeForNonPrograms(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 460)
+	dir := filepath.Join(absBase, "Folder")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app.store.Apps = map[string]*AppItem{
+		"dir":  {GUID: "dir", Name: "Folder", Path: dir, RuntimeMs: 7_200_000},
+		"file": {GUID: "file", Name: "Note", Path: filepath.Join(absBase, "note.txt")},
+		"url":  {GUID: "url", Name: "Site", Path: "https://example.com"},
+		"prog": {GUID: "prog", Name: "Tool", Path: "C:/tools/tool.exe", RuntimeMs: 3_600_000},
+	}
+	app.store.Categories[0].Slots = []*string{
+		ptrString("dir"), ptrString("file"), ptrString("url"), ptrString("prog"),
+	}
+	app.runtimeStats["dir"], app.runtimeStats["prog"] = 7_200_000, 3_600_000
+	tt.Frame()
+
+	hover := func(name string) {
+		r, ok := tt.Find(name)
+		if !ok {
+			t.Fatalf("no cell %q, texts %q", name, tt.Texts())
+		}
+		tt.Move(r.X+r.W/2, r.Y+r.H/2)
+		tt.Frame()
+	}
+
+	for _, name := range []string{"Folder", "Note", "Site"} {
+		hover(name)
+		if tt.HasText("2h") || tt.HasText("1h") || tt.HasText("--") {
+			t.Fatalf("cell %q must show no timer, texts %q", name, tt.Texts())
+		}
+	}
+
+	hover("Tool")
+	if !tt.HasText("1h") {
+		t.Fatalf("a program's cell must keep its timer, texts %q", tt.Texts())
+	}
+}
+
 // TestViewOffersUpdateIconOutsideFolders 验证路径外的图标可以从菜单「更新图标」
 // 收进来，已经自定义的图标则没有这一项。
 func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
@@ -320,6 +365,9 @@ func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
 		tt.Frame()
 		if err := tt.RightClick("Alpha"); err != nil {
 			t.Fatalf("open the item menu: %v", err)
+		}
+		if err := tt.Click("Edit"); err != nil {
+			t.Fatalf("open the editor: %v", err)
 		}
 		if !tt.HasText("Update icon") {
 			t.Fatalf("an icon outside the folders must offer Update icon, texts %q", tt.Texts())
@@ -331,6 +379,9 @@ func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
 		tt.Frame()
 		if err := tt.RightClick("Alpha"); err != nil {
 			t.Fatalf("open the item menu: %v", err)
+		}
+		if err := tt.Click("Edit"); err != nil {
+			t.Fatalf("open the editor: %v", err)
 		}
 		if tt.HasText("Update icon") {
 			t.Fatalf("a custom icon needs no update entry, texts %q", tt.Texts())
@@ -825,12 +876,21 @@ func TestViewSettingsChoosesIconSize(t *testing.T) {
 }
 
 // TestViewGridShowsRuntimeOnHover 验证网格单元左上角的时长默认不画，指针移到格子上
-// 才出现，免得空白的「--」占满网格。
+// 才出现；没有时长的条目只画计时图标，不画占位的「--」。
 func TestViewGridShowsRuntimeOnHover(t *testing.T) {
 	_, _, tt := newTestView(t, 720, 460)
 	tt.Frame()
-	if tt.HasText("--") {
+	if tt.HasText("1h") {
 		t.Fatalf("an unhovered cell must not show its runtime, texts %q", tt.Texts())
+	}
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha cell")
+	}
+	tt.Move(alpha.X+alpha.W/2, alpha.Y+alpha.H/2)
+	tt.Frame()
+	if !tt.HasText("1h") {
+		t.Fatalf("a hovered cell must show its runtime, texts %q", tt.Texts())
 	}
 	beta, ok := tt.Find("Beta")
 	if !ok {
@@ -838,8 +898,8 @@ func TestViewGridShowsRuntimeOnHover(t *testing.T) {
 	}
 	tt.Move(beta.X+beta.W/2, beta.Y+beta.H/2)
 	tt.Frame()
-	if !tt.HasText("--") {
-		t.Fatalf("a hovered cell must show its runtime, texts %q", tt.Texts())
+	if tt.HasText("--") {
+		t.Fatalf("a cell without runtime must not show a placeholder, texts %q", tt.Texts())
 	}
 }
 

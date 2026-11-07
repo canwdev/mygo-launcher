@@ -16,8 +16,7 @@ const windowStateKey = "main"
 const windowStateFile = dataDir + "/window-state.json"
 
 // windowStateStore keeps the window's geometry in mygo-launcher-data instead of
-// MyGo's own file in the user's config folder: the launcher keeps all its data
-// next to the executable.
+// MyGo's own file in the user's config folder, beside the store.
 type windowStateStore struct{}
 
 // windowStatesFile is the file's format: the state of every window, by key.
@@ -26,7 +25,7 @@ type windowStatesFile struct {
 }
 
 func (windowStateStore) LoadWindowStates() (map[string]mygo.WindowState, error) {
-	data, err := os.ReadFile(filepath.Join(absBase, windowStateFile))
+	data, err := os.ReadFile(filepath.Join(dataBase(), windowStateFile))
 	if err != nil {
 		return nil, nil // first run: the window's options apply
 	}
@@ -42,11 +41,11 @@ func (windowStateStore) SaveWindowStates(states map[string]mygo.WindowState) err
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(absBase, dataDir)
+	dir := filepath.Join(dataBase(), dataDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	path := filepath.Join(absBase, windowStateFile)
+	path := filepath.Join(dataBase(), windowStateFile)
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err

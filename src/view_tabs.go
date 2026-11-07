@@ -6,9 +6,13 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// tabHoverDelay is how long something being dragged rests on a page before the
-// page shows itself, so that it can be dropped where the pointer aims.
-const tabHoverDelay = 200 * time.Millisecond
+// tabHoverDelay is how long the pointer rests on a page before the page shows
+// itself. dragTabHoverDelay is the longer rest for something being dragged, so
+// that passing over a chip on the way to a cell does not switch the page.
+const (
+	tabHoverDelay     = 200 * time.Millisecond
+	dragTabHoverDelay = 300 * time.Millisecond
+)
 
 // tabChip is one tab of the top navigation: it takes the click that shows it,
 // drags onto another place in the strip, takes items dragged onto it (moving
@@ -30,6 +34,9 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		b := ui.ButtonBase(c.Key(guid)).Height(32).PaddingX(12).Gap(4).Radius(7).
 			AlignItems(ui.Center).FocusRing(false).Label(name)
 		v.tabRects[guid] = b.Bounds()
+		// The chip being dragged draws no line of its own: the copy following
+		// the pointer would carry it, and its own place is no destination.
+		dragging := b.Dragging()
 		if dragged, ok := ui.Drop[dragTab](slot); ok && dragged.index != index {
 			at := index
 			if dropAfter(b, true) {
@@ -54,7 +61,7 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		}
 		// The line shows where a dragged page lands: at the left edge of the
 		// chip when the pointer aims before it, at the right edge when after.
-		if overTab {
+		if overTab && !dragging {
 			insertLine(b, true, dropAfter(b, true), p)
 		}
 
@@ -63,15 +70,19 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		// at a place in it; files from Explorer do the same.
 		_, overItem := ui.DragOver[dragItem](b)
 		if (overItem || filesOver) && !overTab {
-			b.Border(2, p.accent)
+			// The chip takes an item: outline it without a border, which would
+			// take room and move its name.
+			b.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+				pt.Stroke(r, p.accent, 7, 2)
+			})
 		}
 		if overItem || filesOver {
 			if v.dragHoverTab != guid {
 				v.dragHoverTab, v.dragHoverSince = guid, c.Now()
 			}
 			if !selected {
-				c.After(tabHoverDelay)
-				if c.Now().Sub(v.dragHoverSince) >= tabHoverDelay {
+				c.After(dragTabHoverDelay)
+				if c.Now().Sub(v.dragHoverSince) >= dragTabHoverDelay {
 					v.later(func() { v.setActiveTab(guid) })
 				}
 			}
@@ -89,7 +100,7 @@ func (v *view) tabChip(c *ui.Context, index int) {
 
 		// Tabs themselves reorder by dragging.
 		b.Drag(dragTab{index: index})
-		if b.Dragging() {
+		if dragging {
 			b.Opacity(0.4)
 		}
 		if b.Clicked() {
@@ -113,8 +124,7 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		} else if v.hoverTab == guid {
 			v.hoverTab = ""
 		}
-		menu := v.tabMenu(guid, name)
-		b.PopoverMenu(menu)
+		v.contextMenu(c, b, tabMenuKey(guid), v.tabMenu(guid, name))
 
 		b.Children(func() {
 			color, weight := p.muted, 500
@@ -132,6 +142,11 @@ func (v *view) tabChip(c *ui.Context, index int) {
 // turns it on. The whole window content is the target; the system's title bar
 // is outside it.
 func (v *view) wheelInput(ev ui.InputEvent) bool {
+	if v.folderGUID != "" {
+		// The folder panel takes the wheel: its list scrolls, and nothing turns
+		// the page behind it.
+		return false
+	}
 	if ev.Kind != ui.InputScroll || ev.DY == 0 {
 		return false
 	}
@@ -228,25 +243,28 @@ func tabItemCount(tab *CategoryNode) int {
 	return n
 }
 
-// tabMenu is a tab's menu, shared by a right click and the ⋯ of the chip.
-func (v *view) tabMenu(guid, name string) func(m *ui.Menu) {
+// tabMenu is a tab's menu, opened by a right click on its chip.
+func (v *view) tabMenu(guid, name string) []menuEntry {
 	msgs := v.msgs()
 	// The last page stays: it is the window's only place for its items.
 	removable := len(v.app.store.Categories) > 1
-	return func(m *ui.Menu) {
-		if m.Item(msgs.Rename()).Chosen() {
+	entries := []menuEntry{
+		{icon: iconRename, label: msgs.Rename(), action: func() {
 			v.later(func() { v.openTabRename(guid, name) })
-		}
-		if m.Item(msgs.Duplicate()).Chosen() {
+		}},
+		{icon: iconCopy, label: msgs.Duplicate(), action: func() {
 			v.later(func() { v.duplicateTab(guid) })
-		}
-		if removable {
-			m.Separator()
-			if m.Item(msgs.Remove()).Chosen() {
-				v.later(func() { v.requestDeleteTab(guid, name) })
-			}
-		}
+		}},
 	}
+	if removable {
+		entries = append(entries,
+			menuEntry{},
+			menuEntry{icon: iconTrash, label: msgs.Remove(), action: func() {
+				v.later(func() { v.requestDeleteTab(guid, name) })
+			}},
+		)
+	}
+	return entries
 }
 
 // openTabRename asks for a tab's new name.

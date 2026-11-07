@@ -62,12 +62,30 @@ func (v *view) itemDialog(c *ui.Context) {
 			})
 
 			// The fields scroll in a small window, so the buttons below stay
-			// reachable.
-			ui.Scroll(c).MaxHeight(dialogBodyMax(c)).Children(func() {
+			// reachable. The item actions below the fields take their own room.
+			bodyMax := dialogBodyMax(c)
+			if !v.editNew {
+				bodyMax = max(90, bodyMax-84)
+			}
+			ui.Scroll(c).MaxHeight(bodyMax).Children(func() {
 				ui.Column(c).Gap(6).Padding(0, 2, 6, 2).Children(func() {
 					v.itemDialogFields(c)
 				})
 			})
+
+			// Actions that change the stored item, moved here from its context
+			// menu. They wrap in a narrow window.
+			if !v.editNew {
+				item := v.app.item(v.editGUID)
+				autoIcon := item != nil && (isAutoIcon(item.Icon) || !allowedIcon(item.Icon))
+				ui.Row(c).Gap(8).Wrap().Children(func() {
+					if autoIcon {
+						ui.Button(c, m.UpdateIcon()).OnClick(v.updateIconFromDialog)
+					}
+					ui.Button(c, m.ConvertToAbsolute()).OnClick(func() { v.convertFromDialog(true) })
+					ui.Button(c, m.ConvertToRelative()).OnClick(func() { v.convertFromDialog(false) })
+				})
+			}
 
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 				ui.Button(c, m.Cancel()).OnClick(func() { v.editOpen = false; v.refresh() })
@@ -78,10 +96,11 @@ func (v *view) itemDialog(c *ui.Context) {
 }
 
 // dialogBodyMax is how tall a dialog's scrolling body may be: what the window
-// leaves once the title, the buttons and the margins are in.
+// leaves once the title, the buttons, the gaps and the modal's margins are in.
+// It keeps only that room, so a small window shows as many fields as it can.
 func dialogBodyMax(c *ui.Context) float32 {
 	_, height := c.Size()
-	return max(140, height-220)
+	return max(140, height-170)
 }
 
 // dialogWidth is how wide a dialog's content may be: its preferred width, or

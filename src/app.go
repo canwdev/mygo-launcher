@@ -44,6 +44,10 @@ type App struct {
 	// icons caches decoded icons by the path the store keeps.
 	icons map[string]ui.ImageSource
 
+	// dynamicIcons are state icons, as the Recycle Bin's: kept in memory for
+	// the item, never written to the icon cache.
+	dynamicIcons map[string]ui.ImageSource
+
 	// updates reports whether the updater plugin is used.
 	updates bool
 
@@ -73,12 +77,16 @@ type App struct {
 }
 
 func NewApp() *App {
-	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
+	_ = os.MkdirAll(filepath.Join(dataBase(), dataDir), 0o755)
 	app := &App{
 		store:        loadStore(),
 		runtimeStats: map[string]int64{},
 		running:      map[string]*runningProc{},
 		icons:        map[string]ui.ImageSource{},
+		dynamicIcons: map[string]ui.ImageSource{},
+	}
+	if app.rebaseIcons() {
+		_, _ = writeStoreAtomic(app.store)
 	}
 	for guid, item := range app.store.Apps {
 		if item != nil {
@@ -465,6 +473,31 @@ func (a *App) addRunningWindow(w runningWindow, tabGUID string) {
 	}()
 }
 
+// addSystemLocation adds a shell folder, as the Recycle Bin, to a tab. Its
+// path is a parsing name the shell opens, not a file: it is kept as written,
+// has no working directory, and the shell draws its icon.
+func (a *App) addSystemLocation(loc systemLocation, name, tabGUID string) {
+	makeItem := func(withIcon bool) *AppItem {
+		icon := ""
+		if withIcon {
+			icon = writeIcon(loc.Path)
+		}
+		return &AppItem{GUID: uuid.NewString(), Name: name, Path: loc.Path, Icon: icon}
+	}
+	if a.win == nil {
+		a.addItems([]*AppItem{makeItem(false)}, tabGUID)
+		return
+	}
+	a.setBusy(locales.AddingLocation())
+	go func() {
+		item := makeItem(true)
+		a.dispatch(func() {
+			a.setBusy("")
+			a.addItems([]*AppItem{item}, tabGUID)
+		})
+	}()
+}
+
 // buildRunningItem makes an entry for the program of a window, named as the
 // program names itself rather than after the window's current title.
 func buildRunningItem(w runningWindow, absolute, withIcon bool) *AppItem {
@@ -601,6 +634,16 @@ func (a *App) updateIcon(guid string) error {
 	if isCustomIcon(item.Icon) {
 		return nil // already kept in the app's folder
 	}
+	// A shell folder, as the Recycle Bin, has no file to check: the shell draws
+	// its icon from the parsing name.
+	if isShellNamespace(item.Path) {
+		icon := writeIcon(item.Path)
+		if icon == "" {
+			return errors.New(locales.IconFailed())
+		}
+		a.replaceIcon(item, icon)
+		return nil
+	}
 	if item.Path == "" && item.Link == "" {
 		return errors.New(locales.NoIconPath())
 	}
@@ -636,7 +679,40 @@ func (a *App) updateIcon(guid string) error {
 	return nil
 }
 
+// refreshSpecialIcon redraws an item's icon when its special source reports a
+// new one, as the Recycle Bin does when its contents change. The image stays
+// in memory: a state icon changes often and must not fill the icon cache.
+func (a *App) refreshSpecialIcon(item *AppItem) bool {
+	if item == nil || isCustomIcon(item.Icon) {
+		return false
+	}
+	sp := specialItemFor(item.Path)
+	if sp == nil || sp.RefreshIcon == nil {
+		return false
+	}
+	data, ok := sp.RefreshIcon(item)
+	if !ok || len(data) == 0 {
+		return false
+	}
+	src, err := ui.DecodeImage(data)
+	if err != nil {
+		return false
+	}
+	if a.dynamicIcons == nil {
+		a.dynamicIcons = map[string]ui.ImageSource{}
+	}
+	a.dynamicIcons[item.GUID] = src
+	a.refresh()
+	return true
+}
+
+// clearDynamicIcon drops an item's state icon, so a chosen icon shows instead.
+func (a *App) clearDynamicIcon(guid string) {
+	delete(a.dynamicIcons, guid)
+}
+
 func (a *App) replaceIcon(item *AppItem, icon string) {
+	a.clearDynamicIcon(item.GUID)
 	if old := item.Icon; old != "" {
 		// Never remove a file outside the app's icon folders: an icon added
 		// before the folders were enforced may point at the user's own file.
@@ -695,8 +771,8 @@ func (a *App) storedPick(picked string) string {
 
 // openDataDir shows the data folder.
 func (a *App) openDataDir() {
-	_ = os.MkdirAll(filepath.Join(absBase, dataDir), 0o755)
-	_ = openPath(filepath.Join(absBase, dataDir))
+	_ = os.MkdirAll(filepath.Join(dataBase(), dataDir), 0o755)
+	_ = openPath(filepath.Join(dataBase(), dataDir))
 }
 
 // reveal shows an item in the file manager. An item without a file, or one
@@ -751,7 +827,13 @@ func (a *App) setAlwaysOnTop(on bool) {
 
 // iconImage returns an item's icon, decoded once and kept.
 func (a *App) iconImage(item *AppItem) ui.ImageSource {
-	if item == nil || item.Icon == "" || !allowedIcon(item.Icon) {
+	if item == nil {
+		return nil
+	}
+	if src := a.dynamicIcons[item.GUID]; src != nil {
+		return src
+	}
+	if item.Icon == "" || !allowedIcon(item.Icon) {
 		return nil
 	}
 	if src, ok := a.icons[item.Icon]; ok {
@@ -760,6 +842,44 @@ func (a *App) iconImage(item *AppItem) ui.ImageSource {
 	src := iconSource(item.Icon)
 	a.icons[item.Icon] = src
 	return src
+}
+
+// startSpecialPoll keeps the icons of special items up to date while they
+// show: once when the window appears or the page comes forward, then every 5
+// seconds while the window is visible.
+func (a *App) startSpecialPoll() {
+	if a.win == nil {
+		return
+	}
+	a.refreshVisibleSpecials()
+	a.win.OnShow(func() { a.refreshVisibleSpecials() })
+	a.win.OnFocus(func() { a.refreshVisibleSpecials() })
+	go func() {
+		for range time.Tick(5 * time.Second) {
+			a.dispatch(a.refreshVisibleSpecials)
+		}
+	}()
+}
+
+// refreshVisibleSpecials redraws the special icons of the page shown. It does
+// nothing while the window is hidden or minimized, and never reads the shell
+// for a page that is not shown.
+func (a *App) refreshVisibleSpecials() {
+	if a.win == nil || !a.win.IsVisible() || a.win.IsMinimized() || a.view == nil {
+		return
+	}
+	tab := a.tab(a.view.prefs.ActiveTab)
+	if tab == nil {
+		return
+	}
+	for _, slot := range tab.Slots {
+		if slot == nil {
+			continue
+		}
+		if item := a.store.Apps[*slot]; item != nil {
+			a.refreshSpecialIcon(item)
+		}
+	}
 }
 
 // startClock redraws every ten seconds while a runtime display changes, which

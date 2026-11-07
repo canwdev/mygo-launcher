@@ -230,7 +230,7 @@ func (v *view) settingsView(c *ui.Context) {
 					v.refreshData()
 				}
 			})
-			row(m.DataDirectory(), filepath.Join(absBase, dataDir), func() {
+			row(m.DataDirectory(), filepath.Join(dataBase(), dataDir), func() {
 				if ui.Button(c, m.RevealInFolder()).Clicked() {
 					v.app.openDataDir()
 				}

@@ -25,6 +25,7 @@ func (v *view) setActiveTab(guid string) {
 	}
 	v.prefs.ActiveTab = guid
 	v.savePrefs()
+	v.app.refreshVisibleSpecials()
 }
 
 // === Tabs ===
@@ -167,12 +168,14 @@ func (v *view) updateItem(guid string, fields itemFields) {
 	item.RunAsAdmin = fields.RunAsAdmin
 	v.app.save()
 	if oldIcon != item.Icon {
+		v.app.clearDynamicIcon(guid)
 		v.app.pruneIcons() // the icon it replaced, if nothing else uses it
 	}
 	v.app.notify(v.msgs().ItemUpdated())
 }
 
 func (v *view) removeItem(guid string) {
+	v.app.clearDynamicIcon(guid)
 	for i := range v.app.store.Categories {
 		kept := v.app.store.Categories[i].Slots[:0]
 		for _, slot := range v.app.store.Categories[i].Slots {

@@ -46,7 +46,7 @@ type view struct {
 
 	// dragHoverTab is the page an item being dragged rests on, and
 	// dragHoverSince when it came to rest there: the page shows itself after
-	// tabHoverDelay.
+	// dragTabHoverDelay.
 	dragHoverTab   string
 	dragHoverSince time.Time
 
@@ -73,6 +73,32 @@ type view struct {
 	// pages is what each page keeps of its own: where it scrolls, and how
 	// many cells its grid row holds.
 	pages map[string]*pageView
+
+	// menus keeps whether each context menu shows, by the element it belongs
+	// to, as MyGo's ContextMenuBase asks for.
+	menus map[string]*bool
+
+	// folderGUID is the folder item whose contents the panel lists, "" while
+	// it is closed; folderDir is the folder listed and folderRoot the folder of
+	// the item, which going up never passes. folderItems is what the last read
+	// found, folderGen drops a read a newer one replaced, folderAnchored says
+	// the item's cell built this frame, and folderAtX/Y where the pointer was
+	// when the panel opened, which it centers on.
+	folderGUID       string
+	folderDir        string
+	folderRoot       string
+	folderItems      []folderEntry
+	folderErr        error
+	folderLoading    bool
+	folderGen        int
+	folderAnchored   bool
+	folderAtX        float32
+	folderAtY        float32
+	folderList       ui.ListState
+	folderIcons      map[string]ui.ImageSource
+	folderIconWanted map[string]bool
+	folderIconQueue  []string
+	folderIconBusy   bool
 
 	// itemDragging says an item was dragged in the last frame, and
 	// itemDraggingNow whether one is now: while it is, every page stays
@@ -117,11 +143,13 @@ type view struct {
 	// windowPicker lists the programs with a window open, to add one as an
 	// item; pickerIcons keeps their icons by executable, and pickerLoading
 	// says a goroutine still reads them.
-	pickerOpen    bool
-	pickerWindows []runningWindow
-	pickerIcons   map[string]ui.ImageSource
-	pickerScroll  ui.ScrollState
-	pickerLoading bool
+	pickerOpen       bool
+	pickerMenu       pickerMenuKind // the second-level list the picker shows
+	pickerWindows    []runningWindow
+	pickerIcons      map[string]ui.ImageSource
+	pickerScroll     ui.ScrollState
+	pickerLoading    bool
+	pickerIconReload bool // a list opened while the icons still load
 
 	// registeredShortcut is the accelerator the app has bound at the system,
 	// and the rest is the settings' shortcut record: whether it listens for a
@@ -198,6 +226,9 @@ func (v *view) view(c *ui.Context) {
 	v.lang = c.Locale()
 	deferred := v.drain()
 	v.states = v.app.state()
+	// The folder panel anchors to the cell of the item it lists, which must be
+	// built this frame: a page switch takes it away.
+	v.folderAnchored = false
 	v.showMessages(c)
 
 	// A runtime display that counts up needs a frame now and then; the clock
@@ -234,6 +265,7 @@ func (v *view) view(c *ui.Context) {
 		v.header(c)
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Background(p.bg).Children(func() {
 			v.body(c)
+			v.folderMenu(c)
 			v.busyLine(c)
 			v.addFab(c)
 		})
@@ -364,21 +396,31 @@ func (v *view) fileDropHalf(parent, half ui.Element, tabGUID string, at int, ver
 	}
 }
 
-// insertLine draws where a drop lands: a vertical line at the left or right
+// insertLine shows where a drop lands: a vertical line at the left or right
 // edge of side-by-side items, as between a grid's cells, or a horizontal line
-// above or below a row, as between a list's rows.
+// above or below a row, as between a list's rows. It paints over the element
+// instead of drawing a border, so it takes no room from the icon or the text
+// and does not bend around the element's rounded corners; the line stops short
+// of the corners.
 func insertLine(e ui.Element, vertical, after bool, p palette) {
-	switch {
-	case vertical && after:
-		e.BorderWidth(0, 2, 0, 0)
-	case vertical:
-		e.BorderWidth(0, 0, 0, 2)
-	case after:
-		e.BorderWidth(0, 0, 2, 0)
-	default:
-		e.BorderWidth(2, 0, 0, 0)
-	}
-	e.BorderColor(p.accent)
+	e.DrawOver(func(pt *ui.Painter, r ui.Rect) {
+		const width, end float32 = 2, 6
+		var line ui.Rect
+		if vertical {
+			x := r.X
+			if after {
+				x = r.X + r.W - width
+			}
+			line = ui.Rect{X: x, Y: r.Y + end, W: width, H: max(0, r.H-2*end)}
+		} else {
+			y := r.Y
+			if after {
+				y = r.Y + r.H - width
+			}
+			line = ui.Rect{X: r.X + end, Y: y, W: max(0, r.W-2*end), H: width}
+		}
+		pt.Fill(line, p.accent, width/2)
+	})
 }
 
 // dropTo turns the side a drop aims at into the index moveSlot takes: at is
