@@ -54,21 +54,15 @@ func newTestSettings(t *testing.T, v *view) *ui.Tester {
 	return tt
 }
 
-// TestViewShowsItems 验证列表视图把 tab 里的条目连同运行时一起画出来。
+// TestViewShowsItems 验证网格把 tab 里的条目画出来。
 func TestViewShowsItems(t *testing.T) {
 	_, _, tt := newTestView(t, 720, 460)
 
 	if !tt.HasText("Alpha") || !tt.HasText("Beta") {
 		t.Fatalf("the list must show every item, texts %q", tt.Texts())
 	}
-	if !tt.HasText("1h") {
-		t.Fatalf("the runtime must show beside an item, texts %q", tt.Texts())
-	}
 	if !tt.HasText("Default") {
 		t.Fatalf("the tab strip must show the tab's name, texts %q", tt.Texts())
-	}
-	if !tt.HasText("Run") {
-		t.Fatalf("each item needs a Run button, texts %q", tt.Texts())
 	}
 }
 
@@ -105,29 +99,6 @@ func TestViewOpensItemEditor(t *testing.T) {
 	}
 	if tt.HasText("Edit item") {
 		t.Fatalf("the dialog must close after saving, texts %q", tt.Texts())
-	}
-}
-
-// TestViewSwitchesToGrid 验证顶栏的列表/网格切换，网格里的空槽也画出可放置的空格。
-func TestViewSwitchesToGrid(t *testing.T) {
-	app, v, tt := newTestView(t, 720, 460)
-	app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, nil) // 空槽
-	tt.Frame()
-
-	if err := tt.Click("Switch to grid view"); err != nil {
-		t.Fatalf("switch to the grid: %v", err)
-	}
-	if v.prefs.ViewMode != "grid" {
-		t.Fatalf("the view mode must be remembered, got %q", v.prefs.ViewMode)
-	}
-	if !tt.HasText("Alpha") || !tt.HasText("Beta") {
-		t.Fatalf("the grid must show every item, texts %q", tt.Texts())
-	}
-	if err := tt.Click("Switch to list view"); err != nil {
-		t.Fatalf("switch back to the list: %v", err)
-	}
-	if v.prefs.ViewMode != "list" {
-		t.Fatalf("the view mode must go back to the list, got %q", v.prefs.ViewMode)
 	}
 }
 
@@ -217,6 +188,127 @@ func TestViewLastPageCannotBeRemoved(t *testing.T) {
 			t.Fatalf("a page beside another must offer Remove, texts %q", tt.Texts())
 		}
 	})
+}
+
+// TestItemMenuInsertsBlank 验证条目菜单提供「插入空白」。
+func TestItemMenuInsertsBlank(t *testing.T) {
+	_, _, tt := newTestView(t, 720, 460)
+
+	if err := tt.RightClick("Alpha"); err != nil {
+		t.Fatalf("open the item menu: %v", err)
+	}
+	if !tt.HasText("Insert blank") {
+		t.Fatalf("a cell must offer Insert blank, texts %q", tt.Texts())
+	}
+}
+
+// TestItemMenuReportsMissingFileActions 验证路径为空或不存在时，点「打开所在文件夹」
+// 或「更新图标」会提示不可用，而不是没有反应。
+func TestItemMenuReportsMissingFileActions(t *testing.T) {
+	const missing = "This item's file or folder does not exist"
+	_, v, tt := newTestView(t, 720, 460)
+
+	if err := tt.RightClick("Alpha"); err != nil {
+		t.Fatalf("open the item menu: %v", err)
+	}
+	if err := tt.Click("Open folder…"); err != nil {
+		t.Fatalf("choose Open folder: %v", err)
+	}
+	if !tt.HasText(missing) {
+		t.Fatalf("a missing file must be reported, texts %q", tt.Texts())
+	}
+
+	tt = ui.NewTester(v.view, 720, 460)
+	tt.SetFocused(true)
+	if err := tt.RightClick("Alpha"); err != nil {
+		t.Fatalf("open the item menu again: %v", err)
+	}
+	if err := tt.Click("Update icon"); err != nil {
+		t.Fatalf("choose Update icon: %v", err)
+	}
+	if !tt.HasText(missing) {
+		t.Fatalf("updating a missing file must be reported, texts %q", tt.Texts())
+	}
+}
+
+// TestDialogsFitNarrowWindow 验证窗口很窄时，对话框的输入框和按钮仍留在窗口内。
+func TestDialogsFitNarrowWindow(t *testing.T) {
+	const width float32 = 420
+	fit := func(t *testing.T, tt *ui.Tester, labels ...string) {
+		t.Helper()
+		for _, label := range labels {
+			info, ok := tt.Access(label)
+			if !ok {
+				t.Fatalf("%q must show in the dialog, texts %q", label, tt.Texts())
+			}
+			if info.Bounds.X < 0 || info.Bounds.X+info.Bounds.W > width {
+				t.Fatalf("%q must stay inside the window, bounds %+v", label, info.Bounds)
+			}
+		}
+	}
+
+	t.Run("item", func(t *testing.T) {
+		_, v, tt := newTestView(t, int(width), 460)
+		v.openEdit("a")
+		tt.Frame()
+		fit(t, tt, "Browse…", "Clear", "Cancel", "Save")
+	})
+	t.Run("rename", func(t *testing.T) {
+		_, v, tt := newTestView(t, int(width), 460)
+		v.openItemRename("a", "Alpha")
+		tt.Frame()
+		fit(t, tt, "Cancel", "OK")
+	})
+	t.Run("runtime", func(t *testing.T) {
+		_, v, tt := newTestView(t, int(width), 460)
+		v.openRuntime("a")
+		tt.Frame()
+		fit(t, tt, "Cancel", "Save")
+	})
+	t.Run("search", func(t *testing.T) {
+		_, v, tt := newTestView(t, int(width), 460)
+		v.openSearch()
+		tt.Frame()
+		field, ok := tt.AccessByRole(ui.RoleTextField, "")
+		if !ok {
+			t.Fatalf("the search must show its field, texts %q", tt.Texts())
+		}
+		if field.Bounds.X < 0 || field.Bounds.X+field.Bounds.W > width {
+			t.Fatalf("the search field must stay inside the window, bounds %+v", field.Bounds)
+		}
+	})
+}
+
+// TestViewRunReportsMissingPath 验证启动条目时先检查路径，失效时提示。
+func TestViewRunReportsMissingPath(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+
+	v.runItem("a")
+	tt.Frame()
+	if !tt.HasText("This item's file or folder does not exist") {
+		t.Fatalf("a missing path must be reported before the launch, texts %q", tt.Texts())
+	}
+}
+
+// TestViewRuntimeFieldIsClickable 验证网格单元左上角的时长可以点开编辑。
+func TestViewRuntimeFieldIsClickable(t *testing.T) {
+	_, _, tt := newTestView(t, 720, 460)
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha cell")
+	}
+	tt.Move(alpha.X+alpha.W/2, alpha.Y+alpha.H/2)
+	tt.Frame()
+	runtime, ok := tt.Access("1h")
+	if !ok {
+		t.Fatalf("the hovered cell must show its runtime, texts %q", tt.Texts())
+	}
+	tt.ClickAt(runtime.Bounds.X+runtime.Bounds.W/2, runtime.Bounds.Y+runtime.Bounds.H/2)
+	tt.Frame()
+	if !tt.HasText("Edit runtime") {
+		t.Fatalf("a click on the runtime must edit it, texts %q", tt.Texts())
+	}
 }
 
 // TestViewOffersUpdateIconOutsideFolders 验证路径外的图标可以从菜单「更新图标」
@@ -318,6 +410,194 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 	}
 }
 
+// TestViewSettingsTogglesGPU 验证设置里的 GPU 绘制开关写回 ui-state.json，默认关闭。
+func TestViewSettingsTogglesGPU(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	if v.prefs.GPU {
+		t.Fatal("drawing in memory must be the default")
+	}
+	settings := newTestSettings(t, v)
+	if err := settings.Click("Toggle GPU drawing"); err != nil {
+		t.Fatalf("toggle GPU drawing: %v", err)
+	}
+	if !v.prefs.GPU || !loadPrefs().GPU {
+		t.Fatal("the GPU preference must be kept")
+	}
+}
+
+// TestViewSettingsTogglesWheelPages 验证滚轮切换页面默认开启，开关写回
+// ui-state.json。
+func TestViewSettingsTogglesWheelPages(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	if !v.prefs.WheelPages {
+		t.Fatal("the wheel must switch pages by default")
+	}
+	settings := newTestSettings(t, v)
+	if err := settings.Click("Toggle wheel page switching"); err != nil {
+		t.Fatalf("toggle wheel page switching: %v", err)
+	}
+	if v.prefs.WheelPages || loadPrefs().WheelPages {
+		t.Fatal("turning it off must be kept")
+	}
+	if err := settings.Click("Toggle wheel page switching"); err != nil {
+		t.Fatalf("toggle wheel page switching again: %v", err)
+	}
+	if !v.prefs.WheelPages || !loadPrefs().WheelPages {
+		t.Fatal("turning it back on must be kept")
+	}
+}
+
+// TestWheelSwitchesPages 验证开启后滚轮上下切换页面，并绕过网格滚动。
+func TestWheelSwitchesPages(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 460)
+	first := app.store.Categories[0].GUID
+	app.store.Categories = append(app.store.Categories, CategoryNode{GUID: "second", Name: "Second"})
+	v.prefs.WheelPages = true
+	tt.Frame()
+
+	tt.Wheel(360, 300, 0, 40)
+	tt.Frame()
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("a wheel down must show the next page, got %q", v.prefs.ActiveTab)
+	}
+	tt.Wheel(360, 300, 0, -40)
+	tt.Frame()
+	if v.prefs.ActiveTab != first {
+		t.Fatalf("a wheel up must show the previous page, got %q", v.prefs.ActiveTab)
+	}
+}
+
+// TestWheelOverActiveTabKeepsPage 验证光标停在当前页的胶囊上滚轮时，切过去的页面
+// 不会被这个胶囊的悬停切换回来。
+func TestWheelOverActiveTabKeepsPage(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 460)
+	first := app.store.Categories[0].GUID
+	app.store.Categories = append(app.store.Categories,
+		CategoryNode{GUID: "second", Name: "Second"},
+		CategoryNode{GUID: "third", Name: "Third"},
+	)
+	v.prefs.WheelPages = true
+	tt.Frame()
+
+	chip := v.tabRects[first]
+	x, y := chip.X+chip.W/2, chip.Y+chip.H/2
+	tt.Move(x, y)
+	tt.Frame()
+	tt.Wheel(x, y, 0, 40)
+	tt.Frame()
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("the wheel must show the next page, got %q", v.prefs.ActiveTab)
+	}
+	tt.Advance(2 * tabHoverDelay)
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("the chip under the pointer must not switch the page back, got %q", v.prefs.ActiveTab)
+	}
+
+	tt.Wheel(x, y, 0, 40) // another turn while still on the same chip
+	tt.Frame()
+	if v.prefs.ActiveTab != "third" {
+		t.Fatalf("another wheel must show the next page, got %q", v.prefs.ActiveTab)
+	}
+}
+
+// TestWheelShiftSwapsPagesAndScroll 验证 Shift+滚轮与普通滚轮的用途互换：
+// 开启切页时 Shift 滚动，关闭切页时 Shift 切页。
+func TestWheelShiftSwapsPagesAndScroll(t *testing.T) {
+	t.Run("enabled scrolls", func(t *testing.T) {
+		app, v, tt := newTestView(t, 720, 460)
+		for i := 0; i < 60; i++ {
+			app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, ptrString("a"))
+		}
+		app.store.Categories = append(app.store.Categories, CategoryNode{GUID: "second", Name: "Second"})
+		v.prefs.WheelPages = true
+		tt.Frame()
+		first := v.prefs.ActiveTab
+
+		if !v.wheelInput(ui.InputEvent{Kind: ui.InputScroll, DY: 40, Mods: ui.Shift, X: 360, Y: 300}) {
+			t.Fatal("Shift+wheel must be taken")
+		}
+		tt.Frame()
+		if v.prefs.ActiveTab != first {
+			t.Fatalf("Shift+wheel must not change pages, got %q", v.prefs.ActiveTab)
+		}
+		if pv := v.pageState(v.tab()); pv.gridScroll.Y == 0 {
+			t.Fatalf("Shift+wheel must scroll the grid, Y=%v MaxY=%v", pv.gridScroll.Y, pv.gridScroll.MaxY)
+		}
+	})
+
+	t.Run("off switches", func(t *testing.T) {
+		app, v, tt := newTestView(t, 720, 460)
+		app.store.Categories = append(app.store.Categories, CategoryNode{GUID: "second", Name: "Second"})
+		v.prefs.WheelPages = false
+		tt.Frame()
+
+		if !v.wheelInput(ui.InputEvent{Kind: ui.InputScroll, DY: 40, Mods: ui.Shift, X: 360, Y: 300}) {
+			t.Fatal("Shift+wheel must be taken")
+		}
+		if v.prefs.ActiveTab != "second" {
+			t.Fatalf("Shift+wheel must change pages when the wheel does not, got %q", v.prefs.ActiveTab)
+		}
+	})
+}
+
+// TestWheelTurnsOnePagePerEvent 验证一次滚轮事件即使滚动很远也只切一页，不会跳页。
+func TestWheelTurnsOnePagePerEvent(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 460)
+	app.store.Categories = append(app.store.Categories,
+		CategoryNode{GUID: "second", Name: "Second"},
+		CategoryNode{GUID: "third", Name: "Third"},
+	)
+	v.prefs.WheelPages = true
+	tt.Frame()
+
+	tt.Wheel(360, 300, 0, 400) // a wheel's notches, or a whole fling, in one event
+	tt.Frame()
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("one wheel event must turn one page, got %q", v.prefs.ActiveTab)
+	}
+
+	tt.Scroll(360, 300, 0, 400) // a touchpad's precise scroll, far in one event
+	tt.Frame()
+	if v.prefs.ActiveTab != "third" {
+		t.Fatalf("one precise scroll must turn one page, got %q", v.prefs.ActiveTab)
+	}
+}
+
+// TestWheelOverTabsKeepsPage 验证在页面胶囊上滚轮切页后，胶囊的悬停自动切换被
+// 忽略，直到指针移到另一个胶囊。
+func TestWheelOverTabsKeepsPage(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 460)
+	first := app.store.Categories[0].GUID
+	app.store.Categories = append(app.store.Categories,
+		CategoryNode{GUID: "second", Name: "Second"},
+		CategoryNode{GUID: "third", Name: "Third"},
+	)
+	v.prefs.WheelPages = true
+	tt.Frame()
+
+	third := v.tabRects["third"]
+	x, y := third.X+third.W/2, third.Y+third.H/2
+	tt.Move(x, y)
+	tt.Frame()
+	tt.Wheel(x, y, 0, 40) // switches from the first page to the second
+	tt.Frame()
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("the wheel must show the next page, got %q", v.prefs.ActiveTab)
+	}
+	tt.Advance(2 * tabHoverDelay)
+	if v.prefs.ActiveTab != "second" {
+		t.Fatalf("resting on the wheel's chip must not switch back, got %q", v.prefs.ActiveTab)
+	}
+
+	// Another chip's hover works again, and shows its page.
+	firstChip := v.tabRects[first]
+	tt.Move(firstChip.X+firstChip.W/2, firstChip.Y+firstChip.H/2)
+	tt.Advance(2 * tabHoverDelay)
+	if v.prefs.ActiveTab != first {
+		t.Fatalf("hovering another chip must show its page again, got %q", v.prefs.ActiveTab)
+	}
+}
+
 // TestViewCloseHidesWhenRunningInBackground 验证关闭窗口时按设置隐藏到托盘，
 // 退出应用时照常关闭。
 func TestViewCloseHidesWhenRunningInBackground(t *testing.T) {
@@ -365,23 +645,24 @@ func TestViewSettingsTogglesAutoHide(t *testing.T) {
 	}
 }
 
-// TestViewRuntimeDialogAdjustsByHour 验证 Edit runtime 的 -1h / +1h 按钮直接改
-// 写已保存的时长，且不会减到负数。
+// TestViewRuntimeDialogAdjustsByHour 验证 -1h / +1h 只改待保存的分钟数，点保存
+// 才写入已保存的时长，且不会减到负数。
 func TestViewRuntimeDialogAdjustsByHour(t *testing.T) {
 	app, v, tt := newTestView(t, 720, 460)
-
-	v.runtimeGUID = "a"
-	v.runtimeOpen = true
+	v.openRuntime("a")
 	tt.Frame()
-	if !tt.HasText("-1h") || !tt.HasText("+1h") {
-		t.Fatalf("the dialog must show both buttons, texts %q", tt.Texts())
+	for _, label := range []string{"-1h", "-30m", "+30m", "+1h"} {
+		if !tt.HasText(label) {
+			t.Fatalf("the dialog must show %q, texts %q", label, tt.Texts())
+		}
 	}
+	stored := app.store.Apps["a"].RuntimeMs
 
 	if err := tt.Click("+1h"); err != nil {
 		t.Fatalf("add an hour: %v", err)
 	}
-	if got := app.store.Apps["a"].RuntimeMs; got != 7_200_000 {
-		t.Fatalf("+1h must add an hour to the stored runtime, got %dms", got)
+	if got := app.store.Apps["a"].RuntimeMs; got != stored {
+		t.Fatalf("+1h must wait for Save, stored %dms", got)
 	}
 	if v.runtimeMinutes != "120" {
 		t.Fatalf("the minutes field must follow the buttons, got %q", v.runtimeMinutes)
@@ -389,33 +670,55 @@ func TestViewRuntimeDialogAdjustsByHour(t *testing.T) {
 	if err := tt.Click("-1h"); err != nil {
 		t.Fatalf("subtract an hour: %v", err)
 	}
-	if got := app.store.Apps["a"].RuntimeMs; got != 3_600_000 {
-		t.Fatalf("-1h must take an hour off, got %dms", got)
+	if v.runtimeMinutes != "60" {
+		t.Fatalf("-1h must take an hour off the field, got %q", v.runtimeMinutes)
+	}
+	if err := tt.Click("+30m"); err != nil {
+		t.Fatalf("add half an hour: %v", err)
+	}
+	if v.runtimeMinutes != "90" {
+		t.Fatalf("+30m must add half an hour, got %q", v.runtimeMinutes)
+	}
+	if err := tt.Click("-30m"); err != nil {
+		t.Fatalf("subtract half an hour: %v", err)
+	}
+	if v.runtimeMinutes != "60" {
+		t.Fatalf("-30m must take half an hour off, got %q", v.runtimeMinutes)
 	}
 
-	app.runtimeStats["a"] = 60_000
-	app.store.Apps["a"].RuntimeMs = 60_000
-	v.states = app.state()
-	v.adjustRuntime(-time.Hour)
-	if got := app.store.Apps["a"].RuntimeMs; got != 0 {
-		t.Fatalf("the runtime must not go below zero, got %dms", got)
+	v.runtimeMinutes = "0"
+	v.adjustRuntime(-60)
+	if v.runtimeMinutes != "0" {
+		t.Fatalf("the minutes must not go below zero, got %q", v.runtimeMinutes)
+	}
+
+	v.runtimeMinutes = "120"
+	if err := tt.Click("Save"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if got := app.store.Apps["a"].RuntimeMs; got != 7_200_000 {
+		t.Fatalf("Save must write the minutes, got %dms", got)
 	}
 }
 
-// TestViewSettingsTogglesAutoTiming 验证设置窗口里的自动计时开关写回 store。
+// TestViewSettingsTogglesAutoTiming 验证设置窗口里的计时器开关写回 store。
 func TestViewSettingsTogglesAutoTiming(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
 	app.store.Settings.AutoTime = true
+	v.runtimeOpen = true
 	settings := newTestSettings(t, v)
 
-	if err := settings.Click("Toggle auto timing"); err != nil {
-		t.Fatalf("auto timing: %v", err)
+	if err := settings.Click("Toggle timer"); err != nil {
+		t.Fatalf("timer: %v", err)
 	}
 	if app.store.Settings.AutoTime {
-		t.Fatal("the auto timing toggle must turn the setting off")
+		t.Fatal("the timer toggle must turn the setting off")
 	}
-	if err := settings.Click("Toggle auto timing"); err != nil {
-		t.Fatalf("auto timing again: %v", err)
+	if v.runtimeOpen {
+		t.Fatal("turning the timer off must close its dialog")
+	}
+	if err := settings.Click("Toggle timer"); err != nil {
+		t.Fatalf("timer again: %v", err)
 	}
 	if !app.store.Settings.AutoTime {
 		t.Fatal("the auto timing toggle must turn the setting back on")
@@ -436,9 +739,10 @@ func TestViewSettingsShowsItsChoices(t *testing.T) {
 	settings := newTestSettings(t, v)
 	for _, text := range []string{
 		"Settings", "Language", "Theme", "Accent color", "Run in background",
-		"Auto timing", "Auto-hide the launcher",
+		"Timer", "Auto-hide",
 		"Always on top", "Absolute paths for new items", "Data directory",
 		"Version " + appVersion,
+		filepath.Join(absBase, dataDir),
 	} {
 		if !settings.HasText(text) {
 			t.Fatalf("the settings must show %q, texts %q", text, settings.Texts())
@@ -523,8 +827,7 @@ func TestViewSettingsChoosesIconSize(t *testing.T) {
 // TestViewGridShowsRuntimeOnHover 验证网格单元左上角的时长默认不画，指针移到格子上
 // 才出现，免得空白的「--」占满网格。
 func TestViewGridShowsRuntimeOnHover(t *testing.T) {
-	_, v, tt := newTestView(t, 720, 460)
-	v.prefs.ViewMode = "grid"
+	_, _, tt := newTestView(t, 720, 460)
 	tt.Frame()
 	if tt.HasText("--") {
 		t.Fatalf("an unhovered cell must not show its runtime, texts %q", tt.Texts())
@@ -537,6 +840,29 @@ func TestViewGridShowsRuntimeOnHover(t *testing.T) {
 	tt.Frame()
 	if !tt.HasText("--") {
 		t.Fatalf("a hovered cell must show its runtime, texts %q", tt.Texts())
+	}
+}
+
+// TestViewHidesTimerWhenOff 验证计时器关闭后，格子里不再显示时长，运行中也不显示。
+func TestViewHidesTimerWhenOff(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 460)
+	app.store.Settings.AutoTime = false
+	tt.Frame()
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha cell")
+	}
+	tt.Move(alpha.X+alpha.W/2, alpha.Y+alpha.H/2)
+	tt.Frame()
+	if tt.HasText("1h") || tt.HasText("--") {
+		t.Fatalf("the timer off must hide the runtime, texts %q", tt.Texts())
+	}
+
+	app.running["a"] = &runningProc{start: time.Now()}
+	tt.Frame()
+	if tt.HasText("1h") {
+		t.Fatalf("a running item must not show a runtime with the timer off, texts %q", tt.Texts())
 	}
 }
 
@@ -688,10 +1014,10 @@ func TestViewShowsChineseTexts(t *testing.T) {
 	_, v, tt := newTestView(t, 720, 460)
 	tt.SetLocale("zh-Hans")
 
-	if !tt.HasText("运行") || !tt.HasText("设置") || !tt.HasText("搜索") {
+	if !tt.HasText("设置") || !tt.HasText("搜索") {
 		t.Fatalf("the window must say its texts in Chinese, texts %q", tt.Texts())
 	}
-	if tt.HasText("Run") {
+	if tt.HasText("Settings") {
 		t.Fatalf("the English texts must be gone, texts %q", tt.Texts())
 	}
 
@@ -734,25 +1060,6 @@ func tabSlots(app *App, index int) []string {
 	return out
 }
 
-// TestViewListDragReorders 验证列表里拖动一行把条目换位。
-func TestViewListDragReorders(t *testing.T) {
-	app, _, tt := newTestView(t, 720, 520)
-
-	alpha, ok := tt.Find("Alpha")
-	if !ok {
-		t.Fatal("no Alpha row")
-	}
-	beta, ok := tt.Find("Beta")
-	if !ok {
-		t.Fatal("no Beta row")
-	}
-	dragTo(tt, alpha, 600, beta.Y+beta.H) // below Beta: after it
-
-	if got := tabSlots(app, 0); len(got) != 2 || got[0] != "b" || got[1] != "a" {
-		t.Fatalf("slots = %v, want the dragged item first", got)
-	}
-}
-
 // TestViewDropsItemOnItsPageNothing 验证把条目拖到它当前所在的页面胶囊上放下，
 // 什么都不改变。
 func TestViewDropsItemOnItsPageNothing(t *testing.T) {
@@ -785,37 +1092,40 @@ func TestViewDropsItemAtEndOfPage(t *testing.T) {
 	}
 }
 
-// TestViewDropsBesideTarget 验证拖动的指示线决定落点：下/右半边插在目标之后，
-// 上/左半边插在它之前。
+// TestViewDropsBesideTarget 验证拖动的指示线决定落点：右半边插在目标之后，
+// 左半边插在它之前。
 func TestViewDropsBesideTarget(t *testing.T) {
-	app, _, tt := newTestView(t, 720, 520)
+	app, v, tt := newTestView(t, 720, 520)
 	app.store.Apps["c"] = &AppItem{GUID: "c", Name: "Gamma", Path: "C:/tools/gamma.exe"}
 	app.store.Categories[0].Slots = []*string{ptrString("a"), ptrString("b"), ptrString("c")}
 	tt.Frame()
 
 	alpha, ok := tt.Find("Alpha")
 	if !ok {
-		t.Fatal("no Alpha row")
+		t.Fatal("no Alpha cell")
 	}
 	beta, ok := tt.Find("Beta")
 	if !ok {
-		t.Fatal("no Beta row")
+		t.Fatal("no Beta cell")
 	}
-	dragTo(tt, alpha, 600, beta.Y+beta.H) // below Beta: after it
+	dragTo(tt, alpha, beta.X+beta.W/2+20, beta.Y+beta.H/2) // the right half: after it
 	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "a" || got[2] != "c" {
 		t.Fatalf("slots = %v, want the item after Beta", got)
 	}
 
-	// Beta and Gamma now swap places around Alpha: drag Gamma above Alpha.
+	// Beta and Gamma now swap places around Alpha: drag Gamma before Alpha.
+	tt = ui.NewTester(v.view, 720, 520)
+	tt.SetFocused(true)
+	tt.Frame()
 	alpha, ok = tt.Find("Alpha")
 	if !ok {
-		t.Fatal("no Alpha row")
+		t.Fatal("no Alpha cell")
 	}
 	gamma, ok := tt.Find("Gamma")
 	if !ok {
-		t.Fatal("no Gamma row")
+		t.Fatal("no Gamma cell")
 	}
-	dragTo(tt, gamma, 600, alpha.Y) // above Alpha: before it
+	dragTo(tt, gamma, alpha.X-20, alpha.Y+alpha.H/2) // the left half: before it
 	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "b" || got[1] != "c" || got[2] != "a" {
 		t.Fatalf("slots = %v, want the item before Alpha", got)
 	}
@@ -823,9 +1133,8 @@ func TestViewDropsBesideTarget(t *testing.T) {
 
 // TestViewGridDragReorders 验证网格里拖动一格把条目换位，空槽留在原处。
 func TestViewGridDragReorders(t *testing.T) {
-	app, v, tt := newTestView(t, 720, 520)
+	app, _, tt := newTestView(t, 720, 520)
 	app.store.Categories[0].Slots = append(app.store.Categories[0].Slots, nil)
-	v.prefs.ViewMode = "grid"
 	tt.Frame()
 
 	alpha, ok := tt.Find("Alpha")
@@ -843,7 +1152,7 @@ func TestViewGridDragReorders(t *testing.T) {
 	}
 }
 
-// TestViewDragsItemToTab 验证把列表里的一行拖到另一个标签上，条目就搬过去。
+// TestViewDragsItemToTab 验证把网格里的一格拖到另一个标签上，条目就搬过去。
 func TestViewDragsItemToTab(t *testing.T) {
 	app, _, tt := newTestView(t, 720, 520)
 	if err := tt.Click("Add page"); err != nil {
@@ -1004,10 +1313,10 @@ func TestViewDropsFiles(t *testing.T) {
 	}
 }
 
-// TestViewDropsFilesAtPosition 验证文件拖到某个条目旁时插在那个位置，而不是加到
-// 末尾；列表和网格都用同一条插入线。
+// TestViewDropsFilesAtPosition 验证文件拖到某个单元格旁时插在那个位置，而不是
+// 加到末尾。
 func TestViewDropsFilesAtPosition(t *testing.T) {
-	app, v, tt := newTestView(t, 720, 520)
+	app, _, tt := newTestView(t, 720, 520)
 	path := filepath.Join(t.TempDir(), "gamma.txt")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1015,16 +1324,15 @@ func TestViewDropsFilesAtPosition(t *testing.T) {
 	tt.Frame()
 	alpha, ok := tt.Find("Alpha")
 	if !ok {
-		t.Fatal("no Alpha row")
+		t.Fatal("no Alpha cell")
 	}
-	if !tt.DropFiles(alpha.X, alpha.Y+alpha.H, path) {
-		t.Fatalf("the row must take dropped files, slots %v", tabSlots(app, 0))
+	if !tt.DropFiles(alpha.X+alpha.W/2+20, alpha.Y+alpha.H/2, path) {
+		t.Fatalf("the cell must take dropped files, slots %v", tabSlots(app, 0))
 	}
 	if got := tabSlots(app, 0); len(got) != 3 || got[0] != "a" || got[2] != "b" || got[1] == "a" || got[1] == "b" {
 		t.Fatalf("slots = %v, want the file after Alpha", got)
 	}
 
-	v.prefs.ViewMode = "grid"
 	tt.Frame()
 	beta, ok := tt.Find("Beta")
 	if !ok {
@@ -1048,12 +1356,11 @@ func TestViewDropsFilesOnGridHalf(t *testing.T) {
 			name = "hovered"
 		}
 		t.Run(name, func(t *testing.T) {
-			app, v, tt := newTestView(t, 720, 520)
+			app, _, tt := newTestView(t, 720, 520)
 			path := filepath.Join(t.TempDir(), "gamma.txt")
 			if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			v.prefs.ViewMode = "grid"
 			tt.Frame()
 			alpha, ok := tt.Find("Alpha")
 			if !ok {

@@ -95,13 +95,6 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 	card.PopoverMenu(v.itemMenu(item, index))
 
 	card.Children(func() {
-		// The runtime shows in a cell's corner only while the pointer is over
-		// it, or while the process behind it runs. It is built anyway, hidden:
-		// a child that comes and goes would move the drop halves' IDs with it,
-		// and a native drop names the element it lands on by that ID.
-		v.runtimeField(c, item, st).Absolute().Top(2).Left(4).
-			Hidden(!st.Running && !card.Hovered())
-
 		v.itemIcon(c, item, m.gridIcon)
 		ui.Row(c).Gap(4).AlignItems(ui.Center).MaxWidth(m.cellWidth - 8).Children(func() {
 			if item.RunAsAdmin {
@@ -115,6 +108,16 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		right := ui.Box(c).Key("file-after").Absolute().Top(0).Bottom(0).Right(0).WidthPercent(50)
 		v.fileDropHalf(card, left, tab.GUID, index, true, false, p)
 		v.fileDropHalf(card, right, tab.GUID, index+1, true, true, p)
+
+		// The runtime shows in a cell's corner only while the pointer is over
+		// it, or while the process behind it runs. It is built after the drop
+		// halves, so a click on it reaches it, and always, hidden or not, so
+		// the halves keep their places from frame to frame: a native drop
+		// names the element it lands on by its ID.
+		showRuntime := v.app.store.Settings.AutoTime && (st.Running || card.Hovered())
+		runtime := v.runtimeField(c, item, st).Absolute().Top(2).Left(4).
+			Hidden(!showRuntime)
+		v.fileDropHalf(card, runtime, tab.GUID, index, true, false, p)
 	})
 }
 

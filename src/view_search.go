@@ -86,7 +86,7 @@ func (v *view) search(c *ui.Context) {
 	}
 
 	ui.Modal(c, &v.searchOpen, func() {
-		ui.Column(c).Width(560).Gap(10).Children(func() {
+		ui.Column(c).Width(dialogWidth(c, 560)).Gap(10).Children(func() {
 			field := ui.Row(c).Height(40).Gap(8).AlignItems(ui.Center)
 			field.Children(func() {
 				ui.Icon(c, iconSearch).Size(16, 16).TextColor(p.muted)
@@ -211,21 +211,11 @@ func (v *view) scrollTo(guid string) {
 	}
 	m := v.icons()
 	pv := v.pageState(tab)
-	if v.prefs.ViewMode == "grid" {
-		for i, slot := range tab.Slots {
-			if slot != nil && *slot == guid {
-				row := i / max(pv.gridCols, 1)
-				y := gridMargin[0] + float32(row)*m.cellHeight
-				pv.gridScroll.ScrollTo(0, max(y, 0), ui.Animation{})
-				return
-			}
-		}
-		return
-	}
-	for i, row := range v.rows(tab) {
-		if row.item.GUID == guid {
-			y := listMargin[0] + float32(i)*m.rowHeight
-			pv.listScroll.ScrollTo(0, max(y, 0), ui.Animation{})
+	for i, slot := range tab.Slots {
+		if slot != nil && *slot == guid {
+			row := i / max(pv.gridCols, 1)
+			y := gridMargin[0] + float32(row)*m.cellHeight
+			pv.gridScroll.ScrollTo(0, max(y, 0), ui.Animation{})
 			return
 		}
 	}

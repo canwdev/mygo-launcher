@@ -4,13 +4,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// rowRef is a row of the list: an item and the slot it sits in (slots may hold
-// empty cells, which the list does not show).
-type rowRef struct {
-	item *AppItem
-	slot int
-}
-
 // tab returns the tab the window shows, falling back to the first one.
 func (v *view) tab() *CategoryNode {
 	if len(v.app.store.Categories) == 0 {
@@ -24,20 +17,6 @@ func (v *view) tab() *CategoryNode {
 		v.prefs.ActiveTab = tab.GUID
 	}
 	return tab
-}
-
-// rows lists the items of a tab in order, skipping empty cells.
-func (v *view) rows(tab *CategoryNode) []rowRef {
-	out := make([]rowRef, 0, len(tab.Slots))
-	for i, guid := range tab.Slots {
-		if guid == nil {
-			continue
-		}
-		if item := v.app.item(*guid); item != nil {
-			out = append(out, rowRef{item: item, slot: i})
-		}
-	}
-	return out
 }
 
 func (v *view) setActiveTab(guid string) {

@@ -31,9 +31,9 @@ func TestInstanceTitleUsesFullDir(t *testing.T) {
 	}
 }
 
-func TestInstanceTitleMatchesTitlePattern(t *testing.T) {
+func TestInstanceTitleMatchesTrayPattern(t *testing.T) {
 	re := regexp.MustCompile(`^MyGo Launcher - .+$`)
 	if !re.MatchString(instanceTitle(installDir())) {
-		t.Fatalf("instanceTitle(installDir()) must match the window-title pattern, got %q", instanceTitle(installDir()))
+		t.Fatalf("instanceTitle(installDir()) must match the tray tooltip pattern, got %q", instanceTitle(installDir()))
 	}
 }

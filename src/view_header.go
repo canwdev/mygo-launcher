@@ -29,24 +29,8 @@ func (v *view) header(c *ui.Context) {
 		if iconButton(c, iconSearch, 16, p.muted, m.Search()).Clicked() {
 			v.openSearch()
 		}
-		v.viewModeButton(c)
 		if iconButton(c, iconGear, 18, p.muted, m.Settings()).Clicked() {
 			v.openSettings()
 		}
 	})
-}
-
-// viewModeButton switches between the list and the grid, just before Settings.
-func (v *view) viewModeButton(c *ui.Context) {
-	p := v.pal
-	m := v.msgs()
-	if v.prefs.ViewMode == "grid" {
-		if iconButton(c, iconList, 17, p.muted, m.SwitchToList()).Clicked() {
-			v.setViewMode("list")
-		}
-		return
-	}
-	if iconButton(c, iconGrid, 17, p.muted, m.SwitchToGrid()).Clicked() {
-		v.setViewMode("grid")
-	}
 }

@@ -54,9 +54,9 @@ type CategoryNode struct {
 
 type Settings struct {
 	AbsolutePaths bool `json:"absolute_paths"`
-	// AutoTime accumulates an item's runtime while its process runs. With it
-	// off the item still starts and stops, but the clock does not move: the
-	// runtime only changes when it is edited by hand.
+	// AutoTime shows and accumulates an item's runtime while its process runs.
+	// With it off the runtime is hidden and the clock never moves: the item
+	// still starts and stops.
 	AutoTime bool `json:"auto_time"`
 	// AutoHide minimizes the launcher when an item is launched. It is the
 	// master switch of the window hiding: with it off nothing is minimized at

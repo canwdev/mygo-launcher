@@ -44,11 +44,11 @@ func (msgs Messages) AddButton() string {
 	return Catalog.Format(msgs.locale, "addButton", nil)
 }
 
-// AddButtonHint says "Add files or create an item"
+// AddButtonHint says "Add a running program, files, or create an item"
 // in the language the app shows.
 func AddButtonHint() string { return In(i18n.Locale()).AddButtonHint() }
 
-// AddButtonHint says "Add files or create an item"
+// AddButtonHint says "Add a running program, files, or create an item"
 // in the language of msgs.
 func (msgs Messages) AddButtonHint() string {
 	return Catalog.Format(msgs.locale, "addButtonHint", nil)
@@ -72,26 +72,6 @@ func Search() string { return In(i18n.Locale()).Search() }
 // in the language of msgs.
 func (msgs Messages) Search() string {
 	return Catalog.Format(msgs.locale, "search", nil)
-}
-
-// SwitchToList says "Switch to list view"
-// in the language the app shows.
-func SwitchToList() string { return In(i18n.Locale()).SwitchToList() }
-
-// SwitchToList says "Switch to list view"
-// in the language of msgs.
-func (msgs Messages) SwitchToList() string {
-	return Catalog.Format(msgs.locale, "switchToList", nil)
-}
-
-// SwitchToGrid says "Switch to grid view"
-// in the language the app shows.
-func SwitchToGrid() string { return In(i18n.Locale()).SwitchToGrid() }
-
-// SwitchToGrid says "Switch to grid view"
-// in the language of msgs.
-func (msgs Messages) SwitchToGrid() string {
-	return Catalog.Format(msgs.locale, "switchToGrid", nil)
 }
 
 // Settings says "Settings"
@@ -144,6 +124,88 @@ func (msgs Messages) Create() string {
 	return Catalog.Format(msgs.locale, "create", nil)
 }
 
+// RunningWindows says "Running windows"
+// in the language the app shows.
+func RunningWindows() string { return In(i18n.Locale()).RunningWindows() }
+
+// RunningWindows says "Running windows"
+// in the language of msgs.
+func (msgs Messages) RunningWindows() string {
+	return Catalog.Format(msgs.locale, "runningWindows", nil)
+}
+
+// NoRunningWindows says "No windows to add"
+// in the language the app shows.
+func NoRunningWindows() string { return In(i18n.Locale()).NoRunningWindows() }
+
+// NoRunningWindows says "No windows to add"
+// in the language of msgs.
+func (msgs Messages) NoRunningWindows() string {
+	return Catalog.Format(msgs.locale, "noRunningWindows", nil)
+}
+
+// GlobalShortcut says "Global shortcut"
+// in the language the app shows.
+func GlobalShortcut() string { return In(i18n.Locale()).GlobalShortcut() }
+
+// GlobalShortcut says "Global shortcut"
+// in the language of msgs.
+func (msgs Messages) GlobalShortcut() string {
+	return Catalog.Format(msgs.locale, "globalShortcut", nil)
+}
+
+// ShortcutUnset says "Not set"
+// in the language the app shows.
+func ShortcutUnset() string { return In(i18n.Locale()).ShortcutUnset() }
+
+// ShortcutUnset says "Not set"
+// in the language of msgs.
+func (msgs Messages) ShortcutUnset() string {
+	return Catalog.Format(msgs.locale, "shortcutUnset", nil)
+}
+
+// ShortcutRecording says "Press a shortcut…"
+// in the language the app shows.
+func ShortcutRecording() string { return In(i18n.Locale()).ShortcutRecording() }
+
+// ShortcutRecording says "Press a shortcut…"
+// in the language of msgs.
+func (msgs Messages) ShortcutRecording() string {
+	return Catalog.Format(msgs.locale, "shortcutRecording", nil)
+}
+
+// ShortcutNeedsModifier says "Include Ctrl, Alt or Win (or use F1–F12)"
+// in the language the app shows.
+func ShortcutNeedsModifier() string { return In(i18n.Locale()).ShortcutNeedsModifier() }
+
+// ShortcutNeedsModifier says "Include Ctrl, Alt or Win (or use F1–F12)"
+// in the language of msgs.
+func (msgs Messages) ShortcutNeedsModifier() string {
+	return Catalog.Format(msgs.locale, "shortcutNeedsModifier", nil)
+}
+
+// ShortcutKeyUnsupported says "This key cannot be used"
+// in the language the app shows.
+func ShortcutKeyUnsupported() string { return In(i18n.Locale()).ShortcutKeyUnsupported() }
+
+// ShortcutKeyUnsupported says "This key cannot be used"
+// in the language of msgs.
+func (msgs Messages) ShortcutKeyUnsupported() string {
+	return Catalog.Format(msgs.locale, "shortcutKeyUnsupported", nil)
+}
+
+// ShortcutUnavailable says "Cannot register {shortcut}"
+// in the language the app shows.
+func ShortcutUnavailable(shortcut string) string {
+	return In(i18n.Locale()).ShortcutUnavailable(shortcut)
+}
+
+// ShortcutUnavailable says "Cannot register {shortcut}"
+// in the language of msgs.
+func (msgs Messages) ShortcutUnavailable(shortcut string) string {
+	return Catalog.Format(msgs.locale, "shortcutUnavailable", map[string]any{"shortcut": shortcut})
+}
+
 // NoFilesTitle says "No files added yet."
 // in the language the app shows.
 func NoFilesTitle() string { return In(i18n.Locale()).NoFilesTitle() }
@@ -164,36 +226,6 @@ func (msgs Messages) NoFilesHint() string {
 	return Catalog.Format(msgs.locale, "noFilesHint", nil)
 }
 
-// Run says "Run"
-// in the language the app shows.
-func Run() string { return In(i18n.Locale()).Run() }
-
-// Run says "Run"
-// in the language of msgs.
-func (msgs Messages) Run() string {
-	return Catalog.Format(msgs.locale, "run", nil)
-}
-
-// Stop says "Stop"
-// in the language the app shows.
-func Stop() string { return In(i18n.Locale()).Stop() }
-
-// Stop says "Stop"
-// in the language of msgs.
-func (msgs Messages) Stop() string {
-	return Catalog.Format(msgs.locale, "stop", nil)
-}
-
-// RunsAsAdmin says "Runs as administrator"
-// in the language the app shows.
-func RunsAsAdmin() string { return In(i18n.Locale()).RunsAsAdmin() }
-
-// RunsAsAdmin says "Runs as administrator"
-// in the language of msgs.
-func (msgs Messages) RunsAsAdmin() string {
-	return Catalog.Format(msgs.locale, "runsAsAdmin", nil)
-}
-
 // RuntimeEditHint says "Click to edit runtime"
 // in the language the app shows.
 func RuntimeEditHint() string { return In(i18n.Locale()).RuntimeEditHint() }
@@ -212,26 +244,6 @@ func RuntimeRunningHint() string { return In(i18n.Locale()).RuntimeRunningHint()
 // in the language of msgs.
 func (msgs Messages) RuntimeRunningHint() string {
 	return Catalog.Format(msgs.locale, "runtimeRunningHint", nil)
-}
-
-// RuntimeRunningNoAutoHint says "Running, auto timing is off — click to edit the runtime"
-// in the language the app shows.
-func RuntimeRunningNoAutoHint() string { return In(i18n.Locale()).RuntimeRunningNoAutoHint() }
-
-// RuntimeRunningNoAutoHint says "Running, auto timing is off — click to edit the runtime"
-// in the language of msgs.
-func (msgs Messages) RuntimeRunningNoAutoHint() string {
-	return Catalog.Format(msgs.locale, "runtimeRunningNoAutoHint", nil)
-}
-
-// EmptyCell says "Blank"
-// in the language the app shows.
-func EmptyCell() string { return In(i18n.Locale()).EmptyCell() }
-
-// EmptyCell says "Blank"
-// in the language of msgs.
-func (msgs Messages) EmptyCell() string {
-	return Catalog.Format(msgs.locale, "emptyCell", nil)
 }
 
 // InsertEmpty says "Insert blank"
@@ -524,16 +536,6 @@ func (msgs Messages) RunAsAdministrator() string {
 	return Catalog.Format(msgs.locale, "runAsAdministrator", nil)
 }
 
-// UacHint says "the system asks for UAC on launch"
-// in the language the app shows.
-func UacHint() string { return In(i18n.Locale()).UacHint() }
-
-// UacHint says "the system asks for UAC on launch"
-// in the language of msgs.
-func (msgs Messages) UacHint() string {
-	return Catalog.Format(msgs.locale, "uacHint", nil)
-}
-
 // Icon says "Icon"
 // in the language the app shows.
 func Icon() string { return In(i18n.Locale()).Icon() }
@@ -604,46 +606,56 @@ func (msgs Messages) RuntimeMinutes() string {
 	return Catalog.Format(msgs.locale, "runtimeMinutes", nil)
 }
 
-// RuntimeCurrent says "Current: {current} ({ms} ms) · input → {preview}"
+// RuntimeCurrent says "Current: {current} · input → {preview}"
 // in the language the app shows.
-func RuntimeCurrent(current string, ms string, preview string) string {
-	return In(i18n.Locale()).RuntimeCurrent(current, ms, preview)
+func RuntimeCurrent(current string, preview string) string {
+	return In(i18n.Locale()).RuntimeCurrent(current, preview)
 }
 
-// RuntimeCurrent says "Current: {current} ({ms} ms) · input → {preview}"
+// RuntimeCurrent says "Current: {current} · input → {preview}"
 // in the language of msgs.
-func (msgs Messages) RuntimeCurrent(current string, ms string, preview string) string {
-	return Catalog.Format(msgs.locale, "runtimeCurrent", map[string]any{"current": current, "ms": ms, "preview": preview})
+func (msgs Messages) RuntimeCurrent(current string, preview string) string {
+	return Catalog.Format(msgs.locale, "runtimeCurrent", map[string]any{"current": current, "preview": preview})
 }
 
-// SubtractHour says "Subtract one hour from the stored runtime"
+// SubtractHour says "Subtract one hour from the input"
 // in the language the app shows.
 func SubtractHour() string { return In(i18n.Locale()).SubtractHour() }
 
-// SubtractHour says "Subtract one hour from the stored runtime"
+// SubtractHour says "Subtract one hour from the input"
 // in the language of msgs.
 func (msgs Messages) SubtractHour() string {
 	return Catalog.Format(msgs.locale, "subtractHour", nil)
 }
 
-// AddHour says "Add one hour to the stored runtime"
+// AddHour says "Add one hour to the input"
 // in the language the app shows.
 func AddHour() string { return In(i18n.Locale()).AddHour() }
 
-// AddHour says "Add one hour to the stored runtime"
+// AddHour says "Add one hour to the input"
 // in the language of msgs.
 func (msgs Messages) AddHour() string {
 	return Catalog.Format(msgs.locale, "addHour", nil)
 }
 
-// RuntimeChangesSaved says "changes the saved runtime at once"
+// SubtractHalfHour says "Subtract 30 minutes from the input"
 // in the language the app shows.
-func RuntimeChangesSaved() string { return In(i18n.Locale()).RuntimeChangesSaved() }
+func SubtractHalfHour() string { return In(i18n.Locale()).SubtractHalfHour() }
 
-// RuntimeChangesSaved says "changes the saved runtime at once"
+// SubtractHalfHour says "Subtract 30 minutes from the input"
 // in the language of msgs.
-func (msgs Messages) RuntimeChangesSaved() string {
-	return Catalog.Format(msgs.locale, "runtimeChangesSaved", nil)
+func (msgs Messages) SubtractHalfHour() string {
+	return Catalog.Format(msgs.locale, "subtractHalfHour", nil)
+}
+
+// AddHalfHour says "Add 30 minutes to the input"
+// in the language the app shows.
+func AddHalfHour() string { return In(i18n.Locale()).AddHalfHour() }
+
+// AddHalfHour says "Add 30 minutes to the input"
+// in the language of msgs.
+func (msgs Messages) AddHalfHour() string {
+	return Catalog.Format(msgs.locale, "addHalfHour", nil)
 }
 
 // RuntimeInvalid says "Runtime must be a number of minutes"
@@ -654,6 +666,16 @@ func RuntimeInvalid() string { return In(i18n.Locale()).RuntimeInvalid() }
 // in the language of msgs.
 func (msgs Messages) RuntimeInvalid() string {
 	return Catalog.Format(msgs.locale, "runtimeInvalid", nil)
+}
+
+// RestartToApply says "Restart the app to apply"
+// in the language the app shows.
+func RestartToApply() string { return In(i18n.Locale()).RestartToApply() }
+
+// RestartToApply says "Restart the app to apply"
+// in the language of msgs.
+func (msgs Messages) RestartToApply() string {
+	return Catalog.Format(msgs.locale, "restartToApply", nil)
 }
 
 // SearchPrograms says "Search programs…"
@@ -796,6 +818,16 @@ func (msgs Messages) AddingFiles() string {
 	return Catalog.Format(msgs.locale, "addingFiles", nil)
 }
 
+// AddingProgram says "Adding program…"
+// in the language the app shows.
+func AddingProgram() string { return In(i18n.Locale()).AddingProgram() }
+
+// AddingProgram says "Adding program…"
+// in the language of msgs.
+func (msgs Messages) AddingProgram() string {
+	return Catalog.Format(msgs.locale, "addingProgram", nil)
+}
+
 // UpdatingIcons says "Updating icons…"
 // in the language the app shows.
 func UpdatingIcons() string { return In(i18n.Locale()).UpdatingIcons() }
@@ -874,6 +906,16 @@ func StoreInvalid() string { return In(i18n.Locale()).StoreInvalid() }
 // in the language of msgs.
 func (msgs Messages) StoreInvalid() string {
 	return Catalog.Format(msgs.locale, "storeInvalid", nil)
+}
+
+// PathMissing says "This item's file or folder does not exist"
+// in the language the app shows.
+func PathMissing() string { return In(i18n.Locale()).PathMissing() }
+
+// PathMissing says "This item's file or folder does not exist"
+// in the language of msgs.
+func (msgs Messages) PathMissing() string {
+	return Catalog.Format(msgs.locale, "pathMissing", nil)
 }
 
 // NoIconPath says "This item has no path to extract an icon from"
@@ -1106,11 +1148,11 @@ func (msgs Messages) IconSize() string {
 	return Catalog.Format(msgs.locale, "iconSize", nil)
 }
 
-// IconSizeHint says "The size of icons and rows in the list and the grid"
+// IconSizeHint says "The size of icons and cells in the grid"
 // in the language the app shows.
 func IconSizeHint() string { return In(i18n.Locale()).IconSizeHint() }
 
-// IconSizeHint says "The size of icons and rows in the list and the grid"
+// IconSizeHint says "The size of icons and cells in the grid"
 // in the language of msgs.
 func (msgs Messages) IconSizeHint() string {
 	return Catalog.Format(msgs.locale, "iconSizeHint", nil)
@@ -1144,6 +1186,36 @@ func Large() string { return In(i18n.Locale()).Large() }
 // in the language of msgs.
 func (msgs Messages) Large() string {
 	return Catalog.Format(msgs.locale, "large", nil)
+}
+
+// GpuDrawing says "GPU drawing"
+// in the language the app shows.
+func GpuDrawing() string { return In(i18n.Locale()).GpuDrawing() }
+
+// GpuDrawing says "GPU drawing"
+// in the language of msgs.
+func (msgs Messages) GpuDrawing() string {
+	return Catalog.Format(msgs.locale, "gpuDrawing", nil)
+}
+
+// GpuDrawingHint says "Turning GPU drawing off uses less memory. Takes effect after a restart"
+// in the language the app shows.
+func GpuDrawingHint() string { return In(i18n.Locale()).GpuDrawingHint() }
+
+// GpuDrawingHint says "Turning GPU drawing off uses less memory. Takes effect after a restart"
+// in the language of msgs.
+func (msgs Messages) GpuDrawingHint() string {
+	return Catalog.Format(msgs.locale, "gpuDrawingHint", nil)
+}
+
+// ToggleGpuDrawing says "Toggle GPU drawing"
+// in the language the app shows.
+func ToggleGpuDrawing() string { return In(i18n.Locale()).ToggleGpuDrawing() }
+
+// ToggleGpuDrawing says "Toggle GPU drawing"
+// in the language of msgs.
+func (msgs Messages) ToggleGpuDrawing() string {
+	return Catalog.Format(msgs.locale, "toggleGpuDrawing", nil)
 }
 
 // BackgroundOnClose says "Run in background"
@@ -1216,31 +1288,31 @@ func (msgs Messages) Behavior() string {
 	return Catalog.Format(msgs.locale, "behavior", nil)
 }
 
-// AutoTiming says "Auto timing"
+// AutoTiming says "Timer"
 // in the language the app shows.
 func AutoTiming() string { return In(i18n.Locale()).AutoTiming() }
 
-// AutoTiming says "Auto timing"
+// AutoTiming says "Timer"
 // in the language of msgs.
 func (msgs Messages) AutoTiming() string {
 	return Catalog.Format(msgs.locale, "autoTiming", nil)
 }
 
-// AutoTimingHint says "Add a program's running time to its total while it runs"
+// AutoTimingHint says "Times how long programs run; some cannot be timed"
 // in the language the app shows.
 func AutoTimingHint() string { return In(i18n.Locale()).AutoTimingHint() }
 
-// AutoTimingHint says "Add a program's running time to its total while it runs"
+// AutoTimingHint says "Times how long programs run; some cannot be timed"
 // in the language of msgs.
 func (msgs Messages) AutoTimingHint() string {
 	return Catalog.Format(msgs.locale, "autoTimingHint", nil)
 }
 
-// AutoHide says "Auto-hide the launcher"
+// AutoHide says "Auto-hide"
 // in the language the app shows.
 func AutoHide() string { return In(i18n.Locale()).AutoHide() }
 
-// AutoHide says "Auto-hide the launcher"
+// AutoHide says "Auto-hide"
 // in the language of msgs.
 func (msgs Messages) AutoHide() string {
 	return Catalog.Format(msgs.locale, "autoHide", nil)
@@ -1266,21 +1338,41 @@ func (msgs Messages) AlwaysOnTop() string {
 	return Catalog.Format(msgs.locale, "alwaysOnTop", nil)
 }
 
-// AlwaysOnTopHint says "Keep the window above the other windows"
+// WheelPages says "Wheel switches pages"
 // in the language the app shows.
-func AlwaysOnTopHint() string { return In(i18n.Locale()).AlwaysOnTopHint() }
+func WheelPages() string { return In(i18n.Locale()).WheelPages() }
 
-// AlwaysOnTopHint says "Keep the window above the other windows"
+// WheelPages says "Wheel switches pages"
 // in the language of msgs.
-func (msgs Messages) AlwaysOnTopHint() string {
-	return Catalog.Format(msgs.locale, "alwaysOnTopHint", nil)
+func (msgs Messages) WheelPages() string {
+	return Catalog.Format(msgs.locale, "wheelPages", nil)
 }
 
-// ToggleAutoTiming says "Toggle auto timing"
+// WheelPagesHint says "On: wheel changes pages, Shift scrolls. Off: the reverse"
+// in the language the app shows.
+func WheelPagesHint() string { return In(i18n.Locale()).WheelPagesHint() }
+
+// WheelPagesHint says "On: wheel changes pages, Shift scrolls. Off: the reverse"
+// in the language of msgs.
+func (msgs Messages) WheelPagesHint() string {
+	return Catalog.Format(msgs.locale, "wheelPagesHint", nil)
+}
+
+// ToggleWheelPages says "Toggle wheel page switching"
+// in the language the app shows.
+func ToggleWheelPages() string { return In(i18n.Locale()).ToggleWheelPages() }
+
+// ToggleWheelPages says "Toggle wheel page switching"
+// in the language of msgs.
+func (msgs Messages) ToggleWheelPages() string {
+	return Catalog.Format(msgs.locale, "toggleWheelPages", nil)
+}
+
+// ToggleAutoTiming says "Toggle timer"
 // in the language the app shows.
 func ToggleAutoTiming() string { return In(i18n.Locale()).ToggleAutoTiming() }
 
-// ToggleAutoTiming says "Toggle auto timing"
+// ToggleAutoTiming says "Toggle timer"
 // in the language of msgs.
 func (msgs Messages) ToggleAutoTiming() string {
 	return Catalog.Format(msgs.locale, "toggleAutoTiming", nil)
@@ -1424,26 +1516,6 @@ func DataDirectory() string { return In(i18n.Locale()).DataDirectory() }
 // in the language of msgs.
 func (msgs Messages) DataDirectory() string {
 	return Catalog.Format(msgs.locale, "dataDirectory", nil)
-}
-
-// DataDirectoryHint says "The store, cached icons and window state live here"
-// in the language the app shows.
-func DataDirectoryHint() string { return In(i18n.Locale()).DataDirectoryHint() }
-
-// DataDirectoryHint says "The store, cached icons and window state live here"
-// in the language of msgs.
-func (msgs Messages) DataDirectoryHint() string {
-	return Catalog.Format(msgs.locale, "dataDirectoryHint", nil)
-}
-
-// OpenFolder says "Open folder"
-// in the language the app shows.
-func OpenFolder() string { return In(i18n.Locale()).OpenFolder() }
-
-// OpenFolder says "Open folder"
-// in the language of msgs.
-func (msgs Messages) OpenFolder() string {
-	return Catalog.Format(msgs.locale, "openFolder", nil)
 }
 
 // Icons says "Icons"

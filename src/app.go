@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -172,7 +173,14 @@ func (a *App) dispatch(fn func()) {
 func (a *App) minimize() {
 	if a.win != nil {
 		a.win.Minimize()
+		releaseMemory()
 	}
+}
+
+// releaseMemory returns to the system what the last frames left behind: a
+// window that left the screen keeps less while the app waits in the tray.
+func releaseMemory() {
+	debug.FreeOSMemory()
 }
 
 // notify queues a toast for the next frame; safe from any goroutine.
@@ -270,6 +278,9 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 		// A folder item opens its working directory; there is no process to
 		// track or time.
 		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
+		if !fileExists(plan.path) {
+			return launchPlan{}, errors.New(locales.PathMissing())
+		}
 		return plan, nil
 	}
 	if isShellTarget(item.Path) {
@@ -279,6 +290,9 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 		return plan, nil
 	}
 	plan.path = resolveLaunchPath(item.Path)
+	if !fileExists(plan.path) {
+		return launchPlan{}, errors.New(locales.PathMissing())
+	}
 	plan.track = isExecutable(plan.path)
 	return plan, nil
 }
@@ -426,6 +440,59 @@ func (a *App) addPathsAt(paths []string, tabGUID string, at int) {
 	}()
 }
 
+// addRunningWindow adds the program behind a window to the tab with tabGUID.
+func (a *App) addRunningWindow(w runningWindow, tabGUID string) {
+	if w.Path == "" {
+		return
+	}
+	absolute := a.store.Settings.AbsolutePaths
+	withIcon := a.win != nil
+	if !withIcon {
+		if item := buildRunningItem(w, absolute, false); item != nil {
+			a.addItems([]*AppItem{item}, tabGUID)
+		}
+		return
+	}
+	a.setBusy(locales.AddingProgram())
+	go func() {
+		item := buildRunningItem(w, absolute, true)
+		a.dispatch(func() {
+			a.setBusy("")
+			if item != nil {
+				a.addItems([]*AppItem{item}, tabGUID)
+			}
+		})
+	}()
+}
+
+// buildRunningItem makes an entry for the program of a window, named as the
+// program names itself rather than after the window's current title.
+func buildRunningItem(w runningWindow, absolute, withIcon bool) *AppItem {
+	path := normalizePath(w.Path)
+	if path == "" {
+		return nil
+	}
+	name := strings.TrimSpace(w.Name)
+	if name == "" {
+		name = defaultTitle(path)
+	}
+	icon := ""
+	if withIcon {
+		icon = writeIcon(path)
+	}
+	workDir := ""
+	if !isShellTarget(path) {
+		workDir = storedForm(filepath.Dir(path), absolute)
+	}
+	return &AppItem{
+		GUID:       uuid.NewString(),
+		Name:       name,
+		Path:       storedForm(path, absolute),
+		WorkingDir: workDir,
+		Icon:       icon,
+	}
+}
+
 // buildItems makes entries for paths, resolving shortcuts and caching icons. It
 // reads the disk, so it runs off the main thread outside tests.
 func buildItems(paths []string, absolute, withIcon bool) []*AppItem {
@@ -486,11 +553,15 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 	}
 	icon := ""
 	if withIcon {
-		// A shortcut's own icon is the one Explorer draws, with the app's
-		// badge; the target's may be a blank stub, as chrome_proxy.exe's is.
-		icon = writeIcon(path)
-		if icon == "" && target != path {
-			icon = writeIcon(target)
+		// An image shows itself, rather than the icon of its file type.
+		icon = contentIcon(path)
+		if icon == "" {
+			// A shortcut's own icon is the one Explorer draws, with the app's
+			// badge; the target's may be a blank stub, as chrome_proxy.exe's is.
+			icon = writeIcon(path)
+			if icon == "" && target != path {
+				icon = writeIcon(target)
+			}
 		}
 	}
 	return &AppItem{
@@ -533,14 +604,30 @@ func (a *App) updateIcon(guid string) error {
 	if item.Path == "" && item.Link == "" {
 		return errors.New(locales.NoIconPath())
 	}
-	// A shortcut's own icon is the one Explorer draws; its target's may be a
-	// blank stub.
-	icon := ""
+	linkPath, launchPath := "", ""
 	if item.Link != "" {
-		icon = writeIcon(absPath(item.Link))
+		linkPath = absPath(item.Link)
 	}
-	if icon == "" && item.Path != "" {
-		icon = writeIcon(resolveLaunchPath(item.Path))
+	if item.Path != "" {
+		launchPath = resolveLaunchPath(item.Path)
+	}
+	if !fileExists(linkPath) && !fileExists(launchPath) {
+		return errors.New(locales.PathMissing())
+	}
+	// A shortcut's own icon is the one Explorer draws; its target's may be a
+	// blank stub. An image or an .ico shows its own content.
+	icon := ""
+	if linkPath != "" {
+		icon = contentIcon(linkPath)
+		if icon == "" {
+			icon = writeIcon(linkPath)
+		}
+	}
+	if icon == "" && launchPath != "" {
+		icon = contentIcon(launchPath)
+		if icon == "" {
+			icon = writeIcon(launchPath)
+		}
 	}
 	if icon == "" {
 		return errors.New(locales.IconFailed())
@@ -612,18 +699,22 @@ func (a *App) openDataDir() {
 	_ = openPath(filepath.Join(absBase, dataDir))
 }
 
-// reveal shows an item in the file manager.
+// reveal shows an item in the file manager. An item without a file, or one
+// whose file is gone, says so instead.
 func (a *App) reveal(guid string) error {
 	item := a.item(guid)
 	if item == nil {
 		return fmt.Errorf("invalid item guid %q", guid)
 	}
-	target := absPath(item.Path)
-	if item.Path == "" && item.WorkingDir != "" {
+	target := ""
+	switch {
+	case item.Path != "":
+		target = resolveLaunchPath(item.Path)
+	case item.WorkingDir != "":
 		target = absPath(item.WorkingDir)
 	}
-	if target == "" {
-		return nil
+	if !fileExists(target) {
+		return errors.New(locales.PathMissing())
 	}
 	mygo.Shell.ShowItemInFolder(target)
 	return nil

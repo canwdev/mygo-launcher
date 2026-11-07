@@ -40,11 +40,8 @@ func installKey() string {
 	return hex.EncodeToString(sum[:])
 }
 
-// instanceTitle 返回当前实例的窗口标题：应用名 + 完整安装目录。
-//
-// 用完整安装目录作为定位标识：FindWindowW 只能按窗口标题精确匹配（大小写不敏感），
-// 把完整目录放进标题后，FindWindowW 就能按目录找到对应窗口；且完整目录天然唯一
-// （不同安装目录全路径必不同），无需再叠加校验位。标题本身也直接展示安装位置。
+// instanceTitle 返回实例的说明：应用名 + 完整安装目录，用作托盘悬停提示。
+// 窗口标题只有 appName；托盘提示保留安装位置，不同目录的副本也能分辨。
 func instanceTitle(dir string) string {
-	return "MyGo Launcher - " + dir
+	return appName + " - " + dir
 }

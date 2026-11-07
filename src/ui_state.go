@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // uiPrefs are the view's own settings, which the store does not hold: they
@@ -12,19 +13,27 @@ import (
 // store.
 type uiPrefs struct {
 	Theme     string `json:"theme"`               // auto, light or dark
-	ViewMode  string `json:"view_mode"`           // list or grid
 	ActiveTab string `json:"active_tab"`          // guid of the tab shown
 	Accent    string `json:"accent,omitempty"`    // preset id or #rrggbb; empty is blue
 	Language  string `json:"language,omitempty"`  // auto, en or zh-Hans
 	IconSize  string `json:"icon_size,omitempty"` // small, medium or large
+	// GPU draws with the graphics card; off draws in memory to keep the
+	// footprint low. The renderer is chosen when the window opens.
+	GPU bool `json:"gpu,omitempty"`
+	// WheelPages switches pages with the wheel instead of scrolling lists and
+	// grids; it is on unless the settings turn it off.
+	WheelPages bool `json:"wheel_pages"`
+	// Shortcut shows or hides the launcher from any window, in the form
+	// mygo's global shortcuts take, such as "Ctrl+Alt+Space"; empty is none.
+	Shortcut string `json:"shortcut,omitempty"`
 }
 
 func defaultPrefs() uiPrefs {
 	return uiPrefs{
-		Theme:    "auto",
-		ViewMode: "list",
-		Language: "auto",
-		IconSize: "medium",
+		Theme:      "auto",
+		Language:   "auto",
+		IconSize:   "medium",
+		WheelPages: true,
 	}
 }
 
@@ -42,9 +51,6 @@ func loadPrefs() uiPrefs {
 	default:
 		p.Theme = "auto"
 	}
-	if p.ViewMode != "grid" {
-		p.ViewMode = "list"
-	}
 	if !validAccent(p.Accent) {
 		p.Accent = ""
 	}
@@ -58,6 +64,7 @@ func loadPrefs() uiPrefs {
 	default:
 		p.IconSize = "medium"
 	}
+	p.Shortcut = strings.TrimSpace(p.Shortcut)
 	return p
 }
 

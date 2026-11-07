@@ -312,6 +312,19 @@ func TestShellTargetsAreNotPaths(t *testing.T) {
 	}
 }
 
+// TestPlanLaunchReportsMissingPath 验证启动前就发现路径失效，而不是交给系统报错。
+func TestPlanLaunchReportsMissingPath(t *testing.T) {
+	app := newTestApp(t)
+	app.store.Apps["gone"] = &AppItem{GUID: "gone", Name: "Gone", Path: "C:/tools/gone.exe"}
+	if _, err := app.planLaunch("gone"); err == nil {
+		t.Fatal("a missing path must be reported before the launch")
+	}
+	app.store.Apps["none"] = &AppItem{GUID: "none", Name: "None"}
+	if _, err := app.planLaunch("none"); err == nil {
+		t.Fatal("an item without a path or folder must be reported")
+	}
+}
+
 // TestViewSettingsShowsCLaunchMigration 验证设置的数据分组最下面是迁移那一条。
 func TestViewSettingsShowsCLaunchMigration(t *testing.T) {
 	_, v, _ := newTestView(t, 720, 460)

@@ -1,0 +1,41 @@
+diff --git a/cmd/mygo/proc.go b/cmd/mygo/proc.go
+index 2aaf805c..9f2e3044 100644
+--- a/cmd/mygo/proc.go
++++ b/cmd/mygo/proc.go
+@@ -100,6 +100,9 @@ func goBuild(ctx context.Context, c *Config, t *task, out string, env []string,
+ 		}
+ 		return &goBuildError{out: p.diag.String(), err: err}
+ 	}
++	if err := upxPack(out); err != nil {
++		return err
++	}
+ 	if p.diag.Len() > 0 { // warnings
+ 		l := con.output("go", os.Stderr)
+ 		_, _ = l.Write([]byte(p.diag.String()))
+@@ -108,6 +111,26 @@ func goBuild(ctx context.Context, c *Config, t *task, out string, env []string,
+ 	return nil
+ }
+ 
++// upxPack compresses a Windows executable with the packer MYGO_UPX names, if
++// any, so the installer, archive and update carry the packed file.
++func upxPack(out string) error {
++	tool := os.Getenv("MYGO_UPX")
++	if tool == "" || !strings.EqualFold(filepath.Ext(out), ".exe") {
++		return nil
++	}
++	cmd := exec.Command(tool, "--best", "--lzma", out)
++	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
++	err := cmd.Run()
++	if err == nil {
++		return nil
++	}
++	var exit *exec.ExitError
++	if errors.As(err, &exit) && exit.ExitCode() == 2 {
++		return nil // UPX's warning: the file is still packed
++	}
++	return fmt.Errorf("upx %s: %w", filepath.Base(out), err)
++}
++
+ // goBuildError is a go build that failed, with what it printed.
+ type goBuildError struct {
+ 	out string

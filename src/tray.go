@@ -1,45 +1,10 @@
 package main
 
 import (
-	"bytes"
-	"image"
-	"image/png"
-	"sync"
-
 	"github.com/egoist/mygo"
-	"golang.org/x/image/draw"
 
 	"go-launcher/locales"
-	"go-launcher/resources"
 )
-
-// trayIconPx is the size of the tray icon: enough for the largest the
-// notification area draws it at, on a high-DPI screen.
-const trayIconPx = 64
-
-var (
-	trayIconOnce sync.Once
-	trayIconData []byte
-)
-
-// trayIconPNG is the app's icon at the size the tray shows it.
-func trayIconPNG() []byte {
-	trayIconOnce.Do(func() {
-		trayIconData = resources.IconPNG
-		src, err := png.Decode(bytes.NewReader(resources.IconPNG))
-		if err != nil {
-			return
-		}
-		dst := image.NewNRGBA(image.Rect(0, 0, trayIconPx, trayIconPx))
-		draw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Src, nil)
-		var b bytes.Buffer
-		if err := png.Encode(&b, dst); err != nil {
-			return
-		}
-		trayIconData = b.Bytes()
-	})
-	return trayIconData
-}
 
 // syncTray shows the tray icon while the app keeps running in the background,
 // and takes it away otherwise. Its menu follows the app's language.
@@ -52,11 +17,14 @@ func (v *view) syncTray() {
 		return
 	}
 	menu := v.trayMenu()
+	// The window title no longer carries the install directory, so the tray's
+	// hover text is where it stays.
+	tip := instanceTitle(installDir())
 	if v.tray == nil {
 		tray, err := mygo.NewTray(mygo.TrayOptions{
 			ID:      "main",
-			Icon:    trayIconPNG(),
-			ToolTip: mygo.App.Name(),
+			Icon:    v.trayIcon(),
+			ToolTip: tip,
 			Menu:    menu,
 		})
 		if err != nil {
@@ -70,6 +38,7 @@ func (v *view) syncTray() {
 		return
 	}
 	v.tray.SetMenu(menu)
+	v.tray.SetToolTip(tip)
 }
 
 // destroyTray removes the icon, if there is one.
@@ -85,7 +54,7 @@ func (v *view) destroyTray() {
 func (v *view) trayMenu() *mygo.Menu {
 	m := locales.In(mygo.App.Locale())
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Label: m.OpenMain(), Click: func(*mygo.MenuItem, *mygo.Window) { v.showMain() }},
+		{Label: m.OpenMain(), Accelerator: v.prefs.Shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { v.showMain() }},
 		{Label: m.Settings(), Click: func(*mygo.MenuItem, *mygo.Window) { v.openSettings() }},
 		{Type: mygo.MenuItemSeparator},
 		{Label: m.Exit(), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
@@ -103,9 +72,15 @@ func (v *view) showMain() {
 }
 
 // handleClose hides the main window in the tray while the app is set to keep
-// running in the background. A quit closes it as usual.
+// running in the background. Otherwise closing it quits: the settings window
+// and any tray icon left over from an earlier setting go with it, so nothing
+// keeps the app alive.
 func (v *view) handleClose(e *mygo.CloseEvent) {
 	if !v.app.keepInBackground() {
+		v.destroyTray()
+		if v.app.settingsWin != nil {
+			v.app.settingsWin.Close()
+		}
 		return
 	}
 	e.PreventDefault()
@@ -122,6 +97,7 @@ func (a *App) keepInBackground() bool {
 func (a *App) hideWindow() {
 	if a.win != nil {
 		a.win.Hide()
+		releaseMemory()
 	}
 }
 

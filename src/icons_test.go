@@ -65,6 +65,28 @@ func TestCustomIconCopiesAndShrinks(t *testing.T) {
 	}
 }
 
+// TestBuildItemUsesImageContent 验证添加图片时用图片本身作为图标，而不是文件类型
+// 的图标。
+func TestBuildItemUsesImageContent(t *testing.T) {
+	newTestApp(t)
+	src := filepath.Join(t.TempDir(), "poster.png")
+	writeTestPNG(t, src, 32, 32)
+
+	item := buildItem(src, true, true)
+	if item == nil {
+		t.Fatal("the image must become an item")
+	}
+	if !isAutoIcon(item.Icon) {
+		t.Fatalf("the image's own content must be its icon, got %q", item.Icon)
+	}
+	if _, err := os.Stat(absPath(item.Icon)); err != nil {
+		t.Fatalf("the icon must be written: %v", err)
+	}
+	if iconSource(item.Icon) == nil {
+		t.Fatal("the icon must decode")
+	}
+}
+
 // TestCustomIconExtractsFromProgram 验证选择程序时把它的图标取进 custom-icons，
 // 序号越界时报错。
 func TestCustomIconExtractsFromProgram(t *testing.T) {

@@ -96,8 +96,13 @@ func (v *view) tabChip(c *ui.Context, index int) {
 			v.centerNav = true
 			v.setActiveTab(guid)
 		}
+		// Hovering another chip lets its hover work again after a wheel
+		// switched the page; resting on the one the wheel was used on does not.
+		if b.Hovered() && v.hoverIgnoredTab != "" && v.hoverIgnoredTab != guid {
+			v.hoverIgnoredTab = ""
+		}
 		// Resting the pointer on a page shows it after a moment.
-		if b.Hovered() && !selected && !overItem && !filesOver {
+		if b.Hovered() && !selected && !overItem && !filesOver && guid != v.hoverIgnoredTab {
 			if v.hoverTab != guid {
 				v.hoverTab, v.hoverSince = guid, c.Now()
 			}
@@ -119,6 +124,97 @@ func (v *view) tabChip(c *ui.Context, index int) {
 			ui.Text(c, name).FontSize(13).FontWeight(weight).TextColor(color).SingleLine()
 		})
 	})
+}
+
+// wheelInput switches pages with a vertical wheel when the preference asks, and
+// takes the wheel so that the grid does not scroll. Shift swaps the two: while
+// the wheel switches pages, Shift+wheel scrolls, and while it does not, Shift
+// turns it on. The whole window content is the target; the system's title bar
+// is outside it.
+func (v *view) wheelInput(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputScroll || ev.DY == 0 {
+		return false
+	}
+	if ev.Mods != 0 && ev.Mods != ui.Shift {
+		return false
+	}
+	if ev.Mods == ui.Shift && v.prefs.WheelPages {
+		v.scrollPage(ev.DY)
+		return true
+	}
+	if ev.Mods == 0 && !v.prefs.WheelPages {
+		return false
+	}
+	if ev.Momentum {
+		return true // a touchpad's fling would turn page after page
+	}
+	if guid := v.tabAt(ev.X, ev.Y); guid != "" {
+		// The wheel switches the page under the pointer; resting on this chip
+		// must not switch it back after its hover delay. The chip may be the
+		// one shown already, which has no hover timer of its own.
+		v.hoverIgnoredTab = guid
+	}
+	// A wheel's notch is one step; a touchpad needs more travel, since its
+	// moves come in small pieces. One event turns at most one page, however
+	// far it scrolls, so a fast wheel or a fling cannot skip pages.
+	step := float32(40)
+	if ev.Precise {
+		step = 120
+	}
+	if ev.DY > 0 && v.wheelSum < 0 || ev.DY < 0 && v.wheelSum > 0 {
+		v.wheelSum = 0 // the other way starts over
+	}
+	v.wheelSum += ev.DY
+	switch {
+	case v.wheelSum >= step:
+		v.wheelSum = 0
+		v.switchPage(1)
+	case v.wheelSum <= -step:
+		v.wheelSum = 0
+		v.switchPage(-1)
+	}
+	return true
+}
+
+// scrollPage scrolls the page's grid by dy, for Shift+wheel while the wheel
+// switches pages.
+func (v *view) scrollPage(dy float32) {
+	tab := v.tab()
+	if tab == nil {
+		return
+	}
+	pv := v.pageState(tab)
+	pv.gridScroll.Y = max(0, min(pv.gridScroll.Y+dy, pv.gridScroll.MaxY))
+	v.refresh()
+}
+
+// tabAt returns the page chip at a point of the window, if there is one.
+func (v *view) tabAt(x, y float32) string {
+	for guid, r := range v.tabRects {
+		if x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H {
+			return guid
+		}
+	}
+	return ""
+}
+
+// switchPage shows the page delta places after the active one, wrapping
+// around.
+func (v *view) switchPage(delta int) {
+	tabs := v.app.store.Categories
+	if len(tabs) < 2 {
+		return
+	}
+	at := 0
+	for i := range tabs {
+		if tabs[i].GUID == v.prefs.ActiveTab {
+			at = i
+			break
+		}
+	}
+	at = (at + delta%len(tabs) + len(tabs)) % len(tabs)
+	v.centerNav = true
+	v.setActiveTab(tabs[at].GUID)
 }
 
 // tabItemCount is how many items a tab holds, empty cells aside.

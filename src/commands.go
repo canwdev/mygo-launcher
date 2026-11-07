@@ -12,8 +12,7 @@ import (
 // launchCooldown keeps a double click from running an item twice.
 const launchCooldown = time.Second
 
-// itemMenu is an item's menu, shared by a row's right click, a cell's ⋯ and a
-// row's ⋯.
+// itemMenu is an item's menu, opened by a right click on its cell.
 func (v *view) itemMenu(item *AppItem, slot int) func(m *ui.Menu) {
 	guid, name := item.GUID, item.Name
 	tabGUID := v.prefs.ActiveTab
@@ -269,7 +268,10 @@ func (v *view) batchUpdateIcons() {
 			if j.icon {
 				icon, _ = v.app.customIcon(j.path, 0)
 			} else {
-				icon = writeIcon(j.path)
+				icon = contentIcon(j.path)
+				if icon == "" {
+					icon = writeIcon(j.path)
+				}
 			}
 			if icon != "" {
 				results = append(results, result{j.guid, icon})

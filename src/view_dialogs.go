@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -52,7 +51,7 @@ func (v *view) itemDialog(c *ui.Context) {
 		title = m.CreateItem()
 	}
 	ui.Modal(c, &v.editOpen, func() {
-		ui.Column(c).Width(480).Gap(12).Children(func() {
+		ui.Column(c).Width(dialogWidth(c, 480)).Gap(12).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, title).FontSize(17).FontWeight(700)
 				if !v.editNew {
@@ -83,6 +82,14 @@ func (v *view) itemDialog(c *ui.Context) {
 func dialogBodyMax(c *ui.Context) float32 {
 	_, height := c.Size()
 	return max(140, height-220)
+}
+
+// dialogWidth is how wide a dialog's content may be: its preferred width, or
+// less in a narrow window, so the fields and buttons stay inside the modal's
+// margins and padding.
+func dialogWidth(c *ui.Context, preferred float32) float32 {
+	width, _ := c.Size()
+	return min(preferred, width-c.Theme().Space(20))
 }
 
 // itemDialogFields builds the editable fields of the item dialog.
@@ -122,11 +129,7 @@ func (v *view) itemDialogFields(c *ui.Context) {
 		})
 	})
 
-	ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-		ui.Checkbox(c, &v.editAdmin, m.RunAsAdministrator())
-		ui.Icon(c, iconShield).FontSize(13).TextColor(c.Theme().Warning)
-		ui.Text(c, m.UacHint()).FontSize(11).TextColor(p.muted)
-	})
+	ui.Checkbox(c, &v.editAdmin, m.RunAsAdministrator())
 
 	v.labeled(c, m.Icon(), func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -189,7 +192,7 @@ func (v *view) runtimeDialog(c *ui.Context) {
 	preview := formatRuntime(v.lang, int64(minutes)*60000)
 
 	ui.Modal(c, &v.runtimeOpen, func() {
-		ui.Column(c).Width(460).Gap(10).Children(func() {
+		ui.Column(c).Width(dialogWidth(c, 460)).Gap(10).Children(func() {
 			ui.Text(c, m.EditRuntime()).FontSize(17).FontWeight(700)
 
 			v.labeled(c, m.RuntimeMinutes(), func() {
@@ -197,15 +200,18 @@ func (v *view) runtimeDialog(c *ui.Context) {
 					v.saveRuntime()
 				}
 			})
-			ui.Text(c, m.RuntimeCurrent(formatRuntime(v.lang, current), strconv.FormatInt(current, 10), preview)).
+			ui.Text(c, m.RuntimeCurrent(formatRuntime(v.lang, current), preview)).
 				FontSize(11).TextColor(p.muted)
 
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Button(c, "-1h").Tooltip(m.SubtractHour()).
-					OnClick(func() { v.adjustRuntime(-time.Hour) })
+					OnClick(func() { v.adjustRuntime(-60) })
+				ui.Button(c, "-30m").Tooltip(m.SubtractHalfHour()).
+					OnClick(func() { v.adjustRuntime(-30) })
+				ui.Button(c, "+30m").Tooltip(m.AddHalfHour()).
+					OnClick(func() { v.adjustRuntime(30) })
 				ui.Button(c, "+1h").Tooltip(m.AddHour()).
-					OnClick(func() { v.adjustRuntime(time.Hour) })
-				ui.Text(c, m.RuntimeChangesSaved()).FontSize(11).TextColor(p.muted)
+					OnClick(func() { v.adjustRuntime(60) })
 			})
 
 			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
@@ -216,21 +222,15 @@ func (v *view) runtimeDialog(c *ui.Context) {
 	})
 }
 
-// adjustRuntime moves an item's stored runtime by d, never below zero. The
-// dialog stays open, so the buttons can be pressed repeatedly, and the minutes
-// field follows the saved value: pressing Save afterwards cannot undo them.
-func (v *view) adjustRuntime(d time.Duration) {
-	guid := v.runtimeGUID
-	if v.app.item(guid) == nil {
-		v.runtimeOpen = false
-		return
+// adjustRuntime moves the minutes waiting to be saved by delta, never below
+// zero. The dialog stays open, so the buttons can be pressed repeatedly, and
+// nothing is written until Save.
+func (v *view) adjustRuntime(delta int) {
+	minutes := 0
+	if n, err := strconv.Atoi(strings.TrimSpace(v.runtimeMinutes)); err == nil {
+		minutes = max(0, n)
 	}
-	ms := max(0, v.baseline(guid)+d.Milliseconds())
-	if err := v.app.setRuntimeMs(guid, ms); err != nil {
-		v.app.notify(err.Error())
-		return
-	}
-	v.runtimeMinutes = strconv.FormatInt(ms/60000, 10)
+	v.runtimeMinutes = strconv.Itoa(max(0, minutes+delta))
 	v.refresh()
 }
 
@@ -253,7 +253,7 @@ func (v *view) renameDialog(c *ui.Context) {
 		return
 	}
 	ui.Modal(c, &v.renameOpen, func() {
-		ui.Column(c).Width(380).Gap(12).Children(func() {
+		ui.Column(c).Width(dialogWidth(c, 380)).Gap(12).Children(func() {
 			ui.Text(c, v.renameTitle).FontSize(17).FontWeight(700)
 			if ui.TextInput(c, &v.renameName).AutoFocus().Submitted() {
 				v.applyRename()

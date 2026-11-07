@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/egoist/mygo"
@@ -35,7 +36,11 @@ func (v *view) openSettings() {
 		Content:         ui.View(v.settingsView),
 	})
 	v.app.settingsWin = w
-	w.OnClosed(func() { v.app.settingsWin = nil })
+	w.OnClosed(func() {
+		v.app.settingsWin = nil
+		v.shortcutRecording = false
+	})
+	v.updateAppIcons() // the settings window carries the gear badge
 }
 
 // settingsView is the content of the settings window: the choices the launcher
@@ -120,6 +125,7 @@ func (v *view) settingsView(c *ui.Context) {
 						if sw.Clicked() {
 							v.prefs.Accent = a.id
 							v.changedSettings()
+							v.scheduleAppIconUpdate()
 						}
 					}
 					// The custom accent is the accent in use with an edit icon on
@@ -140,6 +146,7 @@ func (v *view) settingsView(c *ui.Context) {
 						if ui.ColorPicker(c, &custom).Changed() {
 							v.prefs.Accent = hexColor(custom)
 							v.changedSettings()
+							v.scheduleAppIconUpdate()
 						}
 					})
 				})
@@ -157,16 +164,17 @@ func (v *view) settingsView(c *ui.Context) {
 					v.changedSettings()
 				}
 			})
-			row(m.BackgroundOnClose(), m.BackgroundOnCloseHint(), func() {
-				if ui.Switch(c, &s.BackgroundOnClose).Label(m.ToggleBackgroundOnClose()).Changed() {
-					v.setBackgroundOnClose(s.BackgroundOnClose)
-				}
-			})
 		})
 
 		group(m.Behavior(), func() {
+			row(m.GlobalShortcut(), "", func() {
+				v.shortcutControl(c)
+			})
 			row(m.AutoTiming(), m.AutoTimingHint(), func() {
 				if ui.Switch(c, &s.AutoTime).Label(m.ToggleAutoTiming()).Changed() {
+					if !s.AutoTime {
+						v.runtimeOpen = false // the timer's dialog goes with it
+					}
 					v.app.save()
 				}
 			})
@@ -175,9 +183,25 @@ func (v *view) settingsView(c *ui.Context) {
 					v.app.save()
 				}
 			})
-			row(m.AlwaysOnTop(), m.AlwaysOnTopHint(), func() {
+			row(m.AlwaysOnTop(), "", func() {
 				if ui.Switch(c, &s.AlwaysOnTop).Label(m.ToggleAlwaysOnTop()).Changed() {
 					v.app.setAlwaysOnTop(s.AlwaysOnTop)
+				}
+			})
+			row(m.WheelPages(), m.WheelPagesHint(), func() {
+				if ui.Switch(c, &v.prefs.WheelPages).Label(m.ToggleWheelPages()).Changed() {
+					v.setWheelPages(v.prefs.WheelPages)
+				}
+			})
+			row(m.GpuDrawing(), m.GpuDrawingHint(), func() {
+				if ui.Switch(c, &v.prefs.GPU).Label(m.ToggleGpuDrawing()).Changed() {
+					v.changedSettings()
+					v.app.notify(m.RestartToApply())
+				}
+			})
+			row(m.BackgroundOnClose(), m.BackgroundOnCloseHint(), func() {
+				if ui.Switch(c, &s.BackgroundOnClose).Label(m.ToggleBackgroundOnClose()).Changed() {
+					v.setBackgroundOnClose(s.BackgroundOnClose)
 				}
 			})
 		})
@@ -206,8 +230,8 @@ func (v *view) settingsView(c *ui.Context) {
 					v.refreshData()
 				}
 			})
-			row(m.DataDirectory(), m.DataDirectoryHint(), func() {
-				if ui.Button(c, m.OpenFolder()).Clicked() {
+			row(m.DataDirectory(), filepath.Join(absBase, dataDir), func() {
+				if ui.Button(c, m.RevealInFolder()).Clicked() {
 					v.app.openDataDir()
 				}
 			})
@@ -224,7 +248,14 @@ func (v *view) settingsView(c *ui.Context) {
 		})
 
 		group(m.About(), func() {
-			row("MyGo Launcher", m.Version(appVersion), func() {
+			ui.Row(c).Padding(8, 14).Gap(12).AlignItems(ui.Center).MinHeight(42).Children(func() {
+				if icon := v.aboutIconImage(); icon != nil {
+					ui.Image(c, icon).Size(28, 28).Fit(ui.Contain)
+				}
+				ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(2).Children(func() {
+					ui.Text(c, appName).FontSize(13).FontWeight(500)
+					ui.Text(c, m.Version(appVersion)).FontSize(11.5).TextColor(p.muted).LineHeight(1.35)
+				})
 				if ui.Button(c, m.Github()).Clicked() {
 					mygo.Shell.OpenExternal("https://github.com/canwdev/mygo-launcher")
 				}
@@ -338,6 +369,7 @@ func (v *view) changeTheme(mode string) {
 	}
 	v.app.dispatch(func() {
 		v.applyTheme()
+		v.updateAppIcons()
 		v.app.refresh()
 	})
 }
@@ -383,4 +415,13 @@ func localeTag(pref string) string {
 func (v *view) changedSettings() {
 	savePrefs(v.prefs)
 	v.app.refresh()
+}
+
+// setWheelPages keeps the wheel preference and forgets the hover it was
+// suppressing.
+func (v *view) setWheelPages(on bool) {
+	v.prefs.WheelPages = on
+	v.hoverIgnoredTab = ""
+	v.wheelSum = 0
+	v.savePrefs()
 }

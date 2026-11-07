@@ -118,6 +118,15 @@ func formatRuntime(lang string, ms int64) string {
 	return strings.Join(parts, " ")
 }
 
+// fileExists reports whether path names something on disk.
+func fileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {

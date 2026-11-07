@@ -4,6 +4,9 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -43,11 +46,13 @@ var (
 var instanceMutex windows.Handle
 
 var (
-	user32Singleton   = syscall.NewLazyDLL("user32.dll")
-	procFindWindowW   = user32Singleton.NewProc("FindWindowW")
-	procShowWindow    = user32Singleton.NewProc("ShowWindow")
-	procSetForeground = user32Singleton.NewProc("SetForegroundWindow")
-	procSetWindowPos  = user32Singleton.NewProc("SetWindowPos")
+	user32Singleton            = syscall.NewLazyDLL("user32.dll")
+	procGetWindowThreadProcess = user32Singleton.NewProc("GetWindowThreadProcessId")
+	procGetWindowTextLengthW   = user32Singleton.NewProc("GetWindowTextLengthW")
+	procGetWindowTextW         = user32Singleton.NewProc("GetWindowTextW")
+	procShowWindow             = user32Singleton.NewProc("ShowWindow")
+	procSetForeground          = user32Singleton.NewProc("SetForegroundWindow")
+	procSetWindowPos           = user32Singleton.NewProc("SetWindowPos")
 )
 
 // acquireSingleton claims the per-install-directory named mutex. It returns true
@@ -107,18 +112,55 @@ func activateExistingInstance() {
 // findMainWindow returns the HWND of the running copy's main window for this
 // install directory.
 //
-// The window title is the full install directory (see instanceTitle), so with
-// several instances running concurrently the lookup targets exactly this
-// directory's window: full paths differ between install directories, and
-// FindWindowW's title comparison is case-insensitive, covering launches with
-// different path casing. The old class-based lookup is intentionally dropped:
-// all instances share the Wails window class, so it cannot distinguish install
-// directories.
+// The title is the app's name, the same for every install directory, so the
+// lookup walks the top-level windows and keeps the one titled appName whose
+// process runs from this directory: settings windows have another title, and
+// copies in other directories run another executable.
 func findMainWindow() uintptr {
-	title, err := windows.UTF16PtrFromString(instanceTitle(installDir()))
-	if err != nil {
-		return 0
+	want := installDir()
+	var found uintptr
+	cb := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
+		if windowTitle(hwnd) != appName {
+			return 1
+		}
+		var pid uint32
+		procGetWindowThreadProcess.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+		if pid == 0 || pid == uint32(os.Getpid()) {
+			return 1
+		}
+		exe, ok := processImage(pid)
+		if !ok || !strings.EqualFold(filepath.Dir(exe), want) {
+			return 1
+		}
+		found = hwnd
+		return 0 // stop walking
+	})
+	_ = windows.EnumWindows(cb, nil)
+	return found
+}
+
+// windowTitle is the text of a window's title bar.
+func windowTitle(hwnd uintptr) string {
+	length, _, _ := procGetWindowTextLengthW.Call(hwnd)
+	if length == 0 {
+		return ""
 	}
-	h, _, _ := procFindWindowW.Call(0, uintptr(unsafe.Pointer(title)))
-	return h
+	buf := make([]uint16, length+1)
+	procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), length+1)
+	return windows.UTF16ToString(buf)
+}
+
+// processImage is the executable a process runs.
+func processImage(pid uint32) (string, bool) {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return "", false
+	}
+	defer windows.CloseHandle(h)
+	buf := make([]uint16, 32768)
+	size := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &size); err != nil {
+		return "", false
+	}
+	return windows.UTF16ToString(buf[:size]), true
 }

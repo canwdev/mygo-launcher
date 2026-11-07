@@ -57,6 +57,19 @@ type view struct {
 	hoverTab   string             // the page chip the pointer rests on
 	hoverSince time.Time
 
+	// wheelSum is how far a wheel has turned toward the next page while the
+	// wheel switches pages; hoverIgnoredTab is the chip it was used on, which
+	// must not switch the page back until another chip is hovered.
+	wheelSum        float32
+	hoverIgnoredTab string
+
+	// iconTimer redraws the app icons after the accent picker settles;
+	// aboutIcon is the tinted icon of the settings' About row, kept until the
+	// accent or appearance changes.
+	iconTimer    *time.Timer
+	aboutIcon    ui.ImageSource
+	aboutIconKey string
+
 	// pages is what each page keeps of its own: where it scrolls, and how
 	// many cells its grid row holds.
 	pages map[string]*pageView
@@ -101,6 +114,23 @@ type view struct {
 	confirmMsg    string
 	confirmAction func()
 
+	// windowPicker lists the programs with a window open, to add one as an
+	// item; pickerIcons keeps their icons by executable, and pickerLoading
+	// says a goroutine still reads them.
+	pickerOpen    bool
+	pickerWindows []runningWindow
+	pickerIcons   map[string]ui.ImageSource
+	pickerScroll  ui.ScrollState
+	pickerLoading bool
+
+	// registeredShortcut is the accelerator the app has bound at the system,
+	// and the rest is the settings' shortcut record: whether it listens for a
+	// chord, the text input that takes it, and why the last change failed.
+	registeredShortcut string
+	shortcutRecording  bool
+	shortcutDraft      string
+	shortcutInput      ui.Handle
+
 	// migrateStatus says how the last CLaunch import went, shown in the
 	// settings' migration row; empty while none ran.
 	migrateStatus string
@@ -113,7 +143,7 @@ type view struct {
 }
 
 func newView(app *App) *view {
-	return &view{
+	v := &view{
 		app:            app,
 		prefs:          loadPrefs(),
 		states:         map[string]ItemState{},
@@ -124,6 +154,9 @@ func newView(app *App) *view {
 		runtimeMinutes: "0",
 		editIconIndex:  "0",
 	}
+	// Without a window, as in tests, App.refresh redraws through the view.
+	app.view = v
+	return v
 }
 
 // later runs fn before the next build pass: actions that change the collection
@@ -180,6 +213,7 @@ func (v *view) view(c *ui.Context) {
 	c.Root().Background(p.bg)
 
 	page := ui.Column(c).Fill()
+	page.HandleInput(v.wheelInput)
 	// The whole window takes files dragged from Explorer: those over a tab
 	// chip go to that tab (see tabChip), the rest to the active one.
 	if files := page.DroppedFiles(); len(files) > 0 {
@@ -286,17 +320,14 @@ func (v *view) addFab(c *ui.Context) {
 	}
 	b.AnimatePose(pose, ui.Snappy)
 	b.Children(func() { ui.Icon(c, iconPlus).Size(20, 20) })
-	b.PopoverMenuButton(v.addMenu)
-}
-
-func (v *view) addMenu(m *ui.Menu) {
-	msgs := v.msgs()
-	if m.Item(msgs.PickFiles()).Chosen() {
-		v.later(func() { v.app.addFiles(v.tabGUID()) })
-	}
-	if m.Item(msgs.Create()).Chosen() {
-		v.later(v.openCreate)
-	}
+	b.OnClick(func() {
+		if v.pickerOpen {
+			v.closeWindowPicker()
+			return
+		}
+		v.openWindowPicker()
+	})
+	v.windowPicker(c, b)
 }
 
 // tabGUID is the guid of the active tab, or "" when there is none.
@@ -360,10 +391,10 @@ func dropTo(from, at int, copyItem bool) int {
 	return at - 1
 }
 
-// body shows the active page: a list of rows, or a grid of cells. While an
-// item is dragged every page builds, though hidden, so that showing another
-// page does not end the drag: the item's row or cell stays mounted, and the
-// drop can land anywhere in the page the pointer shows.
+// body shows the active page: a grid of cells. While an item is dragged every
+// page builds, though hidden, so that showing another page does not end the
+// drag: the item's cell stays mounted, and the drop can land anywhere in the
+// page the pointer shows.
 func (v *view) body(c *ui.Context) {
 	active := v.tab()
 	if active == nil {
@@ -387,11 +418,7 @@ func (v *view) body(c *ui.Context) {
 				}
 				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.pal.bg)
 				page.Children(func() {
-					if v.prefs.ViewMode == "grid" {
-						v.gridBody(c, tab)
-					} else {
-						v.listBody(c, tab)
-					}
+					v.gridBody(c, tab)
 				})
 			}
 		}
@@ -400,7 +427,6 @@ func (v *view) body(c *ui.Context) {
 
 // pageView is what the window keeps for a page of its own.
 type pageView struct {
-	listScroll ui.ScrollState
 	gridScroll ui.ScrollState
 	gridCols   int
 }
@@ -458,10 +484,4 @@ func (v *view) msgs() locales.Messages { return locales.In(v.lang) }
 func (v *view) savePrefs() {
 	savePrefs(v.prefs)
 	v.refresh()
-}
-
-// setViewMode switches the body between the list and the grid.
-func (v *view) setViewMode(mode string) {
-	v.prefs.ViewMode = mode
-	v.savePrefs()
 }

@@ -26,11 +26,17 @@ import (
 // size of the list's icon, on the sharpest display attached so the icon stays
 // crisp when scaled.
 func iconPixels() int {
+	return iconPixelsFor(64)
+}
+
+// iconPixelsFor is the pixel size of a dip size on the sharpest display
+// attached.
+func iconPixelsFor(dip float32) int {
 	scale := 1.0
 	for _, d := range mygo.Screen.Displays() {
 		scale = max(scale, d.ScaleFactor)
 	}
-	return int(64 * scale)
+	return int(dip * float32(scale))
 }
 
 // saveIcon writes image bytes into the cache folder under their own extension,
@@ -198,6 +204,28 @@ func normalizeIconImage(path string) ([]byte, string, error) {
 		return nil, "", errors.New(locales.IconTooLarge())
 	}
 	return buf.Bytes(), ".png", nil
+}
+
+// contentIcon draws the picture a file holds as its own icon: an image shows
+// itself, and an .ico its first icon, rather than the icon of its file type. It
+// returns "" when the file holds no picture the launcher can draw. The icon is
+// generated, so it goes in the cache folder, as writeIcon's does.
+func contentIcon(path string) string {
+	name := defaultTitle(filepath.Base(path))
+	if strings.EqualFold(filepath.Ext(path), ".ico") {
+		if data := extractIconResource(path, maxIconSide, 0); len(data) > 0 {
+			return saveIcon(data, ".png", name)
+		}
+		return ""
+	}
+	if !isIconImage(path) {
+		return ""
+	}
+	data, ext, err := normalizeIconImage(path)
+	if err != nil {
+		return ""
+	}
+	return saveIcon(data, ext, name)
 }
 
 // iconSource decodes the image an item's icon field points at: a bitmap of any
