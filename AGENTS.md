@@ -47,11 +47,10 @@ GOOS=linux go build -o build/launcher-linux ./src   # _other.go 桩必须能编�
 注意：入口在 `src/`，直接运行 `go build ./...` 会在仓库根目录生成 `src.exe`，应改用
 `go build -o build ./src`。
 
-发布时 `.github/workflows/release.yml` 会安装 UPX 5.3.0，并在 CI 克隆的 MyGo 上应用
-`.github/patches/mygo-upx.patch`，再以 `MYGO_UPX=upx` 构建：MyGo 的 `goBuild` 在生成安装包、
-归档和签名更新包之前用 `upx --best --lzma` 压缩 exe。补丁只作用于 CI 的 MyGo，本地
-`go tool mygo build` 默认不压缩。UPX 用运行内存换下载体积：本机 exe 从约 17MB 降到 5.1MB，
-软件绘制下的常驻内存从约 50MB 升到约 90MB。
+CI 发布 Windows 10/11 的 x64 与 arm64（`go tool mygo build -platform windows/amd64,windows/arm64`）。
+Windows 386 虽能编译，但运行时会退出（MyGo 的 `windows/386 is not supported yet`）；Go 1.27
+也不再支持 Windows 7/8。UPX 压缩曾在 `db2c8ec` 试过，因常驻内存从约 50MB 升到约 90MB、
+且要给 MyGo 固定提交打补丁，已弃用，见 `docs/UPDATES.md`。
 
 `mygo.json` 保存应用名、标识、版本、入口包（`main`）和输出目录；`resources/icon.png` 是应用
 图标（见 `docs/ICON.md`）。
@@ -290,7 +289,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   调用会 panic，所以界面也用 `app.updates` 判断。
 - 发布方案与 MyGo Music 相同：`mygo.json` 的 `updates.publicKey` + `github`
   （`canwdev/mygo-launcher`）；推送 `v<version>` 标签触发 draft Release，CI 用 secret
-  `MYGO_UPDATER_PRIVATE_KEY` 执行 `go tool mygo build -platform windows/amd64 -upload`。
+  `MYGO_UPDATER_PRIVATE_KEY` 执行
+  `go tool mygo build -platform windows/amd64,windows/arm64 -upload`，并为两种架构生成更新包。
   `CHANGELOG.md` 必须有 `## <version>` 小节，发布 draft 时勾选 latest。细节见
   `docs/UPDATES.md`。
 

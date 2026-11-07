@@ -44,21 +44,22 @@ MyGo Music 相同：MyGo 的 updater 插件负责检查、展示和安装，`myg
    - 校验 tag 与 `mygo.json` 的版本一致；
    - 从 CHANGELOG 取出该版本说明；
    - 创建 **draft** Release；
-   - 在仓库旁检出固定提交的 MyGo，应用 `.github/patches/mygo-upx.patch` 并安装
-     UPX 5.3.0；之后用 `MYGO_UPDATER_PRIVATE_KEY`、`GH_TOKEN` 和 `MYGO_UPX=upx` 执行
-     `go tool mygo build -platform windows/amd64 -upload`；
-   - MyGo 会在生成安装包、应用归档和签名更新包之前用 `upx --best --lzma` 压缩 exe，
-     所以下载体积整体变小；本机测试 exe 从约 17MB 降到 5.1MB；
-   - 把安装包、应用归档、`SHA256SUMS`、更新包和 `update-windows-amd64.json` 上传到 draft。
+   - 在仓库旁检出固定提交的 MyGo，然后用 `MYGO_UPDATER_PRIVATE_KEY` 和 `GH_TOKEN` 执行
+     `go tool mygo build -platform windows/amd64,windows/arm64 -upload`；
+   - 为 x64 和 arm64 各生成安装包、应用归档、签名更新包和对应的
+     `update-windows-<arch>.json`；
+   - 把安装包、应用归档、`SHA256SUMS`、更新包和 `update-windows-*.json` 上传到 draft。
 4. 在 GitHub 上检查 draft 的附件，然后手动发布，并确保勾选 **Set as the latest
    release**。安装后的应用通过 `releases/latest/download/` 读取清单。
 
-## UPX 压缩
+## UPX（已弃用）
 
-发布包在 CI 里用 UPX 压缩下载体积：`release.yml` 固定安装 UPX 5.3.0，并在固定提交的 MyGo
-上应用 `.github/patches/mygo-upx.patch`，然后以 `MYGO_UPX=upx` 执行 `mygo build`。补丁在
-生成安装包、应用归档和签名更新包之前执行 `upx --best --lzma`，因此 exe 从约 17MB 降到约
-5.1MB，安装包、归档和更新包都随之变小。本地构建不压缩。
+曾在提交 `db2c8ec6e160e2669d56889a7d34a766833d5215` 中实现：CI 安装 UPX 5.3.0，给固定提交的
+MyGo 打补丁（`.github/patches/mygo-upx.patch`），以 `MYGO_UPX=upx` 在生成安装包、归档和签名
+更新包之前执行 `upx --best --lzma`，exe 从约 17MB 降到约 5.1MB。
+
+之后移除，原因是代价太大：UPX 用运行内存换体积，软件绘制下常驻内存约从 50MB 升到 90MB；
+同时要给固定提交的 MyGo 维护补丁，增加构建复杂度。当前发布包不再压缩。
 
 本地验证签名打包：
 
@@ -67,7 +68,7 @@ MYGO_UPDATER_PRIVATE_KEY="$(cat /path/to/mygo-update.key)" \
   go tool mygo build -skip-installer
 ```
 
-不带密钥时仍能构建 exe，但不会生成 `update-windows-amd64.json` 和更新包。
+不带密钥时仍能构建 exe，但不会生成 `update-windows-*.json` 和更新包。
 
 ## 代码位置
 
@@ -75,10 +76,8 @@ MYGO_UPDATER_PRIVATE_KEY="$(cat /path/to/mygo-update.key)" \
 - `src/view_settings.go` — 关于分组里的更新设置与手动检查。
 - `src/main.go` — App.Run 前启用插件。
 - `locales/*.json` — 更新相关文案，改完运行 `go tool mygo generate`。
-- `.github/workflows/release.yml` — tag 触发的 draft + `-upload` 发布；安装 UPX 并应用
-  `.github/patches/mygo-upx.patch`，在打包前压缩 exe。
-- 注意 UPX 用运行内存换体积：软件绘制时常驻内存约 50MB（未压缩）会升到约 90MB；
-  更看重内存时可以去掉 `MYGO_UPX`。
+- `.github/workflows/release.yml` — tag 触发的 draft + `-upload` 发布，同时构建 x64 与
+  arm64；Release notes 末尾附带按架构下载的表格。
 
 ## 验证
 

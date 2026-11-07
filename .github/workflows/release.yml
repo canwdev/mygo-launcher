@@ -39,27 +39,6 @@ jobs:
           git -C $dest checkout --quiet $env:MYGO_COMMIT
           "checked out MyGo at $env:MYGO_COMMIT -> $dest"
 
-      # MyGo 的构建会把 exe 放进安装包、归档和更新包；补丁让它在这些步骤之前，
-      # 按 MYGO_UPX 指定的打包器压缩 exe（--best --lzma）。
-      - name: Patch MyGo to run UPX
-        shell: pwsh
-        run: |
-          $mygo = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'mygo'
-          git -C $mygo apply "$env:GITHUB_WORKSPACE/.github/patches/mygo-upx.patch"
-
-      # 固定版本，避免发布时突然换了打包器；file-lite 的 release 也这样钉住。
-      - name: Install UPX
-        shell: pwsh
-        run: |
-          $version = '5.3.0'
-          $zip = Join-Path $env:RUNNER_TEMP 'upx.zip'
-          $dir = Join-Path $env:RUNNER_TEMP 'upx'
-          curl.exe -fsSL -o $zip "https://github.com/upx/upx/releases/download/v$version/upx-$version-win64.zip"
-          Expand-Archive -Path $zip -DestinationPath $dir -Force
-          $exe = Get-ChildItem $dir -Recurse -Filter upx.exe | Select-Object -First 1
-          Split-Path $exe.FullName -Parent | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          & $exe.FullName --version
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -98,6 +77,19 @@ jobs:
           $text = ($notes -join "`n").Trim()
           if ([string]::IsNullOrWhiteSpace($text)) { throw "CHANGELOG.md has no section for $version" }
           $text | Out-File -FilePath "$env:RUNNER_TEMP/notes.md" -Encoding utf8
+
+          # 下载表让用户按 CPU 架构直接选安装包或便携版。
+          $asset = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME"
+          $table = @(
+            "",
+            "## 下载",
+            "",
+            "| 平台 | 安装包 | 便携版 |",
+            "| --- | --- | --- |",
+            "| Windows 10/11 x64 | [mygo-launcher-setup-$version-amd64.exe]($asset/mygo-launcher-setup-$version-amd64.exe) | [mygo-launcher-$version-windows-amd64.tar.gz]($asset/mygo-launcher-$version-windows-amd64.tar.gz) |",
+            "| Windows 10/11 arm64 | [mygo-launcher-setup-$version-arm64.exe]($asset/mygo-launcher-setup-$version-arm64.exe) | [mygo-launcher-$version-windows-arm64.tar.gz]($asset/mygo-launcher-$version-windows-arm64.tar.gz) |"
+          ) -join "`n"
+          Add-Content -Path "$env:RUNNER_TEMP/notes.md" -Value $table -Encoding utf8
           $text
 
       # mygo build -upload 把附件放进已存在的 draft release。
@@ -122,27 +114,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-          MYGO_UPX: upx
-        run: go tool mygo build -platform windows/amd64 -upload
-
-      # 补丁在 MYGO_UPX 下会先压缩再打包；这里确认 exe 确实被 UPX 压缩过。
-      - name: Check the packed executable
-        shell: pwsh
-        run: |
-          $exe = 'build/windows-amd64/MyGo Launcher.exe'
-          & upx -t $exe
-          if ($LASTEXITCODE -ne 0) { throw 'the app was not packed with UPX' }
-          'app size: {0:N0} bytes' -f (Get-Item $exe).Length
+        run: go tool mygo build -platform windows/amd64,windows/arm64 -upload
 
       - name: List the built files
         shell: pwsh
-        run: Get-ChildItem build/windows-amd64 | Select-Object Name, Length
+        run: Get-ChildItem build/windows-amd64, build/windows-arm64 | Select-Object Directory, Name, Length
 
       - name: Upload the build artifact
         uses: actions/upload-artifact@v4
         with:
           name: mygo-launcher-${{ steps.version.outputs.version }}
-          path: build/windows-amd64/
+          path: |
+            build/windows-amd64/
+            build/windows-arm64/
           if-no-files-found: error
           retention-days: 14
 

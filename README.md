@@ -8,11 +8,9 @@
 
 ## 安装
 
-从 [Releases](https://github.com/canwdev/mygo-launcher/releases/latest) 下载安装包
-`mygo-launcher-setup-<版本>-amd64.exe`，运行后按向导安装，之后的新版本由应用自动更新。
+目前支持 **Windows 10/11 的 x64 与 arm64**；不支持 32 位 Windows 和 Windows 7/8。
 
-也可以直接用便携版可执行文件：数据都保存在可执行文件旁的 `mygo-launcher-data/` 目录，整个目录可以随身携带。再次从同一目录启动会聚焦已打开的窗口。
-
+从 [Releases](https://github.com/canwdev/mygo-launcher/releases/latest) 下载对应架构的安装包或便携版。 
 ## 功能
 
 - 页面化整理常用程序、文件和文件夹，页面可新建、重命名、复制、移除和拖动排序
