@@ -126,10 +126,20 @@ func (a *App) applyStoreLocked(store AppStore) {
 		}
 	}
 	a.runtimeStats = stats
-	for guid := range a.running {
-		if store.Apps[guid] == nil {
-			delete(a.running, guid)
+	if store.Settings.AutoTime {
+		for guid := range a.running {
+			if store.Apps[guid] == nil {
+				delete(a.running, guid)
+			}
 		}
+	} else {
+		// The file turned the timer off: stop timing at once, as the switch
+		// does, without ending the processes.
+		for _, p := range a.running {
+			p.timed = false
+		}
+		a.running = map[string]*runningProc{}
+		a.tick.Store(false)
 	}
 	a.store = store
 }

@@ -30,7 +30,30 @@ const (
 	swpNoSize     = 0x0001
 	swpNoMove     = 0x0002
 	swpShowWindow = 0x0040
+
+	monitorDefaultToNearest = 2 // MONITOR_DEFAULTTONEAREST
 )
+
+// The Win32 shapes used to place a window another process owns.
+type winPoint struct{ X, Y int32 }
+
+type winRect struct{ Left, Top, Right, Bottom int32 }
+
+type winMonitorInfo struct {
+	Size    uint32
+	Monitor winRect
+	Work    winRect
+	Flags   uint32
+}
+
+type winWindowPlacement struct {
+	Length         uint32
+	Flags          uint32
+	ShowCmd        uint32
+	MinPosition    winPoint
+	MaxPosition    winPoint
+	NormalPosition winRect
+}
 
 // HWND_TOPMOST (-1) and HWND_NOTOPMOST (-2) as uintptr values (two's
 // complement), since negative untyped constants cannot convert to uintptr.
@@ -53,6 +76,10 @@ var (
 	procShowWindow             = user32Singleton.NewProc("ShowWindow")
 	procSetForeground          = user32Singleton.NewProc("SetForegroundWindow")
 	procSetWindowPos           = user32Singleton.NewProc("SetWindowPos")
+	procGetCursorPosSingleton  = user32Singleton.NewProc("GetCursorPos")
+	procGetWindowPlacement     = user32Singleton.NewProc("GetWindowPlacement")
+	procMonitorFromPoint       = user32Singleton.NewProc("MonitorFromPoint")
+	procGetMonitorInfo         = user32Singleton.NewProc("GetMonitorInfoW")
 )
 
 // acquireSingleton claims the per-install-directory named mutex. It returns true
@@ -93,20 +120,60 @@ func releaseSingleton() {
 // activateExistingInstance locates the main window of the already running copy
 // for the same install directory and brings it to the foreground, so a second
 // launch focuses the existing app instead of popping a dialog. The process then
-// exits without starting a new UI.
-func activateExistingInstance() {
+// exits without starting a new UI. A silent launch changes nothing, and one at
+// the pointer moves the window there first.
+func activateExistingInstance(opts launchOptions) {
 	hwnd := findMainWindow()
-	if hwnd == 0 {
+	if hwnd == 0 || opts.silent {
 		return
 	}
 	// Restore the window if it was minimized, then ask Windows to focus it.
 	procShowWindow.Call(hwnd, swRestore)
+	if opts.atCursor {
+		moveWindowToCursor(hwnd)
+	}
 	procSetForeground.Call(hwnd)
 	// SetForegroundWindow can be denied to a process that is not the current
 	// foreground process; the classic topmost flicker forces the window above
 	// the z-order regardless of that restriction.
 	procSetWindowPos.Call(hwnd, hwndTopmost, 0, 0, 0, 0, uintptr(swpNoMove|swpNoSize|swpShowWindow))
 	procSetWindowPos.Call(hwnd, hwndNotTopmost, 0, 0, 0, 0, uintptr(swpNoMove|swpNoSize))
+}
+
+// moveWindowToCursor moves another process's window around the pointer, in
+// the pixels of the display the window ends up on. The restored rectangle of
+// the placement is its size, even while it is minimized.
+func moveWindowToCursor(hwnd uintptr) {
+	var placement winWindowPlacement
+	placement.Length = uint32(unsafe.Sizeof(placement))
+	if ok, _, _ := procGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&placement))); ok == 0 {
+		return
+	}
+	width := int(placement.NormalPosition.Right - placement.NormalPosition.Left)
+	height := int(placement.NormalPosition.Bottom - placement.NormalPosition.Top)
+	if width <= 0 || height <= 0 {
+		return
+	}
+
+	var cursor winPoint
+	if ok, _, _ := procGetCursorPosSingleton.Call(uintptr(unsafe.Pointer(&cursor))); ok == 0 {
+		return
+	}
+	// MonitorFromPoint takes the point by value: two int32 packed little-endian.
+	packed := uintptr(uint32(cursor.X)) | uintptr(uint32(cursor.Y))<<32
+	monitor, _, _ := procMonitorFromPoint.Call(packed, monitorDefaultToNearest)
+	var info winMonitorInfo
+	info.Size = uint32(unsafe.Sizeof(info))
+	if monitor != 0 {
+		procGetMonitorInfo.Call(monitor, uintptr(unsafe.Pointer(&info)))
+	}
+
+	x, y := int(cursor.X)-width/2, int(cursor.Y)-height/2
+	if info.Work.Right > info.Work.Left && info.Work.Bottom > info.Work.Top {
+		x = clampAxis(x, width, int(info.Work.Left), int(info.Work.Right-info.Work.Left))
+		y = clampAxis(y, height, int(info.Work.Top), int(info.Work.Bottom-info.Work.Top))
+	}
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, uintptr(swpNoSize|swpShowWindow))
 }
 
 // findMainWindow returns the HWND of the running copy's main window for this

@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -153,19 +154,92 @@ func (v *view) iconAccent() ui.Color {
 	return accentColor(v.prefs.Accent, v.iconDark())
 }
 
+// customAppIcon loads the chosen program icon as a square image, or nil when
+// there is none or it cannot be read.
+func (v *view) customAppIcon() *image.NRGBA {
+	if v.prefs.AppIcon == "" {
+		return nil
+	}
+	data, err := os.ReadFile(dataPath(v.prefs.AppIcon))
+	if err != nil {
+		return nil
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil
+	}
+	// A picture put there by hand is bounded like the chooser's own copies.
+	img = shrinkBackground(img, maxIconSide)
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return nil
+	}
+	side := max(w, h)
+	dst := image.NewNRGBA(image.Rect(0, 0, side, side))
+	at := image.Rect((side-w)/2, (side-h)/2, (side-w)/2+w, (side-h)/2+h)
+	draw.Draw(dst, at, img, b.Min, draw.Over)
+	return dst
+}
+
+// appIconFor draws the icon the windows keep: the user's picture when one is
+// chosen, otherwise the icon of the accent color. A window of the settings
+// always carries the gear, whichever icon it is.
+func (v *view) appIconFor(gear bool) *image.NRGBA {
+	return v.appIconForDark(gear, v.iconDark())
+}
+
+func (v *view) appIconForDark(gear, dark bool) *image.NRGBA {
+	if custom := v.customAppIcon(); custom != nil {
+		if gear {
+			return gearIcon(custom, dark)
+		}
+		return custom
+	}
+	return appIcon(accentColor(v.prefs.Accent, dark), dark, gear)
+}
+
+// gearIcon puts the settings badge in the corner of src, at a size that
+// follows the picture's.
+func gearIcon(src *image.NRGBA, dark bool) *image.NRGBA {
+	parts := loadIconAssets()
+	if src.Bounds().Empty() || parts.gear.Bounds().Empty() {
+		return src
+	}
+	side := src.Bounds().Dx()
+	badgePx := max(1, side*gearBadgePx/512)
+	margin := max(1, side*gearMarginPx/512)
+	ink := gearInkLight
+	if dark {
+		ink = gearInkDark
+	}
+	mask := tintMask(parts.gear, ink)
+	badge := image.NewNRGBA(image.Rect(0, 0, badgePx, badgePx))
+	xdraw.CatmullRom.Scale(badge, badge.Bounds(), mask, mask.Bounds(), draw.Over, nil)
+	dst := image.NewNRGBA(src.Bounds())
+	copy(dst.Pix, src.Pix)
+	x, y := side-badgePx-margin, side-badgePx-margin
+	draw.Draw(dst, image.Rect(x, y, x+badgePx, y+badgePx), badge, image.Point{}, draw.Over)
+	for i := 3; i < len(dst.Pix); i += 4 {
+		if src.Pix[i] == 0 {
+			dst.Pix[i] = 0
+		}
+	}
+	return dst
+}
+
 // updateAppIcons redraws the window, the settings window and the tray in the
 // accent color, on the background of the current appearance.
 func (v *view) updateAppIcons() {
 	if v.app.win == nil {
 		return // not ready, or a test: there is no icon to set
 	}
-	accent, dark := v.iconAccent(), v.iconDark()
-	plain := appIcon(accent, dark, false)
+	plain := v.appIconFor(false)
 	if data := encodeIcon(plain, windowIconPx); data != nil {
 		_ = v.app.win.SetIcon(data)
 	}
 	if w := v.app.settingsWin; w != nil {
-		if data := encodeIcon(appIcon(accent, dark, true), windowIconPx); data != nil {
+		if data := encodeIcon(v.appIconFor(true), windowIconPx); data != nil {
 			_ = w.SetIcon(data)
 		}
 	}
@@ -176,20 +250,20 @@ func (v *view) updateAppIcons() {
 	}
 }
 
-// trayIcon is the tray's icon in the accent color.
+// trayIcon is the tray's icon in the accent color, or the chosen program icon.
 func (v *view) trayIcon() []byte {
-	return encodeIcon(appIcon(v.iconAccent(), v.iconDark(), false), trayIconPx)
+	return encodeIcon(v.appIconFor(false), trayIconPx)
 }
 
 // aboutIconImage is the app's icon in the appearance the settings window
-// shows, for its About row. It is drawn once and kept until the accent or
-// appearance changes.
+// shows, for its About row. It is drawn once and kept until the accent,
+// appearance or chosen icon changes.
 func (v *view) aboutIconImage() ui.ImageSource {
-	key := v.prefs.Accent + "/" + strconv.FormatBool(v.pal.dark)
+	key := v.prefs.Accent + "/" + strconv.FormatBool(v.pal.dark) + "/" + v.prefs.AppIcon
 	if v.aboutIcon != nil && v.aboutIconKey == key {
 		return v.aboutIcon
 	}
-	src := appIcon(accentColor(v.prefs.Accent, v.pal.dark), v.pal.dark, false)
+	src := v.appIconForDark(false, v.pal.dark)
 	if src == nil {
 		return nil
 	}

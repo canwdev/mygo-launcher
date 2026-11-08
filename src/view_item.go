@@ -18,7 +18,7 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	timed := st.Running && v.app.store.Settings.AutoTime
 
 	m := v.msgs()
-	hint := m.RuntimeEditHint()
+	hint := m.AutoTiming()
 	if timed {
 		hint = m.RuntimeRunningHint()
 	}
@@ -33,7 +33,7 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	if !timed {
 		field.Cursor(ui.CursorPointer)
 	}
-	if field.Hovered() && !timed {
+	if field.Hovered() && !timed && !v.keyboardNav {
 		field.Background(p.hover)
 	}
 	field.OnClick(func() {

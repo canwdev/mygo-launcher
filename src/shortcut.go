@@ -87,8 +87,8 @@ func (v *view) toggleMainWindow() {
 		}
 		return
 	}
-	v.showMain()
-	w.Focus()
+	// A window called for from anywhere comes up where the pointer is.
+	v.showMainAtCursor()
 }
 
 // startShortcutRecording listens for the next chord in the settings.

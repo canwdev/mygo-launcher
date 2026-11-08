@@ -34,6 +34,14 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		b := ui.ButtonBase(c.Key(guid)).Height(32).PaddingX(12).Gap(4).Radius(7).
 			AlignItems(ui.Center).FocusRing(false).Label(name)
 		v.tabRects[guid] = b.Bounds()
+		// The chip under the pointer, selected or not: a page turned by the
+		// keys from under the pointer must not be turned back by its hover,
+		// as a wheel turning it there would not.
+		if b.Hovered() {
+			v.hoveredTab = guid
+		} else if v.hoveredTab == guid {
+			v.hoveredTab = ""
+		}
 		// The chip being dragged draws no line of its own: the copy following
 		// the pointer would carry it, and its own place is no destination.
 		dragging := b.Dragging()
@@ -56,7 +64,7 @@ func (v *view) tabChip(c *ui.Context, index int) {
 		switch {
 		case selected:
 			b.Background(p.press)
-		case b.Hovered():
+		case b.Hovered() && !v.keyboardNav:
 			b.Background(p.hover)
 		}
 		// The line shows where a dragged page lands: at the left edge of the
@@ -113,7 +121,7 @@ func (v *view) tabChip(c *ui.Context, index int) {
 			v.hoverIgnoredTab = ""
 		}
 		// Resting the pointer on a page shows it after a moment.
-		if b.Hovered() && !selected && !overItem && !filesOver && guid != v.hoverIgnoredTab {
+		if b.Hovered() && !selected && !overItem && !filesOver && !v.keyboardNav && guid != v.hoverIgnoredTab {
 			if v.hoverTab != guid {
 				v.hoverTab, v.hoverSince = guid, c.Now()
 			}
@@ -134,6 +142,26 @@ func (v *view) tabChip(c *ui.Context, index int) {
 			ui.Text(c, name).FontSize(13).FontWeight(weight).TextColor(color).SingleLine()
 		})
 	})
+}
+
+// pageInput hands the page's input to the wheel and notes a pointer back on
+// the page: the mouse takes over from the keys, and its hover shows again.
+func (v *view) pageInput(ev ui.InputEvent) bool {
+	switch ev.Kind {
+	case ui.InputPointerDown:
+		v.pointerBack()
+	case ui.InputPointerMove:
+		v.pointerBack()
+	}
+	return v.wheelInput(ev)
+}
+
+// pointerBack ends keyboard navigation when the pointer moves or presses.
+func (v *view) pointerBack() {
+	if v.keyboardNav {
+		v.keyboardNav = false
+		v.refresh()
+	}
 }
 
 // wheelInput switches pages with a vertical wheel when the preference asks, and

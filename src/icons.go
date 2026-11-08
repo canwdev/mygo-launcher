@@ -274,7 +274,22 @@ func (a *App) pruneIcons() {
 			referenced[filepath.Base(app.Icon)] = true
 		}
 	}
+	// The program icon and the background chosen in the settings are icons
+	// of the custom folder too, though no item refers to them.
+	prefs, prefsOK := readPrefs()
+	if prefsOK {
+		for _, icon := range []string{prefs.AppIcon, prefs.Background} {
+			if icon != "" {
+				referenced[filepath.Base(icon)] = true
+			}
+		}
+	}
 	for _, dir := range []string{iconsDir, customIconsDir} {
+		if dir == customIconsDir && !prefsOK {
+			// A preferences file being edited is not one with no choices:
+			// leave the custom folder alone until it can be read.
+			continue
+		}
 		full := filepath.Join(dataBase(), dir)
 		entries, err := os.ReadDir(full)
 		if err != nil {

@@ -26,25 +26,43 @@ type uiPrefs struct {
 	// Shortcut shows or hides the launcher from any window, in the form
 	// mygo's global shortcuts take, such as "Ctrl+Alt+Space"; empty is none.
 	Shortcut string `json:"shortcut,omitempty"`
+	// AppIcon is the program icon the user chose, kept in custom-icons;
+	// empty draws the icon from the accent color.
+	AppIcon string `json:"app_icon,omitempty"`
+	// Background is the launcher's own picture, kept in custom-icons, and
+	// BackgroundOpacity how much of it shows over the content's color.
+	Background        string  `json:"background,omitempty"`
+	BackgroundOpacity float64 `json:"background_opacity,omitempty"`
 }
 
 func defaultPrefs() uiPrefs {
 	return uiPrefs{
-		Theme:      "auto",
-		Language:   "auto",
-		IconSize:   "medium",
-		WheelPages: true,
+		Theme:             "auto",
+		Language:          "auto",
+		IconSize:          "medium",
+		WheelPages:        true,
+		BackgroundOpacity: 0.4,
 	}
 }
 
 func loadPrefs() uiPrefs {
+	p, _ := readPrefs()
+	return p
+}
+
+// readPrefs reads the preferences and reports whether the file was there and
+// valid. Callers that delete files the preferences may name must know: an
+// unreadable file is not a file with no choices.
+func readPrefs() (uiPrefs, bool) {
 	p := defaultPrefs()
 	data, err := os.ReadFile(filepath.Join(dataBase(), uiStateFile))
 	if err != nil {
-		return p
+		// No file is no choices, which pruning may take as it is; a file
+		// that cannot be read or parsed is not.
+		return p, os.IsNotExist(err)
 	}
 	if err := json.Unmarshal(data, &p); err != nil {
-		return defaultPrefs()
+		return defaultPrefs(), false
 	}
 	switch p.Theme {
 	case "auto", "light", "dark":
@@ -65,7 +83,14 @@ func loadPrefs() uiPrefs {
 		p.IconSize = "medium"
 	}
 	p.Shortcut = strings.TrimSpace(p.Shortcut)
-	return p
+	if !allowedIcon(p.AppIcon) {
+		p.AppIcon = ""
+	}
+	if !allowedIcon(p.Background) {
+		p.Background = ""
+	}
+	p.BackgroundOpacity = min(1, max(0, p.BackgroundOpacity))
+	return p, true
 }
 
 func savePrefs(p uiPrefs) {

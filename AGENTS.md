@@ -112,6 +112,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 网格单元之间没有间隙，也不画卡片底色，只在悬停时显示圆角背景；图标与名称之间留 6 DIP：
   `gridBody` 用 `ui.Grid`（`Gap(0)`）按窗口宽度算出列数，因此不需要 `GridView` 和紧凑主题。
 - 网格单元左上角的时长默认不画，悬停该单元（或进程运行中）才出现，计时器关闭时始终不画；
+  时长字段未运行时的 Tooltip 复用设置里的「计时器」（`AutoTiming`），运行中才换成停止提示；
   条目还没有时长时只画计时图标，不画占位的「--」。
   计时字段在文件拖放的两个半区之后构建（两个半区盖住整个单元），这样点击落在计时上而不是
   半区；它自己也注册成「插在单元前」的文件放置区，并始终构建以保证半区的元素 ID 稳定。
@@ -149,6 +150,35 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   改为切页。一次滚轮事件最多切一页（超出阈值也重置 `wheelSum`，不连续切多页）；鼠标停在
   页面胶囊上滚轮时，用 `tabAt` 按胶囊矩形找到光标下的页面（当前选中的胶囊也要算），记下
   `hoverIgnoredTab`，它的 200ms 悬停自动切换被忽略，直到指针移到另一个胶囊。
+
+### 键盘与 Tooltip
+
+- 主界面的按键由 `src/view_keyboard.go` 用 `Context.OnWindowShortcut` 声明：不依赖焦点，
+  浮层和对话框优先，模态打开时根视图上的快捷键不注册。`overlayOpen()` 再按菜单、文件夹
+  面板、添加菜单、搜索和对话框的状态兜底，浮层打开时只保留 `Ctrl+F` 和 `Ctrl+,`。
+- 选中项是槽位下标：`view.keySel` 与 `keySelTab` 一起记住，空白格不参与。方向键按行列导航，
+  在第一行/第一个条目向上或向左、最后一行/最后一个条目向下或向右时调用 `switchPageKey`
+  翻页；选中格子用 `p.hover`，与鼠标悬停同一效果，并只在选中那一帧 `ScrollIntoView`。
+- 悬停条目等同于选中：`hoverSlot` / `hoverSlotTab` 只在指针移到另一个条目时更新选中项，
+  指针停着时方向键仍可离开该条目。鼠标停在页面胶囊上时用键盘切页，会把该胶囊记进
+  `hoverIgnoredTab`，和滚轮切页一样避免悬停延迟把它切回去。
+- `keyboardNav` 在方向键、字母和翻页键导航时置位：鼠标悬停不再画高亮、不再选择条目，
+  悬停才出现的运行时长也一起藏起；`pageInput` 收到指针移动或按下时调用 `pointerBack`
+  清除它，鼠标重新接管。
+- `keyboardFocus` 为真时（键盘导航中且没有浮层），选中格子里会放一个 0×0、无焦点环的
+  `key-focus` 盒子并让它获得焦点。焦点因此从之前点过的按钮（如设置齿轮）移开，回车由
+  窗口快捷键交给选中条目，而不是再次点击那个按钮。
+- 回车等同于单击选中条目（启动、打开文件夹面板、运行中则询问停止）；文件夹面板以选中格子
+  的中心（`keySelX/Y`）为锚点。
+- Tab 下一页（循环）、PgUp/PgDn 上一页/下一页、Home/End 第一页/最后一页、1~9 第 n 页；
+  切页后选中新页面的第一个条目。Esc 在没有浮层时按后台运行开关隐藏或最小化。
+- 条目字母按**槽位下标**分配，空白也占字母：`itemKeyKeys` 依次是
+  `QWERTYUIOPASDFGHJKLZXCVBNM`，对应 0~25。字母只选择条目，不启动；超过 26 个槽位没有字母。
+- Tooltip：顶栏搜索/设置显示 `搜索 (Ctrl+F)`、`设置 (Ctrl+,)`，加速键是字面量，不进文案；
+  条目 Tooltip 只显示名称，不显示字母。`Ctrl+F` 搜索、`Ctrl+,` 打开设置都由
+  `OnWindowShortcut` 注册，不再只靠 `c.Shortcut` 查询（后者需要别处先注册）。
+- 测试在 `src/view_keyboard_test.go`：方向键/翻页/字母选中、回车打开文件夹、搜索打开时按键
+  不落到主界面，以及悬停后的 Tooltip 文本。
 
 ### 从运行中的窗口添加
 
@@ -226,6 +256,16 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   删除条目/页面和更换图标后删掉两个目录里无人引用的文件。回收站这类状态图标不写图标缓存：
   `App.dynamicIcons` 按条目 GUID 保存解码后的图片，显示时优先于持久化图标；换了自定义图标时
   清掉，让用户的选择生效。
+
+- 设置 → 外观底部的「程序图标」通过 `App.pickAppIcon` 和 `App.customIcon(path, 0)` 选图：
+  图片、`.ico`、`.exe`、`.dll`，不含 SVG（窗口和托盘只收 PNG）；主窗口、托盘和「关于」用
+  原图，设置窗口由 `gearIcon` 在右下角叠齿轮。清除后回到强调色合成的图标。
+- 自定义背景由 `App.customBackground` 按显示器像素尺寸缩到最长边 1280~2560（无窗口时 1920）：
+  不透明图存质量为 90 的 JPEG，带透明才存 PNG。加载时 `loadBackgroundBitmap` 再用同一上限缩一次，
+  手工放进 `custom-icons` 的大图也不会多占内存。
+  `drawBackground` 按**整窗** cover 计算源矩形，顶栏和 `body` 的页面 Box 各画落在自己矩形里的
+  那一块，所以顶栏与内容区是一张连续的图；有背景时顶栏底色改用 `p.bg`，避免接缝。拖动时
+  多页仍各自画背景，当前页最后画并盖住其他页；设置窗口不受影响。
 
 ### 特殊条目与 shell 操作
 
@@ -313,10 +353,25 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - `App.refresh` 同时刷新主窗口和设置窗口；设置里的改动立刻反映到启动器。
 - 设置分组：外观（语言下拉框、主题分段控件、强调色色板（悬停提示成员名字）+ 打开取色器的
   显示当前颜色的圆形编辑按钮，色板下的
-  `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件）、行为（全局快捷键、计时器、自动隐藏、
+  `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件、程序图标、背景与背景透明度）、
+  行为（全局快捷键、计时器、自动隐藏、
   窗口置顶、滚轮切换页面、GPU 绘制、关闭后在后台运行）、路径（新条目绝对路径、批量转换）、
   数据（刷新、打开数据目录（hint 显示实际路径）、更新图标、从 CLaunch 迁移）、关于（上色后的
   程序图标、名称与版本、GitHub、更新）。GPU 开关改动后提示重启生效。
+
+## 启动参数
+
+- `src/launch_args.go` 解析 `os.Args`：`--silent` 静默启动，`--at-cursor` 在光标处显示；
+  两者同时出现时以 `--silent` 为准，其它参数忽略。
+- 冷启动时 `WindowOptions.Hidden` 为真，`--at-cursor` 在 `OnReadyToShow` 里调用
+  `showMainAtCursor()`，`--silent` 则不显示。静默启动时后台运行开启仍有托盘和全局快捷键；
+  关闭后台运行就没有托盘，只能靠全局快捷键唤回。
+- 第二实例仍由 `singleton_windows.go` 的按安装目录互斥认出：静默启动只退出、不打扰已有窗口；
+  `--at-cursor` 用 `GetWindowPlacement` 取恢复尺寸，按 `GetCursorPos` / 显示器工作区
+  调 `SetWindowPos` 移动已有窗口，不需要进程间通信。非 Windows 的 `activateExistingInstance`
+  是空操作。
+- 光标与工作区的进程内定位在 `src/window_place.go`：`placeWindowAtCursor` 是纯函数
+  （测试在 `src/launch_args_test.go`），窗口比工作区大时贴工作区左上角。
 
 ## 全局快捷键
 
@@ -328,7 +383,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   Super，F1–F12 可以单独使用，Escape 取消，Backspace/Delete 清除；键名映射见
   `shortcutKeyNames`。
 - 按下时主窗口可见且聚焦就隐藏（后台运行开启则隐藏到托盘，否则最小化），其余情况
-  `showMain()` 并聚焦。托盘「打开」项显示该快捷键。
+  `showMainAtCursor()`：窗口按普通尺寸居中于光标，并夹在光标所在显示器的工作区内，随后
+  显示并聚焦。托盘「打开」项仍用 `showMain()`，不改变窗口位置。
 - 测试把 `registerShortcut` / `unregisterShortcut` 换成假函数：真正的注册需要应用的 message
   loop，无头测试里不能用。
 
@@ -391,21 +447,25 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
     表示空白）和 `settings`（`auto_time` / `auto_hide` / `always_on_top` /
     `absolute_paths` / `background_on_close`）
   - `ui-state.json` — 窗口自身偏好：语言、主题、强调色、当前页面、GPU 绘制、滚轮切换页面、
-    全局快捷键
+    全局快捷键、自定义程序图标、背景图与背景透明度
   - `window-state.json` — 两个窗口的几何信息，通过 MyGo 的 `WindowStateStore`
   - `cached-icons/` — 自动生成的图标（`writeIcon`，以及 `contentIcon` 从图片 / `.ico` 内容
     生成的图标）
-  - `custom-icons/` — 用户在条目编辑器里选择的图标，按 `<名称>-<时间戳>.png` 保存
+  - `custom-icons/` — 用户在条目编辑器里选择的图标、自定义程序图标和启动器背景，按
+    `<名称>-<时间戳>` 保存；`pruneIcons` 除了条目图标，还要保护 `ui-state.json` 里的这两个
+    路径
 - store 只通过 `App.save` → `writeStoreAtomic` 写入，并记录文件指纹（mtime、大小、内容哈希），
   让监听器（`src/store_watch.go`，`mygo.WatchFiles`）区分应用自己的写入和手工编辑。手工改到
   一半（非法 JSON）的文件会被忽略，不会被当作空 store。
 - 条目路径相对于 `absBase`（开发时是工作目录，构建版是 exe 所在目录），除非「新条目使用绝对
   路径」；`convertItemPaths` 只转换条目路径、工作目录和快捷方式路径，**不转换图标路径**：图标
   始终相对于数据文件夹，迁移后仍能显示。
-- 可执行程序运行期间会被跟踪（`startTracked`），退出时把时长加到 `runtimeStats`；运行时对话框
-  的 `-1h` / `-30m` / `+30m` / `+1h` 只改待保存的分钟数（`adjustRuntime`），点保存后才通过
-  `setRuntimeMs` 写入。计时器（`auto_time`）关闭时，网格里的时长整个不画，进程结束也不累计；
-  提示是「部分程序无法自动计时」。
+- 可执行程序只在计时器（`auto_time`）开启时被跟踪（`startTracked`）：退出时把时长加到
+  `runtimeStats`，运行中也能停止。关闭计时器时 `App.stopTiming` 立即清空 `running`（不结束
+  进程）、把已跟踪进程标成不再计时、停止时钟重绘，并关闭运行时长对话框；网格里的时长整个
+  不画，程序可以重复启动，不再弹停止确认。重新开启只跟踪之后启动的程序。
+  运行时对话框的 `-1h` / `-30m` / `+30m` / `+1h` 只改待保存的分钟数（`adjustRuntime`），
+  点保存后才通过 `setRuntimeMs` 写入。提示是「部分程序无法自动计时」。
 - **只有程序计时**：`timeableItem`（`src/utils.go`）按扩展名判断 `Path` 是否为 `.exe` / `.bat` /
   `.cmd` / `.com` 且不是 shell 目标，不读磁盘（文件暂时不存在时仍显示时长）。文件夹、文件、
   网址和 shell 目标打开后没有可跟踪的进程，格子里不画计时字段，`openRuntime` 也直接返回；
@@ -483,6 +543,9 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/view_tabs.go` | 页面胶囊的行为：右键菜单、条目拖入、页面重排 |
 | `src/view_settings.go` | 设置窗口及其内容（齿轮打开） |
 | `src/view_grid.go` / `src/view_item.go` | 网格单元格与拖放；条目图标、时长等共用部分 |
+| `src/view_keyboard.go` | 主界面键盘：选中、翻页、回车、Esc、字母选中与窗口快捷键注册 |
+| `src/background.go` / `src/view_background.go` | 自定义背景归一化、解码缓存与整窗绘制 |
+| `src/view_appearance.go` | 设置里的程序图标和背景选择/清除 |
 | `src/view_window_picker.go` | 添加 FAB 的选择窗口：运行中的程序、系统位置与两个添加入口 |
 | `src/system_locations_*.go` | 系统位置列表：回收站、此电脑、控制面板、用户文件夹、网络、启动、最近使用和常用文件夹的 shell 路径 |
 | `src/special_items_*.go` | 特殊条目注册表：回收站等条目的额外菜单和状态图标 |
@@ -498,6 +561,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/tray.go` | 托盘图标、菜单，以及关闭窗口时隐藏到托盘的拦截 |
 | `src/ui_state.go` / `src/window_state_store.go` | `ui-state.json` 偏好；`window-state.json` |
 | `src/launch_*.go` / `src/lnk_*.go` / `src/singleton_*.go` | 进程启动与提权、`.lnk` 解析（COM）、按安装目录的单实例 |
+| `src/launch_args.go` / `src/window_place.go` | 启动参数（`--silent` / `--at-cursor`）与窗口在光标处的定位 |
 | `src/open_dialog_*.go` | 添加文件的打开对话框；Windows 上保留 `.lnk`，其他平台用 MyGo 的 |
 | `src/claunch.go` | CLaunch.ini 解析与迁移：解码、分节、Type 映射、导入到 store |
 | `src/utils.go` | `formatRuntime`、路径规范化、`splitArgs`、`isExecutable`、`isShellTarget` |
@@ -507,7 +571,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/data_root*.go` | 数据目录选择（安装版 `%LOCALAPPDATA%`、便携版 exe 旁）、旧数据迁移 |
 | `installer/installer.nsh` | 安装器钩子：搬走旧版残留数据，卸载时询问是否删除数据 |
 | `locales/` | 界面文案 `en.json` / `zh-Hans.json` 与生成的 `catalog_gen.go` |
-| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`SHORTCUT.md`（全局快捷键）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
+| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`SHORTCUT.md`（全局快捷键）、`RELEASE-0.2.3.md`（键盘、启动参数与计时器改动）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
 | `resources/` | 应用图标源文件；`resources.go` 把图标嵌入二进制，供托盘使用，图标文件由 `mygo.json` 的 `resourcesExclude` 排除，不随包安装 |
 
 没有前端。新增一个操作意味着在 `view` 或 `App` 上添加方法，并从需要它的菜单或按钮调用。

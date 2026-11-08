@@ -20,9 +20,12 @@ import (
 // runningProc is a process the launcher started and tracks: its runtime
 // accumulates until it exits, and it can be stopped.
 type runningProc struct {
-	start   time.Time
-	wait    func() error
-	stop    func() error
+	start time.Time
+	wait  func() error
+	stop  func() error
+	// timed is false once the timer was turned off while the process ran:
+	// its time is no longer added when it exits.
+	timed   bool
 	cleanup func()
 }
 
@@ -270,8 +273,13 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 	if item == nil {
 		return launchPlan{}, fmt.Errorf("invalid item guid %q", guid)
 	}
-	if _, ok := a.running[guid]; ok {
-		return launchPlan{}, errAlreadyRunning
+	// With the timer off nothing is tracked, so the same program can run
+	// more than once and there is no process to stop.
+	timing := a.store.Settings.AutoTime
+	if timing {
+		if _, ok := a.running[guid]; ok {
+			return launchPlan{}, errAlreadyRunning
+		}
 	}
 	plan := launchPlan{
 		guid:     guid,
@@ -301,7 +309,7 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 	if !fileExists(plan.path) {
 		return launchPlan{}, errors.New(locales.PathMissing())
 	}
-	plan.track = isExecutable(plan.path)
+	plan.track = isExecutable(plan.path) && timing
 	return plan, nil
 }
 
@@ -312,13 +320,19 @@ func (a *App) runLaunch(plan launchPlan) {
 		return
 	}
 	if plan.track {
-		p := &runningProc{}
+		p := &runningProc{timed: true}
 		if err := startTracked(plan.path, plan.args, plan.workDir, plan.elevated, p); err != nil {
 			a.notifyErr(err)
 			return
 		}
 		a.dispatch(func() {
-			a.running[plan.guid] = p
+			// The timer may have been turned off while the process started:
+			// it runs, but the window no longer tracks it.
+			if a.store.Settings.AutoTime {
+				a.running[plan.guid] = p
+			} else {
+				p.timed = false
+			}
 			if plan.hide {
 				a.minimize()
 			}
@@ -350,16 +364,33 @@ func (a *App) watchExit(guid string, p *runningProc) {
 // unless auto timing is off: then its clock never moved and there is nothing to
 // add.
 func (a *App) finishProcess(guid string, p *runningProc, elapsed int64) {
-	delete(a.running, guid)
+	// A process the timer stopped following may exit after the same item was
+	// started again: only drop the entry that is still this process.
+	if a.running[guid] == p {
+		delete(a.running, guid)
+	}
 	if p.cleanup != nil {
 		p.cleanup()
 	}
-	if !a.store.Settings.AutoTime {
+	if !a.store.Settings.AutoTime || !p.timed {
 		a.refresh()
 		return
 	}
 	a.runtimeStats[guid] += elapsed
 	a.save()
+}
+
+// stopTiming ends everything the timer was doing, without ending the programs
+// it tracked: no process is running as far as the window is concerned, a
+// launch no longer waits for one to stop, and a process still running when the
+// timer comes back is not timed from this point on either.
+func (a *App) stopTiming() {
+	for _, p := range a.running {
+		p.timed = false
+	}
+	a.running = map[string]*runningProc{}
+	a.tick.Store(false)
+	a.refresh()
 }
 
 func (a *App) stop(guid string) error {
@@ -743,6 +774,33 @@ func (a *App) pickFile(dir string) string {
 
 func (a *App) pickIcon(dir string) string {
 	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectIconTitle(), DefaultPath: dir, Filters: iconFilter()})
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	return a.storedPick(paths[0])
+}
+
+// appIconFilter is iconFilter without SVG: the window and tray icons take
+// PNG only, which a vector would have to be drawn at their size first.
+func appIconFilter() []mygo.FileFilter {
+	return []mygo.FileFilter{{Name: locales.IconFilesFilter(), Extensions: []string{
+		"png", "jpg", "jpeg", "gif", "bmp", "webp", "ico", "exe", "dll",
+	}}}
+}
+
+func (a *App) pickAppIcon(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectIconTitle(), DefaultPath: dir, Filters: appIconFilter()})
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	return a.storedPick(paths[0])
+}
+
+func (a *App) pickBackground(dir string) string {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.win, Title: locales.SelectFileTitle(), DefaultPath: dir, Filters: []mygo.FileFilter{{
+		Name:       locales.ImageFilesFilter(),
+		Extensions: []string{"png", "jpg", "jpeg", "gif", "bmp", "webp"},
+	}}})
 	if err != nil || len(paths) == 0 {
 		return ""
 	}

@@ -53,4 +53,4 @@ func releaseSingleton() {
 }
 
 // activateExistingInstance is a no-op on non-Windows platforms.
-func activateExistingInstance() {}
+func activateExistingInstance(launchOptions) {}

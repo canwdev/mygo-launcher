@@ -20,6 +20,8 @@ const (
 )
 
 func main() {
+	opts := parseLaunchArgs(os.Args[1:])
+
 	// Where the store, the icon cache and the window's preferences live: in
 	// the user's folder for an installed copy, beside the executable for a
 	// portable one. Everything below reads the data.
@@ -43,7 +45,7 @@ func main() {
 	if ok, err := acquireSingleton(key); err != nil {
 		log.Fatalf("single-instance check failed: %v", err)
 	} else if !ok {
-		activateExistingInstance()
+		activateExistingInstance(opts)
 		return
 	}
 	defer releaseSingleton()
@@ -90,7 +92,10 @@ func main() {
 			StateKey: windowStateKey,
 			// The store's always-on-top setting applies from the first frame.
 			AlwaysOnTop: app.store.Settings.AlwaysOnTop,
-			Content:     ui.View(v.view),
+			// A silent launch keeps it hidden; a launch at the pointer opens it
+			// once it has its place, without a flash at the saved position.
+			Hidden:  opts.silent || opts.atCursor,
+			Content: ui.View(v.view),
 		})
 
 		// The view builds after NewWindow returned, on the main loop's next
@@ -102,6 +107,9 @@ func main() {
 		win.OnFileDrop(func(e *mygo.FileDropEvent) {
 			app.addPaths(e.Paths, v.prefs.ActiveTab)
 		})
+		if opts.atCursor {
+			win.OnReadyToShow(v.showMainAtCursor)
+		}
 		v.syncTray()
 		v.registerSavedShortcut()
 

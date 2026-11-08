@@ -53,13 +53,28 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 	card := ui.Column(c).Height(m.cellHeight).Radius(8).Gap(6).
 		AlignItems(ui.Center).Justify(ui.Center).Role(ui.RoleListItem)
 	card.Cursor(ui.CursorPointer)
+	// Resting on an item chooses it, as if the keyboard had come to it: the
+	// arrows go on from there. A change of the hovered cell alone chooses,
+	// so arrows can leave the item the pointer still rests on.
+	hovered := card.Hovered() && !v.keyboardNav
+	if hovered {
+		if v.hoverSlotTab != tab.GUID || v.hoverSlot != index {
+			v.hoverSlotTab, v.hoverSlot = tab.GUID, index
+			v.keySelTab, v.keySel = tab.GUID, index
+		}
+	} else if v.hoverSlotTab == tab.GUID && v.hoverSlot == index {
+		v.hoverSlotTab, v.hoverSlot = "", -1
+	}
+	selected := v.keySelTab == tab.GUID && index == v.keySel
+	card.Tooltip(item.Name)
+	// The chosen item and the pointer's item look the same.
 	switch {
+	case selected || hovered:
+		card.Background(p.hover)
 	case v.isLocated(item.GUID):
 		card.Background(p.accent.Alpha(0.12))
 	case st.Running:
 		card.Background(p.accent.Alpha(0.07))
-	case card.Hovered():
-		card.Background(p.hover)
 	}
 
 	card.Drag(dragItem{guid: item.GUID, slot: index, tab: tab.GUID})
@@ -108,7 +123,24 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 	}
 	v.contextMenu(c, card, itemMenuKey(tab.GUID, item.GUID, index), v.itemMenu(item, tab.GUID, index))
 
+	if selected {
+		// Where Enter opens a folder panel, and what the keyboard scrolls to
+		// when it chose this cell.
+		b := card.Bounds()
+		v.keySelX, v.keySelY = b.X+b.W/2, b.Y+b.H/2
+		if v.keySelReveal {
+			card.ScrollIntoView()
+		}
+	}
+
 	card.Children(func() {
+		// While the keys choose items, the focus sits in the chosen cell
+		// rather than on a button clicked earlier: Enter then reaches the
+		// item's own action through the window shortcut, not that button's.
+		if selected && v.keyboardFocus {
+			ui.Box(c).Key("key-focus").Absolute().Size(0, 0).
+				Focusable().FocusRing(false).Focus()
+		}
 		v.itemIcon(c, item, m.gridIcon)
 		ui.Row(c).Gap(4).AlignItems(ui.Center).MaxWidth(m.cellWidth - 8).Children(func() {
 			if item.RunAsAdmin {
@@ -130,7 +162,7 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 		// or not, so the halves keep their places from frame to frame: a native
 		// drop names the element it lands on by its ID.
 		showRuntime := timeableItem(item) && v.app.store.Settings.AutoTime &&
-			(st.Running || card.Hovered())
+			(st.Running || (card.Hovered() && !v.keyboardNav))
 		runtime := v.runtimeField(c, item, st).Absolute().Top(2).Left(4).
 			Hidden(!showRuntime)
 		v.fileDropHalf(card, runtime, tab.GUID, index, true, false, p)

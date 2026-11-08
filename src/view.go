@@ -55,7 +55,29 @@ type view struct {
 	tabRects   map[string]ui.Rect // each page's chip
 	centerNav  bool               // center the active chip next frame
 	hoverTab   string             // the page chip the pointer rests on
+	hoveredTab string             // the page chip under the pointer, selected or not
 	hoverSince time.Time
+
+	// hoverSlot and hoverSlotTab are the item cell the pointer rests on, so
+	// that resting on another item chooses it once, as a click would, and
+	// arrows can go on from there.
+	hoverSlot    int
+	hoverSlotTab string
+
+	// keyboardNav is set while the keys choose items or pages: the pointer's
+	// hover no longer paints or chooses until it moves again. keyboardFocus
+	// is the frame's decision to keep the focus in the chosen item, so Enter
+	// goes to it rather than to a button pressed earlier.
+	keyboardNav   bool
+	keyboardFocus bool
+
+	// bgImage is the custom background decoded once, bgImageKey the path it
+	// came from, and bgWindowW/H the window it covers, so the header and the
+	// content show one continuous picture.
+	bgImage    *ui.Bitmap
+	bgImageKey string
+	bgWindowW  float32
+	bgWindowH  float32
 
 	// wheelSum is how far a wheel has turned toward the next page while the
 	// wheel switches pages; hoverIgnoredTab is the chip it was used on, which
@@ -110,6 +132,16 @@ type view struct {
 	// moment.
 	locate     string
 	locateTill time.Time
+
+	// keySel is the slot the keyboard chose, -1 while it chose none, and
+	// keySelTab the page it belongs to. keySelReveal scrolls it into view in
+	// the frame it was chosen; keySelX/Y is its cell's center in the window,
+	// where a folder panel opened by Enter centers.
+	keySel       int
+	keySelTab    string
+	keySelReveal bool
+	keySelX      float32
+	keySelY      float32
 
 	// launchAt throttles launches per item, so a double click runs once.
 	launchAt map[string]time.Time
@@ -178,6 +210,8 @@ func newView(app *App) *view {
 		pages:          map[string]*pageView{},
 		tabRects:       map[string]ui.Rect{},
 		centerNav:      true,
+		keySel:         -1,
+		hoverSlot:      -1,
 		launchAt:       map[string]time.Time{},
 		runtimeMinutes: "0",
 		editIconIndex:  "0",
@@ -235,16 +269,16 @@ func (v *view) view(c *ui.Context) {
 	// goroutine redraws while this says so.
 	v.app.tick.Store(v.anyRunning() && v.app.store.Settings.AutoTime)
 
-	if !c.FocusTakesText() && c.Shortcut(ui.Cmd, ui.KeyF) {
-		v.openSearch()
-	}
+	v.keyboard(c)
+	v.keyboardFocus = v.keyboardNav && !v.overlayOpen()
+	v.bgWindowW, v.bgWindowH = c.Size()
 
 	p := applyPalette(c, v.prefs.Accent)
 	v.pal = p
 	c.Root().Background(p.bg)
 
 	page := ui.Column(c).Fill()
-	page.HandleInput(v.wheelInput)
+	page.HandleInput(v.pageInput)
 	// The whole window takes files dragged from Explorer: those over a tab
 	// chip go to that tab (see tabChip), the rest to the active one.
 	if files := page.DroppedFiles(); len(files) > 0 {
@@ -286,6 +320,10 @@ func (v *view) view(c *ui.Context) {
 		}
 		v.centerNav = false
 	}
+
+	// The chosen cell scrolled into view in this frame; later frames must not
+	// rush the user's own scrolling.
+	v.keySelReveal = false
 
 	if deferred {
 		// An action queued for this pass changed the state this frame shows
@@ -459,6 +497,9 @@ func (v *view) body(c *ui.Context) {
 					continue
 				}
 				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.pal.bg)
+				if v.backgroundShown() {
+					page.Draw(v.drawBackground)
+				}
 				page.Children(func() {
 					v.gridBody(c, tab)
 				})

@@ -436,16 +436,6 @@ func (msgs Messages) NoFilesHint() string {
 	return Catalog.Format(msgs.locale, "noFilesHint", nil)
 }
 
-// RuntimeEditHint says "Click to edit runtime"
-// in the language the app shows.
-func RuntimeEditHint() string { return In(i18n.Locale()).RuntimeEditHint() }
-
-// RuntimeEditHint says "Click to edit runtime"
-// in the language of msgs.
-func (msgs Messages) RuntimeEditHint() string {
-	return Catalog.Format(msgs.locale, "runtimeEditHint", nil)
-}
-
 // RuntimeRunningHint says "Running — stop the program to edit its runtime"
 // in the language the app shows.
 func RuntimeRunningHint() string { return In(i18n.Locale()).RuntimeRunningHint() }
@@ -1238,6 +1228,16 @@ func (msgs Messages) IconIndexInvalid() string {
 	return Catalog.Format(msgs.locale, "iconIndexInvalid", nil)
 }
 
+// BackgroundInvalid says "Choose an image file for the background"
+// in the language the app shows.
+func BackgroundInvalid() string { return In(i18n.Locale()).BackgroundInvalid() }
+
+// BackgroundInvalid says "Choose an image file for the background"
+// in the language of msgs.
+func (msgs Messages) BackgroundInvalid() string {
+	return Catalog.Format(msgs.locale, "backgroundInvalid", nil)
+}
+
 // ElevationCancelled says "Elevation was cancelled"
 // in the language the app shows.
 func ElevationCancelled() string { return In(i18n.Locale()).ElevationCancelled() }
@@ -1338,6 +1338,16 @@ func (msgs Messages) IconFilesFilter() string {
 	return Catalog.Format(msgs.locale, "iconFilesFilter", nil)
 }
 
+// ImageFilesFilter says "Images"
+// in the language the app shows.
+func ImageFilesFilter() string { return In(i18n.Locale()).ImageFilesFilter() }
+
+// ImageFilesFilter says "Images"
+// in the language of msgs.
+func (msgs Messages) ImageFilesFilter() string {
+	return Catalog.Format(msgs.locale, "imageFilesFilter", nil)
+}
+
 // Appearance says "Appearance"
 // in the language the app shows.
 func Appearance() string { return In(i18n.Locale()).Appearance() }
@@ -1426,6 +1436,56 @@ func IconSizeHint() string { return In(i18n.Locale()).IconSizeHint() }
 // in the language of msgs.
 func (msgs Messages) IconSizeHint() string {
 	return Catalog.Format(msgs.locale, "iconSizeHint", nil)
+}
+
+// ProgramIcon says "Program icon"
+// in the language the app shows.
+func ProgramIcon() string { return In(i18n.Locale()).ProgramIcon() }
+
+// ProgramIcon says "Program icon"
+// in the language of msgs.
+func (msgs Messages) ProgramIcon() string {
+	return Catalog.Format(msgs.locale, "programIcon", nil)
+}
+
+// ChooseIcon says "Choose icon…"
+// in the language the app shows.
+func ChooseIcon() string { return In(i18n.Locale()).ChooseIcon() }
+
+// ChooseIcon says "Choose icon…"
+// in the language of msgs.
+func (msgs Messages) ChooseIcon() string {
+	return Catalog.Format(msgs.locale, "chooseIcon", nil)
+}
+
+// Background says "Background"
+// in the language the app shows.
+func Background() string { return In(i18n.Locale()).Background() }
+
+// Background says "Background"
+// in the language of msgs.
+func (msgs Messages) Background() string {
+	return Catalog.Format(msgs.locale, "background", nil)
+}
+
+// ChooseBackground says "Choose image…"
+// in the language the app shows.
+func ChooseBackground() string { return In(i18n.Locale()).ChooseBackground() }
+
+// ChooseBackground says "Choose image…"
+// in the language of msgs.
+func (msgs Messages) ChooseBackground() string {
+	return Catalog.Format(msgs.locale, "chooseBackground", nil)
+}
+
+// BackgroundOpacity says "Background opacity"
+// in the language the app shows.
+func BackgroundOpacity() string { return In(i18n.Locale()).BackgroundOpacity() }
+
+// BackgroundOpacity says "Background opacity"
+// in the language of msgs.
+func (msgs Messages) BackgroundOpacity() string {
+	return Catalog.Format(msgs.locale, "backgroundOpacity", nil)
 }
 
 // Small says "Small"

@@ -164,6 +164,43 @@ func (v *view) settingsView(c *ui.Context) {
 					v.changedSettings()
 				}
 			})
+			row(m.ProgramIcon(), "", func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					if icon := v.aboutIconImage(); icon != nil {
+						ui.Image(c, icon).Size(22, 22).Fit(ui.Contain)
+					}
+					if ui.Button(c, m.ChooseIcon()).Clicked() {
+						v.chooseAppIcon()
+					}
+					if v.prefs.AppIcon != "" {
+						if ui.Button(c, m.Clear()).Clicked() {
+							v.clearAppIcon()
+						}
+					}
+				})
+			})
+			row(m.Background(), "", func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					if ui.Button(c, m.ChooseBackground()).Clicked() {
+						v.chooseBackground()
+					}
+					if v.prefs.Background != "" {
+						if ui.Button(c, m.Clear()).Clicked() {
+							v.clearBackground()
+						}
+					}
+				})
+			})
+			row(m.BackgroundOpacity(), "", func() {
+				value := v.prefs.BackgroundOpacity
+				slider := ui.Slider(c.Key("background-opacity"), &value, 0.05, 0.9).
+					Width(150).Label(m.BackgroundOpacity())
+				if slider.Changed() {
+					v.prefs.BackgroundOpacity = value
+					v.savePrefs()
+					v.app.refresh()
+				}
+			})
 		})
 
 		group(m.Behavior(), func() {
@@ -173,7 +210,10 @@ func (v *view) settingsView(c *ui.Context) {
 			row(m.AutoTiming(), m.AutoTimingHint(), func() {
 				if ui.Switch(c, &s.AutoTime).Label(m.ToggleAutoTiming()).Changed() {
 					if !s.AutoTime {
-						v.runtimeOpen = false // the timer's dialog goes with it
+						// Everything the timer did stops at once: its dialog,
+						// the tracked processes and the redraws that counted.
+						v.runtimeOpen = false
+						v.app.stopTiming()
 					}
 					v.app.save()
 				}

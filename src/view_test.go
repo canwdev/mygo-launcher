@@ -54,6 +54,12 @@ func newTestSettings(t *testing.T, v *view) *ui.Tester {
 	return tt
 }
 
+// scrollSettingsToBehavior brings the lower part of the settings, where the
+// behavior switches are, into the window.
+func scrollSettingsToBehavior(settings *ui.Tester) {
+	settings.Scroll(280, 500, 0, 400)
+}
+
 // TestViewShowsItems 验证网格把 tab 里的条目画出来。
 func TestViewShowsItems(t *testing.T) {
 	_, _, tt := newTestView(t, 720, 460)
@@ -443,6 +449,7 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 		t.Fatal("running in the background must be on by default")
 	}
 	settings := newTestSettings(t, v)
+	scrollSettingsToBehavior(settings)
 
 	if err := settings.Click("Toggle run in background"); err != nil {
 		t.Fatalf("run in background: %v", err)
@@ -468,6 +475,7 @@ func TestViewSettingsTogglesGPU(t *testing.T) {
 		t.Fatal("drawing in memory must be the default")
 	}
 	settings := newTestSettings(t, v)
+	scrollSettingsToBehavior(settings)
 	if err := settings.Click("Toggle GPU drawing"); err != nil {
 		t.Fatalf("toggle GPU drawing: %v", err)
 	}
@@ -1020,10 +1028,11 @@ func TestFinishProcessRespectsAutoTiming(t *testing.T) {
 	app := newTestApp(t)
 	app.store.Apps["a"] = &AppItem{GUID: "a", Name: "A"}
 	app.runtimeStats["a"] = 5_000
-	app.running["a"] = &runningProc{}
+	first := &runningProc{}
+	app.running["a"] = first
 	app.store.Settings.AutoTime = false
 
-	app.finishProcess("a", &runningProc{}, time.Hour.Milliseconds())
+	app.finishProcess("a", first, time.Hour.Milliseconds())
 	if _, ok := app.running["a"]; ok {
 		t.Fatal("the finished process must no longer be tracked")
 	}
@@ -1031,9 +1040,10 @@ func TestFinishProcessRespectsAutoTiming(t *testing.T) {
 		t.Fatalf("with auto timing off the runtime must not move, got %dms", got)
 	}
 
-	app.running["a"] = &runningProc{}
+	second := &runningProc{timed: true}
+	app.running["a"] = second
 	app.store.Settings.AutoTime = true
-	app.finishProcess("a", &runningProc{}, 60_000)
+	app.finishProcess("a", second, 60_000)
 	if got := app.runtimeStats["a"]; got != 65_000 {
 		t.Fatalf("with auto timing on the time must be added, got %dms", got)
 	}
