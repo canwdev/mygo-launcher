@@ -571,7 +571,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/data_root*.go` | 数据目录选择（安装版 `%LOCALAPPDATA%`、便携版 exe 旁）、旧数据迁移 |
 | `installer/installer.nsh` | 安装器钩子：搬走旧版残留数据，卸载时询问是否删除数据 |
 | `locales/` | 界面文案 `en.json` / `zh-Hans.json` 与生成的 `catalog_gen.go` |
-| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`SHORTCUT.md`（全局快捷键）、`RELEASE-0.2.3.md`（键盘、启动参数与计时器改动）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
+| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
 | `resources/` | 应用图标源文件；`resources.go` 把图标嵌入二进制，供托盘使用，图标文件由 `mygo.json` 的 `resourcesExclude` 排除，不随包安装 |
 
 没有前端。新增一个操作意味着在 `view` 或 `App` 上添加方法，并从需要它的菜单或按钮调用。
