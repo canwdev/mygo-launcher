@@ -366,10 +366,11 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 冷启动时 `WindowOptions.Hidden` 为真，`--at-cursor` 在 `OnReadyToShow` 里调用
   `showMainAtCursor()`，`--silent` 则不显示。静默启动时后台运行开启仍有托盘和全局快捷键；
   关闭后台运行就没有托盘，只能靠全局快捷键唤回。
-- 第二实例仍由 `singleton_windows.go` 的按安装目录互斥认出：静默启动只退出、不打扰已有窗口；
-  `--at-cursor` 用 `GetWindowPlacement` 取恢复尺寸，按 `GetCursorPos` / 显示器工作区
-  调 `SetWindowPos` 移动已有窗口，不需要进程间通信。非 Windows 的 `activateExistingInstance`
-  是空操作。
+- 第二实例仍由 `singleton_windows.go` 的按安装目录互斥认出：第二次启动默认和
+  `--at-cursor` 一样（`existingInstanceOpts` 把没有 `--silent` 的启动当作光标启动），
+  用 `GetWindowPlacement` 取恢复尺寸，按 `GetCursorPos` / 显示器工作区调 `SetWindowPos`
+  把已有窗口移到指针处并聚焦，不需要进程间通信；静默启动只退出、不打扰已有窗口。
+  非 Windows 的 `activateExistingInstance` 是空操作。
 - 光标与工作区的进程内定位在 `src/window_place.go`：`placeWindowAtCursor` 是纯函数
   （测试在 `src/launch_args_test.go`），窗口比工作区大时贴工作区左上角。
 

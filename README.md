@@ -52,8 +52,8 @@
 "MyGo Launcher.exe" --at-cursor   # 在鼠标指针处显示主窗口
 ```
 
-`--silent` 与 `--at-cursor` 同时传入时以静默为准。应用已经在运行时，`--silent` 不改变现有
-窗口；`--at-cursor` 会把现有窗口移到指针处。
+`--silent` 与 `--at-cursor` 同时传入时以静默为准。应用已经在运行时，再次启动默认等同于
+`--at-cursor`：把现有窗口移到指针中心并聚焦；带了 `--silent` 则只退出，不改变现有窗口。
 
 ## 构建
 

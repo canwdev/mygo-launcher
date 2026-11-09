@@ -27,3 +27,13 @@ func parseLaunchArgs(args []string) launchOptions {
 	}
 	return opts
 }
+
+// existingInstanceOpts are the flags a second launch applies to the copy that
+// is already running: it shows the window at the pointer by default, just like
+// --at-cursor, and only --silent leaves the existing windows alone.
+func existingInstanceOpts(opts launchOptions) launchOptions {
+	if opts.silent {
+		return launchOptions{}
+	}
+	return launchOptions{atCursor: true}
+}

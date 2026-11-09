@@ -27,6 +27,26 @@ func TestParseLaunchArgs(t *testing.T) {
 	}
 }
 
+// TestExistingInstanceOpts 验证第二次启动的默认行为：没有参数时和在光标处显示
+// 一样，只有静默启动不打扢已在运行的窗口。
+func TestExistingInstanceOpts(t *testing.T) {
+	tests := []struct {
+		args []string
+		want launchOptions
+	}{
+		{nil, launchOptions{atCursor: true}},
+		{[]string{"--at-cursor"}, launchOptions{atCursor: true}},
+		{[]string{"--other"}, launchOptions{atCursor: true}},
+		{[]string{"--silent"}, launchOptions{}},
+		{[]string{"--silent", "--at-cursor"}, launchOptions{}},
+	}
+	for _, test := range tests {
+		if got := existingInstanceOpts(parseLaunchArgs(test.args)); got != test.want {
+			t.Fatalf("existingInstanceOpts(%q) = %+v, want %+v", test.args, got, test.want)
+		}
+	}
+}
+
 // TestPlaceWindowAtCursor 验证窗口居中于光标，并在工作区边缘收住。
 func TestPlaceWindowAtCursor(t *testing.T) {
 	work := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}

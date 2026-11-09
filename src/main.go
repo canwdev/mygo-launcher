@@ -45,7 +45,9 @@ func main() {
 	if ok, err := acquireSingleton(key); err != nil {
 		log.Fatalf("single-instance check failed: %v", err)
 	} else if !ok {
-		activateExistingInstance(opts)
+		// The running copy takes a launch of its own: it brings its window to
+		// the pointer, like --at-cursor, unless asked to stay silent.
+		activateExistingInstance(existingInstanceOpts(opts))
 		return
 	}
 	defer releaseSingleton()

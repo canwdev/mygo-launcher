@@ -50,8 +50,9 @@ Data lives in `mygo-launcher-data/go-launcher-data.json` next to the executable;
 "MyGo Launcher.exe" --at-cursor   # show the main window at the pointer
 ```
 
-When both are passed, silent wins. If the app is already running, `--silent` leaves its windows
-alone and `--at-cursor` moves the existing window to the pointer.
+When both are passed, silent wins. If the app is already running, launching it again acts like
+`--at-cursor`: the existing window moves to the pointer and takes focus. With `--silent` the second
+launch just exits and leaves the windows alone.
 
 ## Building
 

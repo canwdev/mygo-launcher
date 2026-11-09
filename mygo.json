@@ -1,7 +1,7 @@
 {
   "name": "MyGo Launcher",
   "identifier": "com.canwdev.golauncher",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "main": "./src",
   "out": "build",
   "resourcesExclude": [

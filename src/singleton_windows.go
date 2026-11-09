@@ -119,9 +119,9 @@ func releaseSingleton() {
 
 // activateExistingInstance locates the main window of the already running copy
 // for the same install directory and brings it to the foreground, so a second
-// launch focuses the existing app instead of popping a dialog. The process then
-// exits without starting a new UI. A silent launch changes nothing, and one at
-// the pointer moves the window there first.
+// launch focuses the existing app instead of popping a dialog. The window moves
+// to the pointer first, since a second launch behaves like --at-cursor; a silent
+// launch changes nothing. The process then exits without starting a new UI.
 func activateExistingInstance(opts launchOptions) {
 	hwnd := findMainWindow()
 	if hwnd == 0 || opts.silent {
@@ -129,9 +129,7 @@ func activateExistingInstance(opts launchOptions) {
 	}
 	// Restore the window if it was minimized, then ask Windows to focus it.
 	procShowWindow.Call(hwnd, swRestore)
-	if opts.atCursor {
-		moveWindowToCursor(hwnd)
-	}
+	moveWindowToCursor(hwnd)
 	procSetForeground.Call(hwnd)
 	// SetForegroundWindow can be denied to a process that is not the current
 	// foreground process; the classic topmost flicker forces the window above
