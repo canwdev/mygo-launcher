@@ -416,21 +416,21 @@ func (msgs Messages) ShortcutUnavailable(shortcut string) string {
 	return Catalog.Format(msgs.locale, "shortcutUnavailable", map[string]any{"shortcut": shortcut})
 }
 
-// NoFilesTitle says "No files added yet."
+// NoFilesTitle says "No files added yet"
 // in the language the app shows.
 func NoFilesTitle() string { return In(i18n.Locale()).NoFilesTitle() }
 
-// NoFilesTitle says "No files added yet."
+// NoFilesTitle says "No files added yet"
 // in the language of msgs.
 func (msgs Messages) NoFilesTitle() string {
 	return Catalog.Format(msgs.locale, "noFilesTitle", nil)
 }
 
-// NoFilesHint says "Click Add to pick files or create an item, or drop files here."
+// NoFilesHint says "Click + to pick files or create an item, or drop files here"
 // in the language the app shows.
 func NoFilesHint() string { return In(i18n.Locale()).NoFilesHint() }
 
-// NoFilesHint says "Click Add to pick files or create an item, or drop files here."
+// NoFilesHint says "Click + to pick files or create an item, or drop files here"
 // in the language of msgs.
 func (msgs Messages) NoFilesHint() string {
 	return Catalog.Format(msgs.locale, "noFilesHint", nil)
