@@ -283,7 +283,7 @@ func TestDialogsFitNarrowWindow(t *testing.T) {
 		_, v, tt := newTestView(t, int(width), 460)
 		v.openEdit("a")
 		tt.Frame()
-		fit(t, tt, "Browse…", "Clear", "Cancel", "Save")
+		fit(t, tt, "Browse…", "Clear", "System icons…", "Cancel", "Save")
 	})
 	t.Run("rename", func(t *testing.T) {
 		_, v, tt := newTestView(t, int(width), 460)
@@ -442,6 +442,86 @@ func TestViewShowsIconIndexForPrograms(t *testing.T) {
 	}
 }
 
+// TestViewIconPickerFillsFileAndIndex 验证「系统图标…」把选择器返回的文件和
+// 序号一起写进图标字段，并且从当前程序图标和序号开始。
+func TestViewIconPickerFillsFileAndIndex(t *testing.T) {
+	_, v, tt := newTestView(t, 720, 460)
+	v.openEdit("a")
+	tt.Frame()
+
+	old := showIconPicker
+	t.Cleanup(func() { showIconPicker = old })
+
+	type asked struct {
+		path  string
+		index int
+	}
+	var start asked
+	showIconPicker = func(parent *mygo.Window, path string, index int) (string, int, bool) {
+		start = asked{path, index}
+		return `C:\Windows\System32\imageres.dll`, -101, true
+	}
+	if err := tt.Click("System icons…"); err != nil {
+		t.Fatal(err)
+	}
+	if start.path != "" || start.index != 0 {
+		t.Fatalf("an icon without an index must start the picker empty, asked %+v", start)
+	}
+	if got := absPath(v.editIcon); got != `C:\Windows\System32\imageres.dll` {
+		t.Fatalf("the picked file must fill the icon field, got %q", v.editIcon)
+	}
+	if v.editIconIndex != "-101" {
+		t.Fatalf("the picked index must fill the index field, got %q", v.editIconIndex)
+	}
+	tt.Frame()
+	if !tt.HasText("Index") {
+		t.Fatalf("an icon resource must show its index field, texts %q", tt.Texts())
+	}
+
+	v.editIcon = `C:\Windows\System32\shell32.dll`
+	v.editIconIndex = "3"
+	tt.Frame()
+	showIconPicker = func(parent *mygo.Window, path string, index int) (string, int, bool) {
+		start = asked{path, index}
+		return "", 0, false
+	}
+	if err := tt.Click("System icons…"); err != nil {
+		t.Fatal(err)
+	}
+	if start.index != 3 || !strings.EqualFold(filepath.Base(start.path), "shell32.dll") {
+		t.Fatalf("the picker must start at the icon's file and index, asked %+v", start)
+	}
+	if v.editIcon != `C:\Windows\System32\shell32.dll` || v.editIconIndex != "3" {
+		t.Fatalf("a cancelled picker must keep the fields, got %q %q", v.editIcon, v.editIconIndex)
+	}
+}
+
+// TestViewSettingsAppIconPicksFromShell 验证设置里的程序图标也能用系统图标
+// 选择器，选中的图标被收进 custom-icons 并保存。
+func TestViewSettingsAppIconPicksFromShell(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	settings := newTestSettings(t, v)
+
+	exe := filepath.Join(os.Getenv("SystemRoot"), "System32", "notepad.exe")
+	if _, err := os.Stat(exe); err != nil {
+		t.Skipf("no %s: %v", exe, err)
+	}
+	old := showIconPicker
+	t.Cleanup(func() { showIconPicker = old })
+	showIconPicker = func(parent *mygo.Window, path string, index int) (string, int, bool) {
+		return exe, 0, true
+	}
+	if err := settings.Click("System icons…"); err != nil {
+		t.Fatal(err)
+	}
+	if !isCustomIcon(v.prefs.AppIcon) {
+		t.Fatalf("the picked icon must be stored in custom-icons, got %q", v.prefs.AppIcon)
+	}
+	if got := loadPrefs().AppIcon; got != v.prefs.AppIcon {
+		t.Fatalf("the icon must be saved, got %q", got)
+	}
+}
+
 // TestViewSettingsChoosesLanguage 验证语言下拉框把选择写进 ui-state.json；
 // 无头环境没有应用语言可改，所以只检查偏好。
 func TestViewSettingsChoosesLanguage(t *testing.T) {
@@ -473,7 +553,7 @@ func TestViewSettingsChoosesLanguage(t *testing.T) {
 	}
 }
 
-// TestViewSettingsTogglesBackgroundOnClose 验证「关闭后在后台运行」默认开启，开关
+// TestViewSettingsTogglesBackgroundOnClose 验证「关闭后在托盘运行」默认开启，开关
 // 写回 store。
 func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
@@ -483,7 +563,7 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 	settings := newTestSettings(t, v)
 	scrollSettingsToBehavior(settings)
 
-	if err := settings.Click("Toggle run in background"); err != nil {
+	if err := settings.Click("Toggle keep running in the tray"); err != nil {
 		t.Fatalf("run in background: %v", err)
 	}
 	if app.store.Settings.BackgroundOnClose {
@@ -492,11 +572,54 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 	if loadStore().Settings.BackgroundOnClose {
 		t.Fatal("the setting must be saved")
 	}
-	if err := settings.Click("Toggle run in background"); err != nil {
+	if err := settings.Click("Toggle keep running in the tray"); err != nil {
 		t.Fatalf("run in background again: %v", err)
 	}
 	if !app.store.Settings.BackgroundOnClose {
 		t.Fatal("the toggle must turn running in the background back on")
+	}
+}
+
+// TestViewSettingsTogglesTrayOnly 验证「不在任务栏显示」写回 ui-state.json，并且需要
+// 「关闭后在托盘运行」：关掉后台运行时模式一起关掉，后台关闭时开关无效。
+func TestViewSettingsTogglesTrayOnly(t *testing.T) {
+	app, v, _ := newTestView(t, 720, 460)
+	if v.prefs.TrayOnly {
+		t.Fatal("the tray-only mode must be off by default")
+	}
+	settings := newTestSettings(t, v)
+	scrollSettingsToBehavior(settings)
+	if err := settings.Click("Toggle hide from taskbar"); err != nil {
+		t.Fatalf("tray only: %v", err)
+	}
+	if !v.prefs.TrayOnly || !loadPrefs().TrayOnly {
+		t.Fatal("the tray-only preference must be kept")
+	}
+
+	v.setBackgroundOnClose(false)
+	if app.store.Settings.BackgroundOnClose || v.prefs.TrayOnly || loadPrefs().TrayOnly {
+		t.Fatal("the tray-only mode must go with running in the background")
+	}
+
+	settings.Frame()
+	_ = settings.Click("Toggle hide from taskbar")
+	if v.prefs.TrayOnly {
+		t.Fatal("a disabled switch must not turn the mode on")
+	}
+}
+
+// TestTrayOnlyNeedsBackgroundAtStartup 验证数据里留下「不在任务栏显示」、但后台运行已关时，
+// 视图启动就把它关掉。
+func TestTrayOnlyNeedsBackgroundAtStartup(t *testing.T) {
+	app, _, _ := newTestView(t, 720, 460)
+	prefs := loadPrefs()
+	prefs.TrayOnly = true
+	savePrefs(prefs)
+	app.store.Settings.BackgroundOnClose = false
+
+	v := newView(app)
+	if v.prefs.TrayOnly || loadPrefs().TrayOnly {
+		t.Fatal("the tray-only mode must turn off without running in the background")
 	}
 }
 
@@ -722,13 +845,13 @@ func TestViewSettingsTogglesAutoHide(t *testing.T) {
 	app.store.Settings.AutoHide = true
 	settings := newTestSettings(t, v)
 
-	if err := settings.Click("Toggle auto-hide"); err != nil {
+	if err := settings.Click("Toggle minimize after launching an item"); err != nil {
 		t.Fatalf("auto-hide: %v", err)
 	}
 	if app.store.Settings.AutoHide {
 		t.Fatal("the auto-hide toggle must turn the setting off")
 	}
-	if err := settings.Click("Toggle auto-hide"); err != nil {
+	if err := settings.Click("Toggle minimize after launching an item"); err != nil {
 		t.Fatalf("auto-hide again: %v", err)
 	}
 	if !app.store.Settings.AutoHide {
@@ -829,8 +952,8 @@ func TestViewSettingsShowsItsChoices(t *testing.T) {
 
 	settings := newTestSettings(t, v)
 	for _, text := range []string{
-		"Settings", "Language", "Theme", "Accent color", "Run in background",
-		"Timer", "Auto-hide",
+		"Settings", "Language", "Theme", "Accent color", "Keep running in the tray",
+		"Timer", "Minimize after launching an item",
 		"Always on top", "Absolute paths for new items", "Data directory",
 		"Version " + appVersion,
 		filepath.Join(absBase, dataDir),

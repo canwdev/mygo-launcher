@@ -20,13 +20,13 @@ Download the installer or portable build for your architecture from [Releases](h
 - **Grid**: icon size in three steps (small, medium, large), with blank cells to control placement; item names wrap automatically, up to two lines
 - **Launching**: single click launches an item, and running programs can be stopped; a folder item shows its contents instead, and its folders can be entered one level at a time; `.lnk` shortcuts launch with their saved target and arguments; items can run as administrator, prompting Windows UAC on launch
 - **Adding**: drop files from Explorer to add them; the `+` button adds running windows, files, or hand-made items, and can also add common locations such as the Recycle Bin, This PC, Control Panel, your user folder, and the network
-- **Icons**: extracted automatically for programs, files, and shortcuts; dropping in an image or `.ico` shows the image itself, and you can also pick a specific icon from an image, `.ico`, `.exe`, or `.dll`
+- **Icons**: extracted automatically for programs, files, and shortcuts; dropping in an image or `.ico` shows the image itself, and you can pick a specific icon from an image, `.ico`, `.exe`, or `.dll`, or choose one in the Windows icon picker
 - **Arranging items**: reorder by dragging in the grid; hovering over a page tab switches page, so you can keep dropping at the desired position (hold Ctrl/Cmd to copy)
 - **Timer**: off by default; when enabled, runtime is accumulated automatically, and clicking the duration adjusts it by ±1 hour, ±30 minutes, or minutes. When disabled, all timing stops at once and the same program can run again. Folders, files, and URLs are never timed
 - **Search and keyboard**: `Ctrl/Cmd+F` searches and Enter launches; arrows choose items and turn pages, letters choose items in grid order; PgUp/PgDn, Tab, Home/End, and 1–9 switch pages; Esc hides or minimizes; `Ctrl+,` opens settings; icon button tooltips show their keys
 - **Global hotkey**: recordable (function keys can be used alone) to show or hide the launcher from any window; a window called for by the hotkey, a second launch, or the tray appears centered on the pointer
-- **Tray**: closing the window keeps it running in the system tray; settings can make close quit instead
-- **Appearance**: auto-hide, always on top, light / dark / follow system, custom accent color; replaceable program icon and main window background picture (with adjustable opacity), with window and tray icons following the theme
+- **Tray**: closing the window keeps it running in the system tray; settings can make close quit instead; “Hide from taskbar” removes the taskbar button and disables minimize
+- **Appearance**: minimize after launching an item, always on top, light / dark / follow system, custom accent color; replaceable program icon and main window background picture (with adjustable opacity), with window and tray icons following the theme
 - **Wheel**: switches pages by default, and Shift+wheel scrolls the grid; settings can invert this
 - **Right click**: Properties and the native shell menu for files and folders; the Recycle Bin can be emptied from its menu and its icon follows its state
 - **Language**: Simplified Chinese and English, chosen on first launch from the Windows display language

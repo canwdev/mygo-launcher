@@ -70,7 +70,9 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   死锁。`applyTheme` 只在启动时和设置窗口里运行；主题点击先保存偏好，再交给 `app.dispatch` 在
   帧后执行。无窗口（测试）时不改主题。
 - **系统对话框会阻塞**：`mygo.Dialog.Open` 在 goroutine 上运行；没有窗口时（测试）它同步
-  执行。**添加文件用自己的打开对话框**（`src/open_dialog_windows.go`）：MyGo 的对话框会解引用
+  执行。系统图标选择器（`src/icon_pick_windows.go` 的 `PickIconDlg`）同样在 goroutine 上
+  运行，测试里用包级 `showIconPicker` 替换。**添加文件用自己的打开对话框**
+  （`src/open_dialog_windows.go`）：MyGo 的对话框会解引用
   `.lnk`，选中的快捷方式会变成目标程序并丢掉参数；`openFilesDialog` 用
   `FOS_NODEREFERENCELINKS` 返回 `.lnk` 本身，再交给 `resolveShortcut`。
 - `app.win` 在 `WhenReady` 之前以及测试里都是 nil。窗口操作统一走 `app.dispatch`、
@@ -246,12 +248,17 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 只有空白图标。条目的 `link` 字段记住这个 `.lnk`，单条和批量更新图标都用它；编辑条目改了目标
 路径时清空。shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `writeIcon` 从解析名
 重画，不做存在性检查。
-- 条目编辑器可选的图标是图片、`.ico`、`.exe`、`.dll`；`.ico`/`.exe`/`.dll` 旁边显示「序号」，
-  取第几个图标（0 为第一个）。保存时 `App.customIcon` 把结果规范化后放进
-  `mygo-launcher-data/custom-icons/`：图片解码后最长边缩到 256 并重新编码 PNG（源文件最多
+- 条目编辑器可选的图标是图片、`.ico`、`.exe`、`.dll`，以及 `.cpl` / `.ocx` / `.scr` / `.icl` /
+  `.mun` 这类带图标资源的文件；`iconTakesIndex` 为真的路径旁边显示「序号」，取第几个图标
+  （0 为第一个，负数表示资源 ID）。图标行和设置 → 外观的「程序图标」各有一个「系统图标…」
+  按钮：调用 shell32 的 `PickIconDlg`（有名字导出、未公开）打开 Windows 自己的「更改图标」
+  窗口，一次返回文件和序号，写入图标路径与序号字段。选择器返回的路径可能带 `%SystemRoot%`
+  这类环境变量，字段里保留原样，读取前由 `expandPath` 展开。保存时 `App.customIcon`
+  把结果规范化后
+  放进 `mygo-launcher-data/custom-icons/`：图片解码后最长边缩到 256 并重新编码 PNG（源文件最多
   64MB、4000 万像素，落盘图标不超过 10MB，SVG 原样复制）；程序/DLL 用
   `extractIconResource`（`SHDefExtractIcon`，失败退 `ExtractIconEx`）按序号提取。已经在
-  custom-icons 或 cached-icons 里的图标不再复制。`iconTakesIndex` 决定对话框是否显示序号。
+  custom-icons 或 cached-icons 里的图标不再复制。
 - 只有 custom-icons 与 cached-icons 里的图标会显示（`allowedIcon`）；外部路径的图标不显示，
   保存时会复制进 custom-icons。「更新图标」也走同一套：图标在 custom-icons 里就不动，在外面
   就 `customIcon` 收进来（图片缩小），自动图标仍从 `link`/`path` 重画；批量更新同样处理。
@@ -283,7 +290,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   缓存 2 秒，避免菜单每帧查询 shell。
 - 条目菜单：shell 目标（`shell:`、`::{CLSID}`、网址、UWP）没有可显示的文件夹，菜单里的
   「打开所在文件夹」换成「打开」；「系统菜单」上方有分割线，它下面不再加线；「属性」固定放在
-  最下方；「更新图标」「转为绝对/相对路径」收进条目详情弹窗按钮行最左侧的图标按钮
+  最下方；「更新图标」「转为绝对路径」「转为便携」收进条目详情弹窗按钮行最左侧的图标按钮
   （`itemActionsButton` 的 `PopoverMenuButton` 菜单），编辑已有条目时才出现。
 - 「属性」和「系统菜单」对所有文件、文件夹和 shell 位置可用，UWP（`shell:AppsFolder\…`）和
   网址除外（`canUseShellActions`）。属性用 `ShellExecuteEx` 的 `properties` 动词 +
@@ -358,8 +365,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 设置分组：外观（语言下拉框、主题分段控件、强调色色板（悬停提示成员名字）+ 打开取色器的
   显示当前颜色的圆形编辑按钮，色板下的
   `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件、程序图标、背景与背景透明度）、
-  行为（全局快捷键、计时器、自动隐藏、
-  窗口置顶、滚轮切换页面、GPU 绘制、关闭后在后台运行）、路径（新条目绝对路径、批量转换）、
+  行为（全局快捷键、计时器、启动条目后最小化窗口、窗口置顶、滚轮切换页面、GPU 绘制、
+  关闭后在托盘运行、不在任务栏显示）、路径（新条目绝对路径、批量转换）、
   数据（刷新、打开数据目录（hint 显示实际路径）、更新图标、检查可用性、从 CLaunch 迁移）、
   关于（上色后的
   程序图标、名称与版本、GitHub、更新，以及底部的重启与退出按钮）。GPU 开关改动后提示重启生效。
@@ -433,6 +440,13 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   没有窗口让进程留在后台。`OnBeforeQuit` 在退出开始时置位 `quitting`，所以托盘的「退出」不会
   被拦下；`OnQuit` 销毁托盘。
 - 关掉开关时若主窗口正隐藏，先用 `showMain` 显示再移除托盘，否则窗口没有入口。
+- 托盘模式（界面叫「不在任务栏显示」，`ui-state.json` 的 `tray_only`，默认关闭）用 MyGo 的
+  `SkipTaskbar` 去掉任务栏按钮、`DisableMinimize` / `SetMinimizable` 去掉最小化：启动时作为
+  `NewWindow` 选项，切换时调 `SetSkipTaskbar` 和 `SetMinimizable`。它依赖「关闭后在托盘运行」
+  ——没有托盘时窗口只剩全局快捷键能唤回，所以开关在后台关闭时禁用，关掉后台运行会先
+  `setTrayOnly(false)`；`newView` 启动时也把这种无托盘状态下的 `tray_only` 清掉。`App.minimize`
+  （自动隐藏）在该模式下改为隐藏，Esc 和全局快捷键本来就按后台开关隐藏。`SkipTaskbar` 只删
+  任务栏按钮，**Alt+Tab 里仍有窗口**。
 - 测试里 `syncTray` 因为没有窗口（`app.win == nil`）直接返回：`mygo.NewTray` 要求应用
   就绪；测试覆盖设置持久化和 `handleClose` 的判定。
 
@@ -453,7 +467,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
     表示空白）和 `settings`（`auto_time` / `auto_hide` / `always_on_top` /
     `absolute_paths` / `background_on_close`）
   - `ui-state.json` — 窗口自身偏好：语言、主题、强调色、当前页面、GPU 绘制、滚轮切换页面、
-    全局快捷键、自定义程序图标、背景图与背景透明度
+    不在任务栏显示、全局快捷键、自定义程序图标、背景图与背景透明度
   - `window-state.json` — 两个窗口的几何信息，通过 MyGo 的 `WindowStateStore`
   - `cached-icons/` — 自动生成的图标（`writeIcon`，以及 `contentIcon` 从图片 / `.ico` 内容
     生成的图标）
@@ -466,6 +480,15 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 条目路径相对于 `absBase`（开发时是工作目录，构建版是 exe 所在目录），除非「新条目使用绝对
   路径」；`convertItemPaths` 只转换条目路径、工作目录和快捷方式路径，**不转换图标路径**：图标
   始终相对于数据文件夹，迁移后仍能显示。
+- 「转为便携」（`toStoredPath`）按顺序写：数据目录内是普通相对路径（`tools\a.exe`）；
+  落在 `envRoots` 里的已知文件夹时用最长匹配的变量（`%APPDATA%\SomeApp\a.exe`，`%USERPROFILE%`
+  会被更长的 `%APPDATA%` 覆盖）；其余仍是相对 `absBase` 的路径。添加条目
+  时同样走这个规则。变量清单固定为 APPDATA、LOCALAPPDATA、USERPROFILE、ProgramData、
+  ProgramFiles、ProgramFiles(x86)、SystemRoot、PUBLIC，比较时忽略大小写并按路径段边界匹配。
+- 路径里的 `%AppData%`、`%SystemRoot%` 这类环境变量由 `expandPath` 展开，`absPath` 在拼接前
+  先做这一步，所以条目路径、工作目录、图标读取和可用性检查都一致；字段和 store 里保留用户写
+  的原样（系统图标选择器返回的就是 `%SystemRoot%\System32\shell32.dll`）。没有值的变量原样
+  保留，含 `%` 的普通文件名不会被改写。
 - **启动用新环境变量**：`.exe` 由 `CreateProcessW` 启动，环境块用 `CreateEnvironmentBlock`
   从注册表现读，不继承启动器自己的环境，所以启动器启动后用户改过的变量对新进程立即生效。
   `.bat` / `.cmd` / `.com`、需要提权的程序（`runas`）和 shell 目标仍走 `ShellExecuteEx`，
@@ -572,6 +595,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/items.go` / `src/commands.go` | 页面与条目操作；菜单和按钮实际执行的动作 |
 | `src/icons.go` / `src/icons_svg.go` | 条目图标与窗口绘制的 SVG |
 | `src/icon_extract_*.go` | 从 `.ico` / `.exe` / `.dll` 的图标资源提取 PNG |
+| `src/icon_pick_*.go` | 系统图标选择器（`PickIconDlg`），其他平台为空实现 |
 | `src/tray.go` | 托盘图标、菜单，以及关闭窗口时隐藏到托盘的拦截 |
 | `src/ui_state.go` / `src/window_state_store.go` | `ui-state.json` 偏好；`window-state.json` |
 | `src/launch_*.go` / `src/lnk_*.go` / `src/singleton_*.go` | 进程启动与提权、`.lnk` 解析（COM）、按安装目录的单实例 |

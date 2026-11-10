@@ -98,6 +98,10 @@ func main() {
 			// once it has its place, without a flash at the saved position.
 			Hidden:  opts.silent || opts.atCursor,
 			Content: ui.View(v.view),
+			// The tray-only mode: no taskbar button and no minimize, so the
+			// window is reached from the tray or the shortcut alone.
+			SkipTaskbar:     v.prefs.TrayOnly,
+			DisableMinimize: v.prefs.TrayOnly,
 		})
 
 		// The view builds after NewWindow returned, on the main loop's next

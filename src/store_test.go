@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -130,6 +131,41 @@ func TestParseStore(t *testing.T) {
 	}
 	if empty.Settings.AutoTime {
 		t.Fatalf("a new store must leave the timer off, got %+v", empty.Settings)
+	}
+}
+
+// TestToStoredPathUsesEnvironmentRoots 验证数据目录外的系统或用户文件夹路径
+// 写成 %VAR% 形式，数据目录内的路径仍是普通相对路径。
+func TestToStoredPathUsesEnvironmentRoots(t *testing.T) {
+	old := absBase
+	absBase = t.TempDir()
+	t.Cleanup(func() { absBase = old })
+
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		t.Skip("no SystemRoot")
+	}
+	exe := filepath.Join(root, "System32", "notepad.exe")
+	if got, want := toStoredPath(exe), `%SystemRoot%\System32\notepad.exe`; !strings.EqualFold(got, want) {
+		t.Fatalf("a system path must keep as a variable, got %q, want %q", got, want)
+	}
+	if got := toStoredPath(strings.ToUpper(exe)); !strings.HasPrefix(got, `%SystemRoot%\`) {
+		t.Fatalf("the root must match whatever its case, got %q", got)
+	}
+	if got := toStoredPath(root + "-old" + string(filepath.Separator) + "x.exe"); strings.Contains(got, "%") {
+		t.Fatalf("a folder merely starting like the root must not match, got %q", got)
+	}
+
+	if appdata := os.Getenv("APPDATA"); appdata != "" && strings.HasPrefix(strings.ToLower(appdata), strings.ToLower(root)) {
+		got := toStoredPath(filepath.Join(appdata, "SomeApp", "a.exe"))
+		if want := `%APPDATA%\SomeApp\a.exe`; !strings.EqualFold(got, want) {
+			t.Fatalf("the longest root must win, got %q, want %q", got, want)
+		}
+	}
+
+	inside := filepath.Join(absBase, "tools", "app.exe")
+	if got, want := toStoredPath(inside), filepath.Join("tools", "app.exe"); got != want {
+		t.Fatalf("a path in the data folder stays relative, got %q, want %q", got, want)
 	}
 }
 

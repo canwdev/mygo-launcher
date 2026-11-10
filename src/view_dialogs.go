@@ -39,6 +39,34 @@ func (v *view) browseButton(c *ui.Context, label string, pick func() string, set
 	})
 }
 
+// pickIconWithShell opens the shell's own icon picker for the icon field,
+// which returns the file and the index in one go. The dialog blocks, so it
+// runs on a goroutine; the answer comes back on the main thread, and without a
+// window (tests) it runs at once.
+func (v *view) pickIconWithShell() {
+	start, index := "", 0
+	if iconTakesIndex(v.editIcon) {
+		start = absPath(v.editIcon)
+		index = iconIndex(v.editIconIndex)
+	}
+	apply := func(path string, i int) {
+		v.editIcon = v.app.storedPick(path)
+		v.editIconIndex = strconv.Itoa(i)
+		v.refresh()
+	}
+	if v.app.win == nil {
+		if path, i, ok := showIconPicker(nil, start, index); ok {
+			apply(path, i)
+		}
+		return
+	}
+	go func() {
+		if path, i, ok := showIconPicker(v.app.win, start, index); ok {
+			v.app.dispatch(func() { apply(path, i) })
+		}
+	}()
+}
+
 // itemDialog creates an item or edits one.
 func (v *view) itemDialog(c *ui.Context) {
 	if !v.editOpen {
@@ -167,8 +195,12 @@ func (v *view) itemDialogFields(c *ui.Context) {
 				ui.Text(c, m.IconIndex()).FontSize(11).TextColor(p.muted)
 				ui.TextInput(c, &v.editIconIndex).Width(44).Tooltip(m.IconIndexHint())
 			}
+			if iconButton(c, iconGrid, 16, p.muted, m.SystemIcon()).
+				Tooltip(m.SystemIcon()).Clicked() {
+				v.pickIconWithShell()
+			}
 			v.browseButton(c, m.Browse(), func() string {
-				start := dirname(v.editIcon)
+				start := dirname(absPath(v.editIcon))
 				if start == "" {
 					start = dirname(v.editPath)
 				}

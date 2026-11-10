@@ -269,10 +269,11 @@ func (v *view) applyRename() {
 }
 
 // iconIndex reads the icon index field: the first icon when it is not a
-// number or negative.
+// number. A negative index is a resource ID, as the shell's picker returns
+// for icons a file holds only by ID.
 func iconIndex(text string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(text))
-	if err != nil || n < 0 {
+	if err != nil {
 		return 0
 	}
 	return n

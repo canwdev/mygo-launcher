@@ -20,6 +20,30 @@ func (v *view) chooseAppIcon() {
 	}()
 }
 
+// chooseAppIconFromShell takes an icon from the shell's own picker, which
+// returns the file and the index together, and shows it everywhere.
+func (v *view) chooseAppIconFromShell() {
+	take := func() {
+		path, index, ok := showIconPicker(v.app.settingsWin, "", 0)
+		if !ok {
+			return
+		}
+		icon, err := v.app.customIcon(path, index)
+		v.app.dispatch(func() {
+			if err != nil {
+				v.app.notify(err.Error())
+				return
+			}
+			v.setAppIcon(icon)
+		})
+	}
+	if v.app.win == nil {
+		take() // a test: no window to block, and no dialog either
+		return
+	}
+	go take()
+}
+
 func (v *view) setAppIcon(icon string) {
 	v.prefs.AppIcon = icon
 	v.savePrefs()

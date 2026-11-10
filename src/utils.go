@@ -22,6 +22,37 @@ func sanitizeBase(name string) string {
 	return base
 }
 
+// expandPath fills in %VAR% names, the form Windows paths and the shell's icon
+// picker use ("%SystemRoot%\System32\shell32.dll"); a name without a value is
+// left as it was.
+func expandPath(path string) string {
+	if !strings.Contains(path, "%") {
+		return path
+	}
+	var b strings.Builder
+	for {
+		i := strings.IndexByte(path, '%')
+		if i < 0 {
+			b.WriteString(path)
+			break
+		}
+		j := strings.IndexByte(path[i+1:], '%')
+		if j < 0 {
+			b.WriteString(path)
+			break
+		}
+		j += i + 1
+		b.WriteString(path[:i])
+		if value, ok := os.LookupEnv(path[i+1 : j]); ok {
+			b.WriteString(value)
+		} else {
+			b.WriteString(path[i : j+1])
+		}
+		path = path[j+1:]
+	}
+	return b.String()
+}
+
 // isShellTarget reports whether path names something the shell opens instead of
 // a file: a URL ("https://…"), a settings or shell URI ("ms-settings:colors",
 // "shell:AppsFolder"), or a shell namespace path ("::{CLSID}"). A drive letter

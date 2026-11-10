@@ -104,12 +104,32 @@ func (a *App) hideWindow() {
 
 // setBackgroundOnClose applies the setting: the tray icon follows it, and
 // turning it off brings a hidden window back, since nothing would bring it
-// back once the tray is gone.
+// back once the tray is gone. The tray-only mode goes first: without the
+// background setting there is no tray to open its window from.
 func (v *view) setBackgroundOnClose(on bool) {
 	v.app.store.Settings.BackgroundOnClose = on
 	v.app.save()
+	if !on && v.prefs.TrayOnly {
+		v.setTrayOnly(false)
+	}
 	v.syncTray()
 	if !on && v.app.win != nil && !v.app.win.IsVisible() {
 		v.showMain()
+	}
+}
+
+// setTrayOnly applies the tray-only mode: the window leaves the taskbar and
+// cannot be minimized, so the tray icon or the shortcut alone opens it again.
+// It needs running in the background, since closing would otherwise leave no
+// way back to it.
+func (v *view) setTrayOnly(on bool) {
+	if on && !v.app.store.Settings.BackgroundOnClose {
+		return
+	}
+	v.prefs.TrayOnly = on
+	v.savePrefs()
+	if w := v.app.win; w != nil {
+		w.SetSkipTaskbar(on)
+		w.SetMinimizable(!on)
 	}
 }

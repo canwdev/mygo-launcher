@@ -218,6 +218,12 @@ func newView(app *App) *view {
 	}
 	// Without a window, as in tests, App.refresh redraws through the view.
 	app.view = v
+	// The tray-only mode needs the background setting: without a tray, a
+	// window with no taskbar button and no minimize would have no way back.
+	if v.prefs.TrayOnly && !app.store.Settings.BackgroundOnClose {
+		v.prefs.TrayOnly = false
+		savePrefs(v.prefs)
+	}
 	return v
 }
 

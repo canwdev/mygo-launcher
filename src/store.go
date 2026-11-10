@@ -78,7 +78,63 @@ type AppStore struct {
 	Settings   Settings            `json:"settings"`
 }
 
+// envRoots are the folders a stored path may name with a variable instead of a
+// chain of "..", the most useful first. The longest root that matches wins, so
+// %APPDATA% wins over the %USERPROFILE% that holds it.
+var envRoots = []string{
+	"APPDATA", "LOCALAPPDATA", "USERPROFILE", "ProgramData",
+	"ProgramFiles", "ProgramFiles(x86)", "SystemRoot", "PUBLIC",
+}
+
+// envStoredPath writes path as %VAR%\… when it lies in one of envRoots, and ""
+// when it lies in none of them.
+func envStoredPath(path string) string {
+	bestName, bestLen := "", 0
+	for _, name := range envRoots {
+		root, ok := os.LookupEnv(name)
+		if !ok || root == "" {
+			continue
+		}
+		root = filepath.Clean(root)
+		if len(root) > bestLen && hasPathPrefix(path, root) {
+			bestName, bestLen = name, len(root)
+		}
+	}
+	if bestName == "" {
+		return ""
+	}
+	root, _ := os.LookupEnv(bestName)
+	root = filepath.Clean(root)
+	return "%" + bestName + "%" + path[len(root):]
+}
+
+// hasPathPrefix reports whether path is root or lies inside it, ignoring the
+// case of the root as Windows does: C:\apps must not match C:\apps-old.
+func hasPathPrefix(path, root string) bool {
+	if len(path) < len(root) || !strings.EqualFold(path[:len(root)], root) {
+		return false
+	}
+	if len(path) == len(root) {
+		return true
+	}
+	return path[len(root)] == '\\' || path[len(root)] == '/'
+}
+
+// toStoredPath keeps abs as the item fields store it when paths are not
+// absolute: relative to the data folder inside it, in the %VAR% form when it
+// lies in a well-known folder, and relative to the data folder otherwise.
 func toStoredPath(abs string) string {
+	if abs == "" || isShellTarget(abs) {
+		return abs
+	}
+	abs = filepath.Clean(abs)
+	if rel, err := filepath.Rel(absBase, abs); err == nil &&
+		rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return rel
+	}
+	if p := envStoredPath(abs); p != "" {
+		return p
+	}
 	rel, err := filepath.Rel(absBase, abs)
 	if err != nil {
 		return abs
@@ -87,7 +143,11 @@ func toStoredPath(abs string) string {
 }
 
 func absPath(p string) string {
-	if p == "" || filepath.IsAbs(p) || isShellTarget(p) {
+	if p == "" || isShellTarget(p) {
+		return p
+	}
+	p = expandPath(p)
+	if filepath.IsAbs(p) {
 		return p
 	}
 	return filepath.Join(absBase, p)

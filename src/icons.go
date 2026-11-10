@@ -92,10 +92,11 @@ func isIconImage(path string) bool {
 }
 
 // iconTakesIndex reports whether path holds icons to pick from: an .ico, or
-// the icon resources of an .exe or .dll.
+// the icon resources of a program or library. The shell's icon picker lets any
+// of these, and .cpl, .scr, .icl and .mun are files of the same kinds.
 func iconTakesIndex(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
-	case ".ico", ".exe", ".dll":
+	case ".ico", ".exe", ".dll", ".ocx", ".cpl", ".scr", ".icl", ".mun":
 		return true
 	}
 	return false

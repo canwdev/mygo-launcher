@@ -646,11 +646,11 @@ func (msgs Messages) ConvertToAbsolute() string {
 	return Catalog.Format(msgs.locale, "convertToAbsolute", nil)
 }
 
-// ConvertToRelative says "Convert to relative path"
+// ConvertToRelative says "Make portable"
 // in the language the app shows.
 func ConvertToRelative() string { return In(i18n.Locale()).ConvertToRelative() }
 
-// ConvertToRelative says "Convert to relative path"
+// ConvertToRelative says "Make portable"
 // in the language of msgs.
 func (msgs Messages) ConvertToRelative() string {
 	return Catalog.Format(msgs.locale, "convertToRelative", nil)
@@ -846,11 +846,11 @@ func (msgs Messages) IconIndex() string {
 	return Catalog.Format(msgs.locale, "iconIndex", nil)
 }
 
-// IconIndexHint says "Which icon to take from an .ico, .exe or .dll (0 is the first)"
+// IconIndexHint says "Which icon to take from the file (0 is the first)"
 // in the language the app shows.
 func IconIndexHint() string { return In(i18n.Locale()).IconIndexHint() }
 
-// IconIndexHint says "Which icon to take from an .ico, .exe or .dll (0 is the first)"
+// IconIndexHint says "Which icon to take from the file (0 is the first)"
 // in the language of msgs.
 func (msgs Messages) IconIndexHint() string {
 	return Catalog.Format(msgs.locale, "iconIndexHint", nil)
@@ -1148,11 +1148,11 @@ func (msgs Messages) ConvertedToAbsolute() string {
 	return Catalog.Format(msgs.locale, "convertedToAbsolute", nil)
 }
 
-// ConvertedToRelative says "Converted to relative path"
+// ConvertedToRelative says "Made portable"
 // in the language the app shows.
 func ConvertedToRelative() string { return In(i18n.Locale()).ConvertedToRelative() }
 
-// ConvertedToRelative says "Converted to relative path"
+// ConvertedToRelative says "Made portable"
 // in the language of msgs.
 func (msgs Messages) ConvertedToRelative() string {
 	return Catalog.Format(msgs.locale, "convertedToRelative", nil)
@@ -1438,6 +1438,16 @@ func (msgs Messages) ChooseIcon() string {
 	return Catalog.Format(msgs.locale, "chooseIcon", nil)
 }
 
+// SystemIcon says "System icons…"
+// in the language the app shows.
+func SystemIcon() string { return In(i18n.Locale()).SystemIcon() }
+
+// SystemIcon says "System icons…"
+// in the language of msgs.
+func (msgs Messages) SystemIcon() string {
+	return Catalog.Format(msgs.locale, "systemIcon", nil)
+}
+
 // Background says "Background"
 // in the language the app shows.
 func Background() string { return In(i18n.Locale()).Background() }
@@ -1528,31 +1538,41 @@ func (msgs Messages) ToggleGpuDrawing() string {
 	return Catalog.Format(msgs.locale, "toggleGpuDrawing", nil)
 }
 
-// BackgroundOnClose says "Run in background"
+// BackgroundOnClose says "Keep running in the tray"
 // in the language the app shows.
 func BackgroundOnClose() string { return In(i18n.Locale()).BackgroundOnClose() }
 
-// BackgroundOnClose says "Run in background"
+// BackgroundOnClose says "Keep running in the tray"
 // in the language of msgs.
 func (msgs Messages) BackgroundOnClose() string {
 	return Catalog.Format(msgs.locale, "backgroundOnClose", nil)
 }
 
-// BackgroundOnCloseHint says "Closing the window keeps the app in the tray"
+// TrayOnly says "Hide from taskbar"
 // in the language the app shows.
-func BackgroundOnCloseHint() string { return In(i18n.Locale()).BackgroundOnCloseHint() }
+func TrayOnly() string { return In(i18n.Locale()).TrayOnly() }
 
-// BackgroundOnCloseHint says "Closing the window keeps the app in the tray"
+// TrayOnly says "Hide from taskbar"
 // in the language of msgs.
-func (msgs Messages) BackgroundOnCloseHint() string {
-	return Catalog.Format(msgs.locale, "backgroundOnCloseHint", nil)
+func (msgs Messages) TrayOnly() string {
+	return Catalog.Format(msgs.locale, "trayOnly", nil)
 }
 
-// ToggleBackgroundOnClose says "Toggle run in background"
+// ToggleTrayOnly says "Toggle hide from taskbar"
+// in the language the app shows.
+func ToggleTrayOnly() string { return In(i18n.Locale()).ToggleTrayOnly() }
+
+// ToggleTrayOnly says "Toggle hide from taskbar"
+// in the language of msgs.
+func (msgs Messages) ToggleTrayOnly() string {
+	return Catalog.Format(msgs.locale, "toggleTrayOnly", nil)
+}
+
+// ToggleBackgroundOnClose says "Toggle keep running in the tray"
 // in the language the app shows.
 func ToggleBackgroundOnClose() string { return In(i18n.Locale()).ToggleBackgroundOnClose() }
 
-// ToggleBackgroundOnClose says "Toggle run in background"
+// ToggleBackgroundOnClose says "Toggle keep running in the tray"
 // in the language of msgs.
 func (msgs Messages) ToggleBackgroundOnClose() string {
 	return Catalog.Format(msgs.locale, "toggleBackgroundOnClose", nil)
@@ -1618,24 +1638,14 @@ func (msgs Messages) AutoTimingHint() string {
 	return Catalog.Format(msgs.locale, "autoTimingHint", nil)
 }
 
-// AutoHide says "Auto-hide"
+// AutoHide says "Minimize after launching an item"
 // in the language the app shows.
 func AutoHide() string { return In(i18n.Locale()).AutoHide() }
 
-// AutoHide says "Auto-hide"
+// AutoHide says "Minimize after launching an item"
 // in the language of msgs.
 func (msgs Messages) AutoHide() string {
 	return Catalog.Format(msgs.locale, "autoHide", nil)
-}
-
-// AutoHideHint says "Minimize the window after launching an item"
-// in the language the app shows.
-func AutoHideHint() string { return In(i18n.Locale()).AutoHideHint() }
-
-// AutoHideHint says "Minimize the window after launching an item"
-// in the language of msgs.
-func (msgs Messages) AutoHideHint() string {
-	return Catalog.Format(msgs.locale, "autoHideHint", nil)
 }
 
 // AlwaysOnTop says "Always on top"
@@ -1688,11 +1698,11 @@ func (msgs Messages) ToggleAutoTiming() string {
 	return Catalog.Format(msgs.locale, "toggleAutoTiming", nil)
 }
 
-// ToggleAutoHide says "Toggle auto-hide"
+// ToggleAutoHide says "Toggle minimize after launching an item"
 // in the language the app shows.
 func ToggleAutoHide() string { return In(i18n.Locale()).ToggleAutoHide() }
 
-// ToggleAutoHide says "Toggle auto-hide"
+// ToggleAutoHide says "Toggle minimize after launching an item"
 // in the language of msgs.
 func (msgs Messages) ToggleAutoHide() string {
 	return Catalog.Format(msgs.locale, "toggleAutoHide", nil)
@@ -1748,16 +1758,6 @@ func (msgs Messages) ConvertAllPaths() string {
 	return Catalog.Format(msgs.locale, "convertAllPaths", nil)
 }
 
-// ConvertAllPathsHint says "Rewrite the paths of every item at once"
-// in the language the app shows.
-func ConvertAllPathsHint() string { return In(i18n.Locale()).ConvertAllPathsHint() }
-
-// ConvertAllPathsHint says "Rewrite the paths of every item at once"
-// in the language of msgs.
-func (msgs Messages) ConvertAllPathsHint() string {
-	return Catalog.Format(msgs.locale, "convertAllPathsHint", nil)
-}
-
 // ToAbsolute says "To absolute"
 // in the language the app shows.
 func ToAbsolute() string { return In(i18n.Locale()).ToAbsolute() }
@@ -1768,11 +1768,11 @@ func (msgs Messages) ToAbsolute() string {
 	return Catalog.Format(msgs.locale, "toAbsolute", nil)
 }
 
-// ToRelative says "To relative"
+// ToRelative says "Make portable"
 // in the language the app shows.
 func ToRelative() string { return In(i18n.Locale()).ToRelative() }
 
-// ToRelative says "To relative"
+// ToRelative says "Make portable"
 // in the language of msgs.
 func (msgs Messages) ToRelative() string {
 	return Catalog.Format(msgs.locale, "toRelative", nil)

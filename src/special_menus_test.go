@@ -53,7 +53,7 @@ func TestItemDialogActions(t *testing.T) {
 	if err := tt.Click("Edit"); err != nil {
 		t.Fatalf("open the editor: %v", err)
 	}
-	for _, hidden := range []string{"Update icon", "Convert to absolute path", "Convert to relative path"} {
+	for _, hidden := range []string{"Update icon", "Convert to absolute path", "Make portable"} {
 		if tt.HasText(hidden) {
 			t.Fatalf("%q belongs in the actions menu, texts %q", hidden, tt.Texts())
 		}
@@ -61,7 +61,7 @@ func TestItemDialogActions(t *testing.T) {
 	if err := tt.Click("More actions"); err != nil {
 		t.Fatalf("open the actions menu: %v", err)
 	}
-	for _, want := range []string{"Update icon", "Convert to absolute path", "Convert to relative path"} {
+	for _, want := range []string{"Update icon", "Convert to absolute path", "Make portable"} {
 		if !tt.HasText(want) {
 			t.Fatalf("the actions menu must offer %q, texts %q", want, tt.Texts())
 		}
@@ -77,7 +77,7 @@ func TestItemDialogActions(t *testing.T) {
 	if err := tt.Click("Create…"); err != nil {
 		t.Fatalf("open the create dialog: %v", err)
 	}
-	for _, unwanted := range []string{"More actions", "Update icon", "Convert to absolute path", "Convert to relative path"} {
+	for _, unwanted := range []string{"More actions", "Update icon", "Convert to absolute path", "Make portable"} {
 		if tt.HasText(unwanted) {
 			t.Fatalf("a new item has no stored icon or path to change, texts %q", tt.Texts())
 		}

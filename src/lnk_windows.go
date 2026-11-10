@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 	"syscall"
@@ -195,7 +194,7 @@ func (sl *shellLinkW) getPath() string {
 	// Some shortcuts store the target with environment variables
 	// (e.g. %LOCALAPPDATA%\...); expand them like the shell would.
 	if strings.Contains(p, "%") {
-		p = os.ExpandEnv(p)
+		p = expandPath(p)
 	}
 	return normalizePath(p)
 }

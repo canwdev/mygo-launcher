@@ -213,12 +213,19 @@ func (a *App) dispatch(fn func()) {
 }
 
 // minimize hides the window when there is one, as auto-hide asks after a
-// launch. Nothing brings it back on its own.
+// launch. Nothing brings it back on its own, but the tray does. A tray-only
+// window has no minimize to fall back to, so it goes to the tray instead. It
+// runs on the main thread, where the view's preferences are read.
 func (a *App) minimize() {
-	if a.win != nil {
-		a.win.Minimize()
-		releaseMemory()
+	if a.win == nil {
+		return
 	}
+	if a.view != nil && a.view.prefs.TrayOnly {
+		a.hideWindow()
+		return
+	}
+	a.win.Minimize()
+	releaseMemory()
 }
 
 // releaseMemory returns to the system what the last frames left behind: a
@@ -383,7 +390,7 @@ func (a *App) runLaunch(plan launchPlan) {
 		return
 	}
 	if plan.hide {
-		a.minimize()
+		a.dispatch(a.minimize)
 	}
 }
 
@@ -817,6 +824,9 @@ func (a *App) pickIcon(dir string) string {
 	}
 	return a.storedPick(paths[0])
 }
+
+// showIconPicker is the shell's own icon picker; tests replace it.
+var showIconPicker = pickIconFromShell
 
 // appIconFilter is iconFilter without SVG: the window and tray icons take
 // PNG only, which a vector would have to be drawn at their size first.

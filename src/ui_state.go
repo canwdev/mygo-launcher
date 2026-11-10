@@ -23,6 +23,10 @@ type uiPrefs struct {
 	// WheelPages switches pages with the wheel instead of scrolling lists and
 	// grids; it is on unless the settings turn it off.
 	WheelPages bool `json:"wheel_pages"`
+	// TrayOnly keeps the window out of the taskbar and unable to minimize, so
+	// it opens from the tray or the shortcut alone. It needs running in the
+	// background: closing would otherwise leave no way back.
+	TrayOnly bool `json:"tray_only,omitempty"`
 	// Shortcut shows or hides the launcher from any window, in the form
 	// mygo's global shortcuts take, such as "Ctrl+Alt+Space"; empty is none.
 	Shortcut string `json:"shortcut,omitempty"`

@@ -169,6 +169,10 @@ func (v *view) settingsView(c *ui.Context) {
 					if icon := v.aboutIconImage(); icon != nil {
 						ui.Image(c, icon).Size(22, 22).Fit(ui.Contain)
 					}
+					if iconButton(c, iconGrid, 16, v.pal.muted, m.SystemIcon()).
+						Tooltip(m.SystemIcon()).Clicked() {
+						v.chooseAppIconFromShell()
+					}
 					if ui.Button(c, m.ChooseIcon()).Clicked() {
 						v.chooseAppIcon()
 					}
@@ -218,7 +222,7 @@ func (v *view) settingsView(c *ui.Context) {
 					v.app.save()
 				}
 			})
-			row(m.AutoHide(), m.AutoHideHint(), func() {
+			row(m.AutoHide(), "", func() {
 				if ui.Switch(c, &s.AutoHide).Label(m.ToggleAutoHide()).Changed() {
 					v.app.save()
 				}
@@ -239,9 +243,16 @@ func (v *view) settingsView(c *ui.Context) {
 					v.app.notify(m.RestartToApply())
 				}
 			})
-			row(m.BackgroundOnClose(), m.BackgroundOnCloseHint(), func() {
+			row(m.BackgroundOnClose(), "", func() {
 				if ui.Switch(c, &s.BackgroundOnClose).Label(m.ToggleBackgroundOnClose()).Changed() {
 					v.setBackgroundOnClose(s.BackgroundOnClose)
+				}
+			})
+			row(m.TrayOnly(), "", func() {
+				on := v.prefs.TrayOnly
+				sw := ui.Switch(c, &on).Label(m.ToggleTrayOnly()).Disabled(!s.BackgroundOnClose)
+				if sw.Changed() {
+					v.setTrayOnly(on)
 				}
 			})
 		})
@@ -252,7 +263,7 @@ func (v *view) settingsView(c *ui.Context) {
 					v.app.save()
 				}
 			})
-			row(m.ConvertAllPaths(), m.ConvertAllPathsHint(), func() {
+			row(m.ConvertAllPaths(), "", func() {
 				ui.Row(c).Gap(8).Children(func() {
 					if ui.Button(c, m.ToAbsolute()).Clicked() {
 						v.convertPaths(true)

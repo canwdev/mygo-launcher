@@ -149,6 +149,64 @@ func TestCustomIconRejectsBrokenImage(t *testing.T) {
 	}
 }
 
+// TestIconIndexReadsResourceIDs 验证序号接受负数：系统图标选择器把按资源 ID
+// 存放的图标作为负数返回，文件类型也要包含带图标资源的程序与库。
+func TestIconIndexReadsResourceIDs(t *testing.T) {
+	cases := map[string]int{"": 0, "3": 3, "-101": -101, " x ": 0}
+	for text, want := range cases {
+		if got := iconIndex(text); got != want {
+			t.Errorf("iconIndex(%q) = %d, want %d", text, got, want)
+		}
+	}
+	for _, path := range []string{`C:\Windows\System32\imageres.dll`, "app.exe", "app.ico", "panel.cpl", "lib.ocx", "saver.scr", "icons.icl", "pack.mun"} {
+		if !iconTakesIndex(path) {
+			t.Errorf("%q holds icon resources and must take an index", path)
+		}
+	}
+	for _, path := range []string{"", "a.txt", "image.png"} {
+		if iconTakesIndex(path) {
+			t.Errorf("%q has no icon resources to index", path)
+		}
+	}
+}
+
+// TestPathsExpandEnvironment 验证 %SystemRoot%\... 这类路径在图标、条目和工作
+// 目录上都会先展开：系统图标选择器返回的就是这种写法。
+func TestPathsExpandEnvironment(t *testing.T) {
+	app := newTestApp(t)
+	root := os.Getenv("SystemRoot")
+	if root == "" {
+		t.Skip("no SystemRoot")
+	}
+	exe := filepath.Join(root, "System32", "notepad.exe")
+	if _, err := os.Stat(exe); err != nil {
+		t.Skipf("no %s: %v", exe, err)
+	}
+	envPath := `%SystemRoot%\System32\notepad.exe`
+
+	if got := expandPath(envPath); got != exe {
+		t.Fatalf("the variable must expand, got %q", got)
+	}
+	if got := expandPath(`%NO_SUCH_VARIABLE%\a.exe`); got != `%NO_SUCH_VARIABLE%\a.exe` {
+		t.Fatalf("an unknown variable must stay as it is, got %q", got)
+	}
+	if got := absPath(envPath); got != exe {
+		t.Fatalf("a path with variables must resolve as an absolute one, got %q", got)
+	}
+	item := &AppItem{GUID: "env", Name: "Env", Path: envPath}
+	if !itemPresent(item) {
+		t.Fatal("an item behind a variable must be present")
+	}
+
+	icon, err := app.customIcon(envPath, 0)
+	if err != nil {
+		t.Fatalf("read the icon behind the variable: %v", err)
+	}
+	if !isCustomIcon(icon) {
+		t.Fatalf("the icon must live in custom-icons, got %q", icon)
+	}
+}
+
 // TestPruneIconsRemovesUnused 验证删除条目时删掉无人引用的图标，共享的图标保留。
 func TestPruneIconsRemovesUnused(t *testing.T) {
 	app := newTestApp(t)
