@@ -43,8 +43,8 @@ func TestItemMenuEndsWithoutSeparator(t *testing.T) {
 	}
 }
 
-// TestItemDialogActions 验证编辑已有条目时，更新图标和路径转换在详情弹窗里；
-// 新建条目时没有。
+// TestItemDialogActions 验证编辑已有条目时，更新图标和路径转换在按钮行最左侧
+// 图标按钮的菜单里，不在弹窗正文；新建条目时没有这个按钮。
 func TestItemDialogActions(t *testing.T) {
 	_, _, tt := newTestView(t, 720, 520)
 	if err := tt.RightClick("Alpha"); err != nil {
@@ -53,9 +53,17 @@ func TestItemDialogActions(t *testing.T) {
 	if err := tt.Click("Edit"); err != nil {
 		t.Fatalf("open the editor: %v", err)
 	}
+	for _, hidden := range []string{"Update icon", "Convert to absolute path", "Convert to relative path"} {
+		if tt.HasText(hidden) {
+			t.Fatalf("%q belongs in the actions menu, texts %q", hidden, tt.Texts())
+		}
+	}
+	if err := tt.Click("More actions"); err != nil {
+		t.Fatalf("open the actions menu: %v", err)
+	}
 	for _, want := range []string{"Update icon", "Convert to absolute path", "Convert to relative path"} {
 		if !tt.HasText(want) {
-			t.Fatalf("the editor must offer %q, texts %q", want, tt.Texts())
+			t.Fatalf("the actions menu must offer %q, texts %q", want, tt.Texts())
 		}
 	}
 	if err := tt.Click("Cancel"); err != nil {
@@ -69,7 +77,7 @@ func TestItemDialogActions(t *testing.T) {
 	if err := tt.Click("Create…"); err != nil {
 		t.Fatalf("open the create dialog: %v", err)
 	}
-	for _, unwanted := range []string{"Update icon", "Convert to absolute path", "Convert to relative path"} {
+	for _, unwanted := range []string{"More actions", "Update icon", "Convert to absolute path", "Convert to relative path"} {
 		if tt.HasText(unwanted) {
 			t.Fatalf("a new item has no stored icon or path to change, texts %q", tt.Texts())
 		}

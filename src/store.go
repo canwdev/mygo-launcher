@@ -114,7 +114,7 @@ func defaultStore() AppStore {
 		Categories: []CategoryNode{
 			{GUID: uuid.NewString(), Name: locales.DefaultTabName(), Slots: []*string{}},
 		},
-		Settings: Settings{AbsolutePaths: true, AutoTime: true, AutoHide: true, AlwaysOnTop: false, BackgroundOnClose: true},
+		Settings: Settings{AbsolutePaths: true, AutoHide: true, AlwaysOnTop: false, BackgroundOnClose: true},
 	}
 }
 
@@ -135,17 +135,15 @@ func settingsMissingKey(data []byte, key string) bool {
 	return !ok
 }
 
-// parseStore reads the store JSON and fills in defaults (the auto_time and
-// auto_hide keys of older files, missing guids and names, path normalization).
+// parseStore reads the store JSON and fills in defaults (the auto_hide key of
+// older files, missing guids and names, path normalization). AutoTime and
+// AbsolutePaths stay off when an older file lacks them.
 // ok=false means the content is not valid JSON: a file caught mid-edit must not
 // be taken as an empty store.
 func parseStore(data []byte) (AppStore, bool) {
 	var store AppStore
 	if err := json.Unmarshal(data, &store); err != nil {
 		return AppStore{}, false
-	}
-	if settingsMissingKey(data, "auto_time") {
-		store.Settings.AutoTime = true
 	}
 	if settingsMissingKey(data, "auto_hide") {
 		store.Settings.AutoHide = true

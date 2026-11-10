@@ -104,6 +104,16 @@ func (msgs Messages) Exit() string {
 	return Catalog.Format(msgs.locale, "exit", nil)
 }
 
+// Restart says "Restart"
+// in the language the app shows.
+func Restart() string { return In(i18n.Locale()).Restart() }
+
+// Restart says "Restart"
+// in the language of msgs.
+func (msgs Messages) Restart() string {
+	return Catalog.Format(msgs.locale, "restart", nil)
+}
+
 // PickFiles says "Pick files…"
 // in the language the app shows.
 func PickFiles() string { return In(i18n.Locale()).PickFiles() }
@@ -644,6 +654,16 @@ func ConvertToRelative() string { return In(i18n.Locale()).ConvertToRelative() }
 // in the language of msgs.
 func (msgs Messages) ConvertToRelative() string {
 	return Catalog.Format(msgs.locale, "convertToRelative", nil)
+}
+
+// MoreActions says "More actions"
+// in the language the app shows.
+func MoreActions() string { return In(i18n.Locale()).MoreActions() }
+
+// MoreActions says "More actions"
+// in the language of msgs.
+func (msgs Messages) MoreActions() string {
+	return Catalog.Format(msgs.locale, "moreActions", nil)
 }
 
 // EditItem says "Edit item"
@@ -1248,46 +1268,6 @@ func (msgs Messages) ElevationCancelled() string {
 	return Catalog.Format(msgs.locale, "elevationCancelled", nil)
 }
 
-// DurationDay says "{n}d"
-// in the language the app shows.
-func DurationDay(n string) string { return In(i18n.Locale()).DurationDay(n) }
-
-// DurationDay says "{n}d"
-// in the language of msgs.
-func (msgs Messages) DurationDay(n string) string {
-	return Catalog.Format(msgs.locale, "durationDay", map[string]any{"n": n})
-}
-
-// DurationHour says "{n}h"
-// in the language the app shows.
-func DurationHour(n string) string { return In(i18n.Locale()).DurationHour(n) }
-
-// DurationHour says "{n}h"
-// in the language of msgs.
-func (msgs Messages) DurationHour(n string) string {
-	return Catalog.Format(msgs.locale, "durationHour", map[string]any{"n": n})
-}
-
-// DurationMinute says "{n}m"
-// in the language the app shows.
-func DurationMinute(n string) string { return In(i18n.Locale()).DurationMinute(n) }
-
-// DurationMinute says "{n}m"
-// in the language of msgs.
-func (msgs Messages) DurationMinute(n string) string {
-	return Catalog.Format(msgs.locale, "durationMinute", map[string]any{"n": n})
-}
-
-// DurationNone says "--"
-// in the language the app shows.
-func DurationNone() string { return In(i18n.Locale()).DurationNone() }
-
-// DurationNone says "--"
-// in the language of msgs.
-func (msgs Messages) DurationNone() string {
-	return Catalog.Format(msgs.locale, "durationNone", nil)
-}
-
 // AddFilesTitle says "Add Files"
 // in the language the app shows.
 func AddFilesTitle() string { return In(i18n.Locale()).AddFilesTitle() }
@@ -1866,6 +1846,36 @@ func IconsHint() string { return In(i18n.Locale()).IconsHint() }
 // in the language of msgs.
 func (msgs Messages) IconsHint() string {
 	return Catalog.Format(msgs.locale, "iconsHint", nil)
+}
+
+// CheckAvailability says "Check availability"
+// in the language the app shows.
+func CheckAvailability() string { return In(i18n.Locale()).CheckAvailability() }
+
+// CheckAvailability says "Check availability"
+// in the language of msgs.
+func (msgs Messages) CheckAvailability() string {
+	return Catalog.Format(msgs.locale, "checkAvailability", nil)
+}
+
+// CheckAvailabilityHint says "Check whether each item's file or folder still exists"
+// in the language the app shows.
+func CheckAvailabilityHint() string { return In(i18n.Locale()).CheckAvailabilityHint() }
+
+// CheckAvailabilityHint says "Check whether each item's file or folder still exists"
+// in the language of msgs.
+func (msgs Messages) CheckAvailabilityHint() string {
+	return Catalog.Format(msgs.locale, "checkAvailabilityHint", nil)
+}
+
+// AvailabilityChecked says "{count, plural, =0 {All items are available} one {# item is missing and dimmed} other {# items are missing and dimmed}}"
+// in the language the app shows.
+func AvailabilityChecked(count int) string { return In(i18n.Locale()).AvailabilityChecked(count) }
+
+// AvailabilityChecked says "{count, plural, =0 {All items are available} one {# item is missing and dimmed} other {# items are missing and dimmed}}"
+// in the language of msgs.
+func (msgs Messages) AvailabilityChecked(count int) string {
+	return Catalog.Format(msgs.locale, "availabilityChecked", map[string]any{"count": count})
 }
 
 // UpdateIcons says "Update icons"

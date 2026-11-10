@@ -280,6 +280,11 @@ func (v *view) settingsView(c *ui.Context) {
 					v.batchUpdateIcons()
 				}
 			})
+			row(m.CheckAvailability(), m.CheckAvailabilityHint(), func() {
+				if ui.Button(c, m.CheckAvailability()).Clicked() {
+					v.checkAvailability()
+				}
+			})
 			row(m.MigrateCLaunch(), v.migrateHint(m), func() {
 				if ui.Button(c, m.ChooseCLaunchIni()).Clicked() {
 					v.migrateCLaunch()
@@ -320,6 +325,14 @@ func (v *view) settingsView(c *ui.Context) {
 					}
 				})
 			}
+			ui.Row(c).Padding(8, 14).Gap(8).Justify(ui.End).MinHeight(42).Children(func() {
+				if ui.Button(c, m.Restart()).Clicked() {
+					mygo.App.Relaunch()
+				}
+				if ui.Button(c, m.Exit()).Clicked() {
+					mygo.App.Quit()
+				}
+			})
 		})
 	})
 }

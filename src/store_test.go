@@ -105,13 +105,13 @@ func TestParseStore(t *testing.T) {
 		t.Fatal("parseStore must reject invalid JSON")
 	}
 
-	// 旧文件缺 auto_time / auto_hide：默认打开
+	// 旧文件缺 auto_time / auto_hide：计时器默认关闭，自动隐藏默认打开
 	store, ok := parseStore([]byte(`{"apps":{"a":{"guid":"a","path":"C:/a.exe"}},"categories":[{"guid":"c","name":"Main"}]}`))
 	if !ok {
 		t.Fatal("parseStore rejected valid JSON")
 	}
-	if !store.Settings.AutoTime || !store.Settings.AutoHide {
-		t.Fatalf("legacy file should default auto_time/auto_hide to true, got %+v", store.Settings)
+	if store.Settings.AutoTime || !store.Settings.AutoHide {
+		t.Fatalf("legacy file should default auto_time off and auto_hide on, got %+v", store.Settings)
 	}
 	if store.Categories[0].Slots == nil {
 		t.Fatal("nil slots must be normalized to an empty slice")
@@ -127,6 +127,9 @@ func TestParseStore(t *testing.T) {
 	}
 	if len(empty.Categories) != 1 || len(empty.Apps) != 0 {
 		t.Fatalf("empty store should fall back to the default store, got %+v", empty)
+	}
+	if empty.Settings.AutoTime {
+		t.Fatalf("a new store must leave the timer off, got %+v", empty.Settings)
 	}
 }
 

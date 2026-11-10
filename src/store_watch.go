@@ -142,6 +142,9 @@ func (a *App) applyStoreLocked(store AppStore) {
 		a.tick.Store(false)
 	}
 	a.store = store
+	// The hand-edited store may have changed paths; what was missing before
+	// says nothing about the new items.
+	a.missing = nil
 }
 
 // handleStoreFileEvent applies an edit from outside and tells the user.

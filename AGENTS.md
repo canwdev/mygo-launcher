@@ -111,6 +111,9 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   不要把这段留白放回滚动容器，那会让内容提前被裁掉，留下一块空白。
 - 网格单元之间没有间隙，也不画卡片底色，只在悬停时显示圆角背景；图标与名称之间留 6 DIP：
   `gridBody` 用 `ui.Grid`（`Gap(0)`）按窗口宽度算出列数，因此不需要 `GridView` 和紧凑主题。
+  名称自动换行、居中，最多两行（超出以省略号结尾）；以管理员身份运行的条目在图标左下角画
+  盾牌（`view_item.go` 的 `adminBadge`），不再放在名称前面。被检查判定为缺失的条目置灰：
+  图标用 MyGo 的 `Grayscale()` 去掉颜色，名称改用 muted 色。
 - 网格单元左上角的时长默认不画，悬停该单元（或进程运行中）才出现，计时器关闭时始终不画；
   时长字段未运行时的 Tooltip 复用设置里的「计时器」（`AutoTiming`），运行中才换成停止提示；
   条目还没有时长时只画计时图标，不画占位的「--」。
@@ -280,8 +283,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   缓存 2 秒，避免菜单每帧查询 shell。
 - 条目菜单：shell 目标（`shell:`、`::{CLSID}`、网址、UWP）没有可显示的文件夹，菜单里的
   「打开所在文件夹」换成「打开」；「系统菜单」上方有分割线，它下面不再加线；「属性」固定放在
-  最下方；「更新图标」「转为绝对/相对路径」移到条目详情弹窗（编辑已有条目时显示，窄窗口下
-  按钮自动换行）。
+  最下方；「更新图标」「转为绝对/相对路径」收进条目详情弹窗按钮行最左侧的图标按钮
+  （`itemActionsButton` 的 `PopoverMenuButton` 菜单），编辑已有条目时才出现。
 - 「属性」和「系统菜单」对所有文件、文件夹和 shell 位置可用，UWP（`shell:AppsFolder\…`）和
   网址除外（`canUseShellActions`）。属性用 `ShellExecuteEx` 的 `properties` 动词 +
   `SEE_MASK_INVOKEIDLIST`；系统菜单用 `SHParseDisplayName` + `SHBindToParent` +
@@ -335,7 +338,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   设置里的语言是 `ui.Select` 下拉框，只列简体中文和 English（没有「跟随系统」项）：`auto`
   时显示系统选定的语言，选择后走 `changeLanguage`，和主题一样在帧外执行 `SetLocale`。设置窗口
   标题在 `OnLocaleChanged` 里跟着更新。
-- 运行时长单位也走文案（`durationDay` 等），`formatRuntime(lang, ms)` 需要语言参数。
+- **运行时长不翻译**：`formatRuntime(ms)` 直接写 `1h30m` 这样的短格式（单位是字面的
+  `d` / `h` / `m`），翻译后太长放不进格子；没有时长时返回空字符串，界面只画计时图标。
 - 新增一条文案：两个 JSON 都加键（源语言的复数等元数据写在 `en.json`），运行 generate，再用
   `v.msgs().KeyName()` 或 `locales.KeyName()` 取用。
 - **语义相同的文案共用一个键**，不要为不同位置各加一条：设置「数据目录」的按钮和条目菜单都用
@@ -356,8 +360,9 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件、程序图标、背景与背景透明度）、
   行为（全局快捷键、计时器、自动隐藏、
   窗口置顶、滚轮切换页面、GPU 绘制、关闭后在后台运行）、路径（新条目绝对路径、批量转换）、
-  数据（刷新、打开数据目录（hint 显示实际路径）、更新图标、从 CLaunch 迁移）、关于（上色后的
-  程序图标、名称与版本、GitHub、更新）。GPU 开关改动后提示重启生效。
+  数据（刷新、打开数据目录（hint 显示实际路径）、更新图标、检查可用性、从 CLaunch 迁移）、
+  关于（上色后的
+  程序图标、名称与版本、GitHub、更新，以及底部的重启与退出按钮）。GPU 开关改动后提示重启生效。
 
 ## 启动参数
 
@@ -385,7 +390,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
   `shortcutKeyNames`。
 - 按下时主窗口可见且聚焦就隐藏（后台运行开启则隐藏到托盘，否则最小化），其余情况
   `showMainAtCursor()`：窗口按普通尺寸居中于光标，并夹在光标所在显示器的工作区内，随后
-  显示并聚焦。托盘「打开」项仍用 `showMain()`，不改变窗口位置。
+  显示并聚焦。托盘的图标点击和「打开」项也用 `showMainAtCursor()`。
 - 测试把 `registerShortcut` / `unregisterShortcut` 换成假函数：真正的注册需要应用的 message
   loop，无头测试里不能用。
 
@@ -417,8 +422,8 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - `src/tray.go`：`syncTray` 在开关打开时创建 `mygo.NewTray`（稳定 ID `main`，图标由
   `app_icon.go` 按当前强调色合成成 64px），关闭时 `Destroy`；语言变化或开关变化时重设菜单和
   悬停提示。托盘只在开关打开时存在，且一直显示。
-- 托盘左键和右键菜单的「打开」恢复主窗口（`showMain`，最小化时先 `Restore` 再 `Show`，
-  因为 `Show` 不会取消最小化），并显示当前全局快捷键；菜单还有「设置」（`openSettings`）和
+- 托盘左键和右键菜单的「打开」恢复主窗口（`showMainAtCursor`，和重复启动、全局快捷键一样
+  出现在指针中心），并显示当前全局快捷键；菜单还有「设置」（`openSettings`）和
   「退出」（`App.Quit`）。
 - 主窗口标题只有 `appName`；安装目录放在托盘悬停提示 `instanceTitle(installDir())` 里。因为
   标题不再唯一，`singleton_windows.go` 的 `findMainWindow` 按「标题 = appName + 进程 exe 所在
@@ -461,12 +466,20 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 条目路径相对于 `absBase`（开发时是工作目录，构建版是 exe 所在目录），除非「新条目使用绝对
   路径」；`convertItemPaths` 只转换条目路径、工作目录和快捷方式路径，**不转换图标路径**：图标
   始终相对于数据文件夹，迁移后仍能显示。
-- 可执行程序只在计时器（`auto_time`）开启时被跟踪（`startTracked`）：退出时把时长加到
+- **启动用新环境变量**：`.exe` 由 `CreateProcessW` 启动，环境块用 `CreateEnvironmentBlock`
+  从注册表现读，不继承启动器自己的环境，所以启动器启动后用户改过的变量对新进程立即生效。
+  `.bat` / `.cmd` / `.com`、需要提权的程序（`runas`）和 shell 目标仍走 `ShellExecuteEx`，
+  它不接受环境块。
+- 计时器（`auto_time`）默认关闭。可执行程序只在它开启时被跟踪（`startTracked`）：退出时把时长加到
   `runtimeStats`，运行中也能停止。关闭计时器时 `App.stopTiming` 立即清空 `running`（不结束
   进程）、把已跟踪进程标成不再计时、停止时钟重绘，并关闭运行时长对话框；网格里的时长整个
   不画，程序可以重复启动，不再弹停止确认。重新开启只跟踪之后启动的程序。
   运行时对话框的 `-1h` / `-30m` / `+30m` / `+1h` 只改待保存的分钟数（`adjustRuntime`），
   点保存后才通过 `setRuntimeMs` 写入。提示是「部分程序无法自动计时」。
+- **可用性置灰**：设置 → 数据 的「检查可用性」批量检查每个条目的路径（`itemPresent`：shell
+  目标不计，空路径按工作目录检查），缺失的条目记在内存 `App.missing`（不写 store），网格把
+  它们置灰。启动前 `planLaunch` 的路径检查（原有行为）同时置灰或取消置灰；编辑保存条目、
+  删除条目和手工重载 store 会更新或清空标记。
 - **只有程序计时**：`timeableItem`（`src/utils.go`）按扩展名判断 `Path` 是否为 `.exe` / `.bat` /
   `.cmd` / `.com` 且不是 shell 目标，不读磁盘（文件暂时不存在时仍显示时长）。文件夹、文件、
   网址和 shell 目标打开后没有可跟踪的进程，格子里不画计时字段，`openRuntime` 也直接返回；
@@ -572,7 +585,7 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 | `src/data_root*.go` | 数据目录选择（安装版 `%LOCALAPPDATA%`、便携版 exe 旁）、旧数据迁移 |
 | `installer/installer.nsh` | 安装器钩子：搬走旧版残留数据，卸载时询问是否删除数据 |
 | `locales/` | 界面文案 `en.json` / `zh-Hans.json` 与生成的 `catalog_gen.go` |
-| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
+| `docs/` | `ICON.md`（图标）、`UPDATES.md`（更新与发布）、`MIGRATION.md`（CLaunch 迁移）、`TOUCH.md`（触摸与滚动支持）、`TODO.md`（待办）、`screenshot.webp`（界面截图）、`generate-icon.ps1` |
 | `resources/` | 应用图标源文件；`resources.go` 把图标嵌入二进制，供托盘使用，图标文件由 `mygo.json` 的 `resourcesExclude` 排除，不随包安装 |
 
 没有前端。新增一个操作意味着在 `view` 或 `App` 上添加方法，并从需要它的菜单或按钮调用。

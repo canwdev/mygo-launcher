@@ -141,11 +141,12 @@ func TestReloadStoreDropsItemsRemovedOnDisk(t *testing.T) {
 	}
 }
 
-// TestRuntimeText 固定运行时数值的读法：写成短格式，运行中的计时再加一段
-// 「(+ 1m)」，没有运行时只显示占位符。
+// TestRuntimeText 固定运行时数值的读法：写成短格式（单位不翻译），运行中的
+// 计时再加一段「(+ 1m)」，没有运行时是空字符串。
 func TestRuntimeText(t *testing.T) {
 	app := newTestApp(t)
 	v := newView(app)
+	app.store.Settings.AutoTime = true
 	app.store.Apps["a"] = &AppItem{GUID: "a", Name: "A", RuntimeMs: 90_000}
 	app.runtimeStats["a"] = 90_000
 	v.states = app.state()
@@ -153,8 +154,14 @@ func TestRuntimeText(t *testing.T) {
 	if got := v.runtimeText("a"); got != "1m" {
 		t.Fatalf("runtime text of 90s should be %q, got %q", "1m", got)
 	}
-	if got := v.runtimeText("missing"); got != "--" {
-		t.Fatalf("an item without runtime should show the placeholder, got %q", got)
+	app.store.Apps["b"] = &AppItem{GUID: "b", Name: "B", RuntimeMs: 5_400_000}
+	app.runtimeStats["b"] = 5_400_000
+	v.states = app.state()
+	if got := v.runtimeText("b"); got != "1h30m" {
+		t.Fatalf("90 minutes should read %q, got %q", "1h30m", got)
+	}
+	if got := v.runtimeText("missing"); got != "" {
+		t.Fatalf("an item without runtime should show nothing, got %q", got)
 	}
 
 	app.running["a"] = &runningProc{start: time.Now().Add(-65 * time.Second)}

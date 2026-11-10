@@ -89,12 +89,16 @@ func (v *view) runItem(guid string) {
 		return
 	}
 	v.launchAt[guid] = time.Now()
+	wasMissing := v.app.isMissing(guid)
 	plan, err := v.app.planLaunch(guid)
 	if err != nil {
 		if err != errAlreadyRunning {
 			v.app.notify(err.Error())
 		}
 		return
+	}
+	if wasMissing {
+		v.refresh() // the item is back, so its dimming goes now
 	}
 	go v.app.runLaunch(plan)
 }
@@ -136,12 +140,12 @@ func (v *view) liveMs(guid string) int64 {
 	return 0
 }
 
-// runtimeText spells an item's runtime as a row shows it: "1h 2m", and what is
+// runtimeText spells an item's runtime as a row shows it: "1h2m", and what is
 // being added now as "(+ 3m)".
 func (v *view) runtimeText(guid string) string {
-	text := formatRuntime(v.lang, v.baseline(guid))
+	text := formatRuntime(v.baseline(guid))
 	if ms := v.liveMs(guid); ms > 0 {
-		text += " (+ " + formatRuntime(v.lang, ms) + ")"
+		text += " (+ " + formatRuntime(ms) + ")"
 	}
 	return text
 }
@@ -359,6 +363,50 @@ func (v *view) batchUpdateIcons() {
 			v.app.notify(v.msgs().UpdatedIcons(len(results)))
 		})
 	}()
+}
+
+// checkAvailability checks every item's file or folder, on a goroutine since a
+// network path may be slow, and dims the items that are gone. Items the check
+// no longer covers, as shell targets, lose their dimming.
+func (v *view) checkAvailability() {
+	type check struct{ guid, path string }
+	var checks []check
+	missing := map[string]bool{}
+	for guid, item := range v.app.store.Apps {
+		if item == nil {
+			continue
+		}
+		switch {
+		case isShellTarget(item.Path):
+			// The shell resolves it; there is no file to check.
+		case item.Path == "":
+			if item.WorkingDir == "" {
+				missing[guid] = true
+				continue
+			}
+			checks = append(checks, check{guid, absPath(item.WorkingDir)})
+		default:
+			checks = append(checks, check{guid, resolveLaunchPath(item.Path)})
+		}
+	}
+	run := func() {
+		for _, c := range checks {
+			if !fileExists(c.path) {
+				missing[c.guid] = true
+			}
+		}
+		v.app.dispatch(func() {
+			v.app.setBusy("")
+			v.app.missing = missing
+			v.app.notify(v.msgs().AvailabilityChecked(len(missing)))
+		})
+	}
+	if v.app.win == nil {
+		run() // tests: there is no message loop to wait for
+		return
+	}
+	v.app.setBusy(v.msgs().CheckAvailability())
+	go run()
 }
 
 func (v *view) convertPaths(absolute bool) {

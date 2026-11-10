@@ -62,36 +62,46 @@ func (v *view) itemDialog(c *ui.Context) {
 			})
 
 			// The fields scroll in a small window, so the buttons below stay
-			// reachable. The item actions below the fields take their own room.
-			bodyMax := dialogBodyMax(c)
-			if !v.editNew {
-				bodyMax = max(90, bodyMax-84)
-			}
-			ui.Scroll(c).MaxHeight(bodyMax).Children(func() {
+			// reachable.
+			ui.Scroll(c).MaxHeight(dialogBodyMax(c)).Children(func() {
 				ui.Column(c).Gap(6).Padding(0, 2, 6, 2).Children(func() {
 					v.itemDialogFields(c)
 				})
 			})
 
-			// Actions that change the stored item, moved here from its context
-			// menu. They wrap in a narrow window.
-			if !v.editNew {
-				item := v.app.item(v.editGUID)
-				autoIcon := item != nil && (isAutoIcon(item.Icon) || !allowedIcon(item.Icon))
-				ui.Row(c).Gap(8).Wrap().Children(func() {
-					if autoIcon {
-						ui.Button(c, m.UpdateIcon()).OnClick(v.updateIconFromDialog)
-					}
-					ui.Button(c, m.ConvertToAbsolute()).OnClick(func() { v.convertFromDialog(true) })
-					ui.Button(c, m.ConvertToRelative()).OnClick(func() { v.convertFromDialog(false) })
-				})
-			}
-
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			// The actions that change the stored item, moved here from its
+			// context menu, sit behind the icon button at the start of the
+			// button row, so the dialog keeps a single row of buttons.
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if !v.editNew {
+					v.itemActionsButton(c)
+				}
+				ui.Box(c).Grow(1)
 				ui.Button(c, m.Cancel()).OnClick(func() { v.editOpen = false; v.refresh() })
 				ui.PrimaryButton(c, m.Save()).OnClick(v.saveItemDialog)
 			})
 		})
+	})
+}
+
+// itemActionsButton is the icon button at the start of the dialog's button
+// row: its menu holds the actions that change the stored item.
+func (v *view) itemActionsButton(c *ui.Context) {
+	m := v.msgs()
+	item := v.app.item(v.editGUID)
+	autoIcon := item != nil && (isAutoIcon(item.Icon) || !allowedIcon(item.Icon))
+	b := iconButton(c, iconMenu, 16, v.pal.muted, m.MoreActions())
+	b.Tooltip(m.MoreActions())
+	b.PopoverMenuButton(func(menu *ui.Menu) {
+		if autoIcon && menu.Item(m.UpdateIcon()).Chosen() {
+			v.updateIconFromDialog()
+		}
+		if menu.Item(m.ConvertToAbsolute()).Chosen() {
+			v.convertFromDialog(true)
+		}
+		if menu.Item(m.ConvertToRelative()).Chosen() {
+			v.convertFromDialog(false)
+		}
 	})
 }
 
@@ -208,7 +218,7 @@ func (v *view) runtimeDialog(c *ui.Context) {
 	if n, err := strconv.Atoi(strings.TrimSpace(v.runtimeMinutes)); err == nil {
 		minutes = max(0, n)
 	}
-	preview := formatRuntime(v.lang, int64(minutes)*60000)
+	preview := formatRuntime(int64(minutes) * 60000)
 
 	ui.Modal(c, &v.runtimeOpen, func() {
 		ui.Column(c).Width(dialogWidth(c, 460)).Gap(10).Children(func() {
@@ -219,7 +229,7 @@ func (v *view) runtimeDialog(c *ui.Context) {
 					v.saveRuntime()
 				}
 			})
-			ui.Text(c, m.RuntimeCurrent(formatRuntime(v.lang, current), preview)).
+			ui.Text(c, m.RuntimeCurrent(formatRuntime(current), preview)).
 				FontSize(11).TextColor(p.muted)
 
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {

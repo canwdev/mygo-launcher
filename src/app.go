@@ -51,6 +51,10 @@ type App struct {
 	// the item, never written to the icon cache.
 	dynamicIcons map[string]ui.ImageSource
 
+	// missing holds the items whose file or folder was found missing by the
+	// availability check or a launch; the grid dims them.
+	missing map[string]bool
+
 	// updates reports whether the updater plugin is used.
 	updates bool
 
@@ -116,6 +120,35 @@ func (a *App) state() map[string]ItemState {
 		out[guid] = st
 	}
 	return out
+}
+
+// setMissing records whether an item's file or folder was found; the grid dims
+// the items that were not.
+func (a *App) setMissing(guid string, missing bool) {
+	if missing {
+		if a.missing == nil {
+			a.missing = map[string]bool{}
+		}
+		a.missing[guid] = true
+		return
+	}
+	delete(a.missing, guid)
+}
+
+// isMissing reports whether the last check found the item's path missing.
+func (a *App) isMissing(guid string) bool { return a.missing[guid] }
+
+// itemPresent reports whether item's file or folder exists now. A shell target
+// has no file to check and counts as present; an item without a path opens its
+// working directory, as a folder item does.
+func itemPresent(item *AppItem) bool {
+	if item == nil || isShellTarget(item.Path) {
+		return true
+	}
+	if item.Path == "" {
+		return item.WorkingDir != "" && fileExists(absPath(item.WorkingDir))
+	}
+	return fileExists(resolveLaunchPath(item.Path))
 }
 
 func (a *App) item(guid string) *AppItem {
@@ -295,20 +328,25 @@ func (a *App) planLaunch(guid string) (launchPlan, error) {
 		// track or time.
 		plan.path, plan.args, plan.elevated = plan.workDir, nil, false
 		if !fileExists(plan.path) {
+			a.setMissing(guid, true)
 			return launchPlan{}, errors.New(locales.PathMissing())
 		}
+		a.setMissing(guid, false)
 		return plan, nil
 	}
 	if isShellTarget(item.Path) {
 		// A URL or shell namespace goes to the shell as written: it is not a
 		// file to resolve and not a process to track.
 		plan.path, plan.elevated = item.Path, false
+		a.setMissing(guid, false)
 		return plan, nil
 	}
 	plan.path = resolveLaunchPath(item.Path)
 	if !fileExists(plan.path) {
+		a.setMissing(guid, true)
 		return launchPlan{}, errors.New(locales.PathMissing())
 	}
+	a.setMissing(guid, false)
 	plan.track = isExecutable(plan.path) && timing
 	return plan, nil
 }

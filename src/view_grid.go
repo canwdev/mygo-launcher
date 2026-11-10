@@ -141,13 +141,14 @@ func (v *view) gridCell(c *ui.Context, tab *CategoryNode, index int, guid *strin
 			ui.Box(c).Key("key-focus").Absolute().Size(0, 0).
 				Focusable().FocusRing(false).Focus()
 		}
-		v.itemIcon(c, item, m.gridIcon)
-		ui.Row(c).Gap(4).AlignItems(ui.Center).MaxWidth(m.cellWidth - 8).Children(func() {
-			if item.RunAsAdmin {
-				ui.Icon(c, iconShield).Size(11, 11).TextColor(c.Theme().Warning)
-			}
-			ui.Text(c, item.Name).FontSize(m.gridFont).FontWeight(500).SingleLine().TextColor(p.text)
-		})
+		missing := v.app.isMissing(item.GUID)
+		v.itemIcon(c, item, m.gridIcon, item.RunAsAdmin, missing)
+		titleColor := p.text
+		if missing {
+			titleColor = p.muted // the item no longer has anything to launch
+		}
+		ui.Text(c, item.Name).FontSize(m.gridFont).FontWeight(500).MaxLines(2).
+			TextAlign(ui.Center).MaxWidth(m.cellWidth - 8).TextColor(titleColor)
 
 		// Files land before or after the cell, as its two halves take them.
 		left := ui.Box(c).Key("file-before").Absolute().Top(0).Bottom(0).Left(0).WidthPercent(50)

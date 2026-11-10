@@ -4,6 +4,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -98,8 +99,14 @@ func launchVerb(elevated bool) string {
 	return "open"
 }
 
-// startProcess launches path with args in workDir via ShellExecuteEx and
-// returns the process handle; the caller decides how to wait/cleanup.
+// startProcess launches path with args in workDir and returns the process
+// handle; the caller decides how to wait/cleanup.
+//
+// An .exe starts through CreateProcess with an environment block built fresh
+// from the registry, so item processes see the system's current variables
+// rather than the copy the launcher inherited when it started. Other files
+// (.bat/.cmd/.com) and an .exe CreateProcess cannot start still go through
+// ShellExecuteEx, which takes no environment block.
 //
 // elevated=true（item 勾选了“Run as administrator”）时固定用 "runas" 动词，由系统
 // 弹 UAC 提权；否则先用 "open"，只有在程序自身要求提权等情况下才回退到 "runas"。
@@ -115,6 +122,11 @@ func startProcess(path string, args []string, workDir string, elevated bool) (wi
 		}
 		return h, nil
 	}
+	if strings.EqualFold(filepath.Ext(path), ".exe") {
+		if h, err := createProcessFreshEnv(path, args, workDir); err == nil {
+			return h, nil
+		}
+	}
 	h, err := shellExecuteEx(launchVerb(false), path, joinArgsForShell(args), workDir)
 	if err != nil {
 		if errors.Is(err, syscall.Errno(1223)) || errors.Is(err, syscall.Errno(5)) {
@@ -126,6 +138,52 @@ func startProcess(path string, args []string, workDir string, elevated bool) (wi
 		}
 	}
 	return h, nil
+}
+
+// createProcessFreshEnv starts path with an environment block read from the
+// registry now instead of the launcher's own environment: variables the user
+// changed after the launcher started apply to the new process.
+func createProcessFreshEnv(path string, args []string, workDir string) (windows.Handle, error) {
+	var token windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token); err != nil {
+		return 0, err
+	}
+	defer token.Close()
+	var env *uint16
+	if err := windows.CreateEnvironmentBlock(&env, token, false); err != nil {
+		return 0, err
+	}
+	defer func() { _ = windows.DestroyEnvironmentBlock(env) }()
+
+	app, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return 0, err
+	}
+	line := make([]string, 0, len(args)+1)
+	line = append(line, syscall.EscapeArg(path))
+	for _, a := range args {
+		line = append(line, syscall.EscapeArg(a))
+	}
+	cmdLine, err := windows.UTF16PtrFromString(strings.Join(line, " "))
+	if err != nil {
+		return 0, err
+	}
+	var dir *uint16
+	if workDir != "" {
+		dir, err = windows.UTF16PtrFromString(workDir)
+		if err != nil {
+			return 0, err
+		}
+	}
+	si := &windows.StartupInfo{}
+	si.Cb = uint32(unsafe.Sizeof(*si))
+	var pi windows.ProcessInformation
+	if err := windows.CreateProcess(app, cmdLine, nil, nil, false,
+		windows.CREATE_UNICODE_ENVIRONMENT, env, dir, si, &pi); err != nil {
+		return 0, err
+	}
+	_ = windows.CloseHandle(pi.Thread)
+	return pi.Process, nil
 }
 
 // startUntracked launches path without returning a process handle, so nothing

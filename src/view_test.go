@@ -108,6 +108,29 @@ func TestViewOpensItemEditor(t *testing.T) {
 	}
 }
 
+// TestViewMarksElevatedItems 验证以管理员身份运行的条目在图标左下角显示盾牌，
+// 不再放在名称前面。
+func TestViewMarksElevatedItems(t *testing.T) {
+	app, _, tt := newTestView(t, 720, 460)
+	app.store.Apps["a"].RunAsAdmin = true
+	tt.Frame()
+
+	name, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha cell")
+	}
+	badge, ok := tt.Access("Run as administrator")
+	if !ok {
+		t.Fatalf("an elevated item must show the shield, texts %q", tt.Texts())
+	}
+	if badge.Bounds.Y+badge.Bounds.H > name.Y {
+		t.Fatalf("the shield must sit above the name, badge %+v name %+v", badge.Bounds, name)
+	}
+	if badge.Bounds.X+badge.Bounds.W/2 >= name.X+name.W/2 {
+		t.Fatalf("the shield must sit at the icon's left, badge %+v name %+v", badge.Bounds, name)
+	}
+}
+
 // TestViewSearch 验证搜索浮层：打开、输入过滤、点击结果定位。
 func TestViewSearch(t *testing.T) {
 	app, v, tt := newTestView(t, 720, 460)
@@ -232,7 +255,7 @@ func TestItemMenuReportsMissingFileActions(t *testing.T) {
 	if err := tt.Click("Edit"); err != nil {
 		t.Fatalf("open the editor: %v", err)
 	}
-	if err := tt.Click("Update icon"); err != nil {
+	if err := clickMenu(tt, "More actions", "Update icon"); err != nil {
 		t.Fatalf("choose Update icon: %v", err)
 	}
 	if !tt.HasText(missing) {
@@ -301,7 +324,9 @@ func TestViewRunReportsMissingPath(t *testing.T) {
 
 // TestViewRuntimeFieldIsClickable 验证网格单元左上角的时长可以点开编辑。
 func TestViewRuntimeFieldIsClickable(t *testing.T) {
-	_, _, tt := newTestView(t, 720, 460)
+	app, _, tt := newTestView(t, 720, 460)
+	app.store.Settings.AutoTime = true
+	tt.Frame()
 
 	alpha, ok := tt.Find("Alpha")
 	if !ok {
@@ -337,6 +362,7 @@ func TestViewHidesRuntimeForNonPrograms(t *testing.T) {
 	app.store.Categories[0].Slots = []*string{
 		ptrString("dir"), ptrString("file"), ptrString("url"), ptrString("prog"),
 	}
+	app.store.Settings.AutoTime = true
 	app.runtimeStats["dir"], app.runtimeStats["prog"] = 7_200_000, 3_600_000
 	tt.Frame()
 
@@ -375,6 +401,9 @@ func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
 		if err := tt.Click("Edit"); err != nil {
 			t.Fatalf("open the editor: %v", err)
 		}
+		if err := tt.Click("More actions"); err != nil {
+			t.Fatalf("open the actions menu: %v", err)
+		}
 		if !tt.HasText("Update icon") {
 			t.Fatalf("an icon outside the folders must offer Update icon, texts %q", tt.Texts())
 		}
@@ -388,6 +417,9 @@ func TestViewOffersUpdateIconOutsideFolders(t *testing.T) {
 		}
 		if err := tt.Click("Edit"); err != nil {
 			t.Fatalf("open the editor: %v", err)
+		}
+		if err := tt.Click("More actions"); err != nil {
+			t.Fatalf("open the actions menu: %v", err)
 		}
 		if tt.HasText("Update icon") {
 			t.Fatalf("a custom icon needs no update entry, texts %q", tt.Texts())
@@ -886,7 +918,8 @@ func TestViewSettingsChoosesIconSize(t *testing.T) {
 // TestViewGridShowsRuntimeOnHover 验证网格单元左上角的时长默认不画，指针移到格子上
 // 才出现；没有时长的条目只画计时图标，不画占位的「--」。
 func TestViewGridShowsRuntimeOnHover(t *testing.T) {
-	_, _, tt := newTestView(t, 720, 460)
+	app, _, tt := newTestView(t, 720, 460)
+	app.store.Settings.AutoTime = true
 	tt.Frame()
 	if tt.HasText("1h") {
 		t.Fatalf("an unhovered cell must not show its runtime, texts %q", tt.Texts())
@@ -1011,6 +1044,7 @@ func TestSettingsUpdates(t *testing.T) {
 // TestAutoTimingGatesRuntime 验证关掉自动计时后，运行中的进程不再显示增量。
 func TestAutoTimingGatesRuntime(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
+	app.store.Settings.AutoTime = true
 	app.running["a"] = &runningProc{start: time.Now().Add(-time.Hour)}
 	v.states = app.state()
 

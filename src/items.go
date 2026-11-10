@@ -146,6 +146,7 @@ func (v *view) createItem(fields itemFields) {
 		RunAsAdmin: fields.RunAsAdmin,
 	}
 	v.app.runtimeStats[guid] = 0
+	v.app.setMissing(guid, !itemPresent(v.app.store.Apps[guid]))
 	tab.Slots = append(tab.Slots, &guid)
 	v.app.save()
 	v.app.notify(v.msgs().ItemCreated())
@@ -166,6 +167,7 @@ func (v *view) updateItem(guid string, fields itemFields) {
 	item.WorkingDir = fields.WorkDir
 	item.Icon = fields.Icon
 	item.RunAsAdmin = fields.RunAsAdmin
+	v.app.setMissing(guid, !itemPresent(item))
 	v.app.save()
 	if oldIcon != item.Icon {
 		v.app.clearDynamicIcon(guid)
@@ -176,6 +178,7 @@ func (v *view) updateItem(guid string, fields itemFields) {
 
 func (v *view) removeItem(guid string) {
 	v.app.clearDynamicIcon(guid)
+	v.app.setMissing(guid, false)
 	for i := range v.app.store.Categories {
 		kept := v.app.store.Categories[i].Slots[:0]
 		for _, slot := range v.app.store.Categories[i].Slots {

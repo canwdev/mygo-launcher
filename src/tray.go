@@ -32,9 +32,9 @@ func (v *view) syncTray() {
 			return
 		}
 		v.tray = tray
-		// A click brings the window back; Windows opens the menu on a right
-		// click, as the app asks.
-		tray.OnClick(v.showMain)
+		// A click brings the window back at the pointer; Windows opens the
+		// menu on a right click, as the app asks.
+		tray.OnClick(v.showMainAtCursor)
 		return
 	}
 	v.tray.SetMenu(menu)
@@ -54,15 +54,16 @@ func (v *view) destroyTray() {
 func (v *view) trayMenu() *mygo.Menu {
 	m := locales.In(mygo.App.Locale())
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Label: m.OpenMain(), Accelerator: v.prefs.Shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { v.showMain() }},
+		{Label: m.OpenMain(), Accelerator: v.prefs.Shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { v.showMainAtCursor() }},
 		{Label: m.Settings(), Click: func(*mygo.MenuItem, *mygo.Window) { v.openSettings() }},
 		{Type: mygo.MenuItemSeparator},
 		{Label: m.Exit(), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
 	})
 }
 
-// showMain brings the main window back from the tray. A minimized window is
-// restored first: Show alone would leave it minimized.
+// showMain shows the main window where it was left, for when the background
+// setting turns off and the hidden window needs an entrance. A minimized window
+// is restored first: Show alone would leave it minimized.
 func (v *view) showMain() {
 	if v.app.win == nil {
 		return

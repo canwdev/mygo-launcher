@@ -50,16 +50,39 @@ func (v *view) runtimeField(c *ui.Context, item *AppItem, st ItemState) ui.Eleme
 	return field
 }
 
-// itemIcon shows an item's cached icon, or its initial when it has none.
-func (v *view) itemIcon(c *ui.Context, item *AppItem, size float32) {
+// itemIcon shows an item's cached icon, or its initial when it has none. With
+// badge, the administrator shield sits in its bottom-left corner; with gray,
+// the icon is drawn without its colors.
+func (v *view) itemIcon(c *ui.Context, item *AppItem, size float32, badge, gray bool) {
 	p := v.pal
-	if src := v.app.iconImage(item); src != nil {
-		ui.Image(c, src).Size(size, size).Fit(ui.Contain)
-		return
-	}
-	box := ui.Box(c).Size(size, size).Radius(size / 4).Background(p.hover).Center()
+	box := ui.Box(c).Size(size, size)
 	box.Children(func() {
-		ui.Text(c, initial(item.Name)).FontSize(size * 0.42).FontWeight(600).TextColor(p.muted)
+		if src := v.app.iconImage(item); src != nil {
+			img := ui.Image(c, src).Size(size, size).Fit(ui.Contain)
+			if gray {
+				img.Grayscale()
+			}
+		} else {
+			fallback := ui.Box(c).Size(size, size).Radius(size / 4).Background(p.hover).Center()
+			fallback.Children(func() {
+				ui.Text(c, initial(item.Name)).FontSize(size * 0.42).FontWeight(600).TextColor(p.muted)
+			})
+		}
+		if badge {
+			v.adminBadge(c, size)
+		}
+	})
+}
+
+// adminBadge marks an elevated item over the bottom-left corner of its icon,
+// as Windows marks its shortcuts.
+func (v *view) adminBadge(c *ui.Context, iconSize float32) {
+	d := max(13, iconSize*0.3)
+	badge := ui.Box(c).Absolute().Left(0).Bottom(0).Size(d, d).Radius(999).
+		Center().Background(v.pal.bg).Role(ui.RoleImage).
+		Label(v.msgs().RunAsAdministrator())
+	badge.Children(func() {
+		ui.Icon(c, iconShield).Size(d*0.72, d*0.72).TextColor(c.Theme().Warning)
 	})
 }
 

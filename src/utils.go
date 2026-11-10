@@ -6,8 +6,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"go-launcher/locales"
 )
 
 func sanitizeBase(name string) string {
@@ -101,34 +99,35 @@ func defaultTitle(path string) string {
 	return base
 }
 
-// formatRuntime spells accumulated milliseconds shortly, as the rows show them
-// in lang: "3d 2h 5m", "--" for nothing yet and "1m" for anything under a
-// minute.
-func formatRuntime(lang string, ms int64) string {
-	msg := locales.In(lang)
+// formatRuntime spells accumulated milliseconds shortly, as the rows show them:
+// "3d2h5m". The units stay untranslated on purpose: the localized ones are too
+// long for a cell. Nothing yet is "", and anything under a minute is "1m".
+func formatRuntime(ms int64) string {
 	total := ms / 1000
 	d := total / 86400
 	h := (total % 86400) / 3600
 	m := (total % 3600) / 60
 	s := total % 60
-	parts := make([]string, 0, 3)
+	var b strings.Builder
 	if d > 0 {
-		parts = append(parts, msg.DurationDay(strconv.FormatInt(d, 10)))
+		b.WriteString(strconv.FormatInt(d, 10))
+		b.WriteByte('d')
 	}
 	if h > 0 {
-		parts = append(parts, msg.DurationHour(strconv.FormatInt(h, 10)))
+		b.WriteString(strconv.FormatInt(h, 10))
+		b.WriteByte('h')
 	}
 	if m > 0 {
-		parts = append(parts, msg.DurationMinute(strconv.FormatInt(m, 10)))
+		b.WriteString(strconv.FormatInt(m, 10))
+		b.WriteByte('m')
 	}
-	if len(parts) == 0 {
+	if b.Len() == 0 {
 		if s > 0 {
-			parts = append(parts, msg.DurationMinute("1"))
-		} else {
-			parts = append(parts, msg.DurationNone())
+			return "1m"
 		}
+		return ""
 	}
-	return strings.Join(parts, " ")
+	return b.String()
 }
 
 // fileExists reports whether path names something on disk.

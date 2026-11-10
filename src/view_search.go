@@ -157,7 +157,7 @@ func (v *view) searchRow(c *ui.Context, hit searchHit, index int) {
 	}
 	row.Children(func() {
 		if item := v.app.item(hit.guid); item != nil {
-			v.itemIcon(c, item, 18)
+			v.itemIcon(c, item, 18, false, v.app.isMissing(item.GUID))
 		}
 		ui.Text(c, hit.name).SingleLine().FontSize(14).TextColor(textColor).Grow(1)
 		where := hit.path
