@@ -19,7 +19,7 @@ concurrency:
 env:
   # go.mod 的 replace 指向 ../mygo，这里固定 MyGo 的提交，构建才可复现。
   MYGO_REPO: github.com/egoist/mygo
-  MYGO_COMMIT: 977ea57e0baf78da62698ba7371420d192260466
+  MYGO_COMMIT: 217fbc069ddc34a9cfec8f6db3ff2d2f1d1780b6
 
 jobs:
   release:

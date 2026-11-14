@@ -121,10 +121,10 @@ func utf16LEBytes(s string) []byte {
 // 文本。
 func TestCLaunchDecodesItsEncodings(t *testing.T) {
 	text := "[Pages]\r\nCount=1\r\n[Page000]\r\nName=工具\r\n"
-	if got := decodeCLaunch(utf16LEBytes(text)); got != text {
+	if got := decodeIniText(utf16LEBytes(text)); got != text {
 		t.Fatalf("UTF-16 with a BOM must decode to the same text, got %q", got)
 	}
-	if got := decodeCLaunch([]byte(text)); got != text {
+	if got := decodeIniText([]byte(text)); got != text {
 		t.Fatalf("UTF-8 must decode to the same text, got %q", got)
 	}
 }

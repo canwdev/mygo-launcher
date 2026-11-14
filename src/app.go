@@ -651,13 +651,21 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 	}
 	name := defaultTitle(path)
 	target, args, workDir, link := path, "", filepath.Dir(path), ""
-	if isShortcutFile(path) {
+	switch {
+	case isShortcutFile(path):
 		if lnk, err := resolveShortcut(path); err == nil && lnk.Target != "" {
 			target, args, workDir = lnk.Target, lnk.Args, lnk.WorkDir
 			link = storedForm(path, absolute)
 			if workDir == "" {
 				workDir = filepath.Dir(target)
 			}
+		}
+	case isURLFile(path):
+		// An Internet Shortcut points at a page: the item opens the page it
+		// names, and keeps the file for its icon and "Update icon".
+		if us, err := resolveInternetShortcut(path); err == nil && us.URL != "" {
+			target, workDir = us.URL, ""
+			link = storedForm(path, absolute)
 		}
 	}
 	icon := ""
@@ -668,7 +676,7 @@ func buildItem(raw string, absolute, withIcon bool) *AppItem {
 			// A shortcut's own icon is the one Explorer draws, with the app's
 			// badge; the target's may be a blank stub, as chrome_proxy.exe's is.
 			icon = writeIcon(path)
-			if icon == "" && target != path {
+			if icon == "" && target != path && !isShellTarget(target) {
 				icon = writeIcon(target)
 			}
 		}

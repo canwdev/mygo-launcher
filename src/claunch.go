@@ -111,9 +111,9 @@ type cLaunchTab struct {
 	Items []*AppItem
 }
 
-// decodeCLaunch reads the text of a CLaunch.ini: UTF-16 with a BOM (what CLaunch
+// decodeIniText reads the text of an INI file: UTF-16 with a BOM (what Windows
 // writes), UTF-16 without one, or UTF-8 as an editor may have saved it.
-func decodeCLaunch(data []byte) string {
+func decodeIniText(data []byte) string {
 	switch {
 	case len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE:
 		return decodeUTF16(data[2:], binary.LittleEndian)
@@ -307,7 +307,7 @@ func importCLaunchFile(path string, absolute, withIcon bool) (cLaunchImport, err
 	if err != nil {
 		return cLaunchImport{}, err
 	}
-	pages := readCLaunchIni(decodeCLaunch(data))
+	pages := readCLaunchIni(decodeIniText(data))
 	return buildCLaunchImport(pages, cLaunchBase(path), absolute, withIcon), nil
 }
 

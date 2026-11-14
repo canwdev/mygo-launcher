@@ -246,7 +246,10 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 `.ico` 会重新生成同样的内容图标，其它程序仍走 `writeIcon`。快捷方式的图标取自 `.lnk`
 本身（Explorer 画的带应用徽标的图标），取不到才退回目标程序：有些目标（如 `chrome_proxy.exe`）
 只有空白图标。条目的 `link` 字段记住这个 `.lnk`，单条和批量更新图标都用它；编辑条目改了目标
-路径时清空。shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `writeIcon` 从解析名
+路径时清空。`.url`（Internet Shortcut）添加时由 `resolveInternetShortcut` 读取
+`[InternetShortcut]` 里的 `URL=`：条目以文件名为名称、直接打开该网址，`.url` 文件同样记在
+`link` 里，更新图标取 Explorer 为它画的图标；读不到 URL 时仍按普通文件添加。
+shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `writeIcon` 从解析名
 重画，不做存在性检查。
 - 条目编辑器可选的图标是图片、`.ico`、`.exe`、`.dll`，以及 `.cpl` / `.ocx` / `.scr` / `.icl` /
   `.mun` 这类带图标资源的文件；`iconTakesIndex` 为真的路径旁边显示「序号」，取第几个图标

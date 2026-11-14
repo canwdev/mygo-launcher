@@ -18,7 +18,7 @@ Download the installer or portable build for your architecture from [Releases](h
 
 - **Pages**: group frequently used programs, files, and folders into pages; pages can be created, renamed, duplicated, removed, and reordered by dragging
 - **Grid**: icon size in three steps (small, medium, large), with blank cells to control placement; item names wrap automatically, up to two lines
-- **Launching**: single click launches an item, and running programs can be stopped; a folder item shows its contents instead, and its folders can be entered one level at a time; `.lnk` shortcuts launch with their saved target and arguments; items can run as administrator, prompting Windows UAC on launch
+- **Launching**: single click launches an item, and running programs can be stopped; a folder item shows its contents instead, and its folders can be entered one level at a time; `.lnk` shortcuts launch with their saved target and arguments, and `.url` files are added as the page they name; items can run as administrator, prompting Windows UAC on launch
 - **Adding**: drop files from Explorer to add them; the `+` button adds running windows, files, or hand-made items, and can also add common locations such as the Recycle Bin, This PC, Control Panel, your user folder, and the network
 - **Icons**: extracted automatically for programs, files, and shortcuts; dropping in an image or `.ico` shows the image itself, and you can pick a specific icon from an image, `.ico`, `.exe`, or `.dll`, or choose one in the Windows icon picker
 - **Arranging items**: reorder by dragging in the grid; hovering over a page tab switches page, so you can keep dropping at the desired position (hold Ctrl/Cmd to copy)
