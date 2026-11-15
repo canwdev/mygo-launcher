@@ -25,9 +25,8 @@ UI 编写：窗口由 Go 直接绘制，没有 WebView、HTML 或前端构建。
 ## 工具链
 
 - Go 1.27+（`go.mod` 为 `go 1.27.3`）；原生 UI 需要它。
-- MyGo 是 `github.com/egoist/mygo` 模块，`go.mod` **用 `replace` 指向 `../mygo`**，那个检出
-  里带有 `ui` 包。没有这个检出就无法构建：把 MyGo 克隆到本仓库旁边，或删掉 `replace`。CI 在
-  `release.yml` 里克隆固定提交。
+- MyGo 是 `github.com/egoist/mygo` 模块，用发布版（`go.mod` 的 `require`），不从本机检出
+  替换；`ui` 包也在模块里。CI 直接按 `go.mod` 下载模块。
 - MyGo CLI 来自 `go.mod` 的 `tool` 指令：`go tool mygo`。
 - 不需要 C 编译器、bun/npm 或 WebView2。
 
@@ -51,7 +50,7 @@ GOOS=linux go build -o build/launcher-linux ./src   # _other.go 桩必须能编�
 CI 发布 Windows 10/11 的 x64 与 arm64（`go tool mygo build -platform windows/amd64,windows/arm64`）。
 Windows 386 虽能编译，但运行时会退出（MyGo 的 `windows/386 is not supported yet`）；Go 1.27
 也不再支持 Windows 7/8。UPX 压缩曾在 `db2c8ec` 试过，因常驻内存从约 50MB 升到约 90MB、
-且要给 MyGo 固定提交打补丁，已弃用，见 `docs/UPDATES.md`。
+且要维护 MyGo 补丁，已弃用，见 `docs/UPDATES.md`。
 
 `mygo.json` 保存应用名、标识、版本、入口包（`main`）和输出目录；`resources/icon.png` 是应用
 图标（见 `docs/ICON.md`）。
@@ -95,6 +94,9 @@ store 和 view 自己的字段来搭界面；帧之间只保留这些字段。�
 - 窗口是纵向结构：50 DIP 顶栏（`src/view_header.go`）+ 内容区 + 底部忙碌条。
 - 顶栏从左到右：横向页面胶囊与「新建页面」按钮、搜索、设置。没有品牌、分割线或大标题；
   页面多时横向滚动。
+- 搜索浮层（`src/view_search.go`）是模态框：顶部是 MyGo Music 风格的圆角搜索框（放大镜内嵌、
+  聚焦时强调色描边与光晕、有输入时右侧圆形清除按钮），输入框铺满整块以便点击任意处输入。
+  只在有查询时显示结果列表（无结果时显示「没有结果」），空查询只留搜索框；不显示快捷键提示。
 - 页面胶囊悬停 200ms 会自动切换（`hoverTab`/`hoverSince`）。页面多时用 `ScrollHorizontal` 的
   原生横向滚动条滚动；点击或新建页面后，`view()` 末尾按 `tabRects` 把当前胶囊滚到中间
   （`centerNav`）。滚轮不做特殊处理。
@@ -360,17 +362,23 @@ shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `wr
 ## 设置窗口
 
 - `src/view_settings.go`：`openSettings` 首次创建设置窗口，之后只显示并聚焦；关闭时清空指针。
-  设置窗口是一个独立的 `mygo.NewWindow`，560×720（最小 480×420），`StateKey: "settings"`，
-  不提供最大/最小化，背景 `light-dark(#f4f4f6, #1c1c1f)`。
+  设置窗口是一个独立的 `mygo.NewWindow`，780×640（最小 640×420），
+  `StateKey: "settings-sections"`，不提供最大/最小化，背景 `light-dark(#f4f4f6, #1c1c1f)`；
+  标题是「设置 - <标题>」，跟随外观里的窗口标题与界面语言。
+- 布局参照 MyGo Music 的设置窗口：左侧是 180 DIP 的页面导航（图标 + 名称，选中项用 `press`
+  底色和强调色图标），右侧是当前页面——顶部页面标题，下面是内容卡片。当前页存在 view 的
+  `settingsPage`（空表示第一页），点导航只改它。
 - `app.win` 为 nil 时 `openSettings` 直接返回，所以测试用
-  `ui.NewTester(v.settingsView, 560, 720)` 单独驱动设置内容。
+  `ui.NewTester(v.settingsView, 780, 640)` 单独驱动设置内容；`openSettingsPage` 点侧栏切页。
 - `App.refresh` 同时刷新主窗口和设置窗口；设置里的改动立刻反映到启动器。
-- 设置分组：外观（语言下拉框、主题分段控件、强调色色板（悬停提示成员名字）+ 打开取色器的
+- 设置页面：外观（语言下拉框、主题分段控件、强调色色板（悬停提示成员名字）+ 打开取色器的
   显示当前颜色的圆形编辑按钮，色板下的
-  `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件、程序图标、背景与背景透明度）、
+  `MyGo!!!!!` 是字面文字、不进文案、图标大小分段控件、程序图标、窗口标题（行内显示当前标题，
+  「编辑」按钮弹出输入框；空标题回到 `appName`）、背景与背景透明度）、
   行为（全局快捷键、计时器、启动条目后最小化窗口、窗口置顶、滚轮切换页面、GPU 绘制、
-  关闭后在托盘运行、不在任务栏显示）、路径（新条目绝对路径、批量转换）、
-  数据（刷新、打开数据目录（hint 显示实际路径）、更新图标、检查可用性、从 CLaunch 迁移）、
+  关闭后在托盘运行、不在任务栏显示）、数据（分两段、各有二级标题：路径——新条目绝对路径、
+  批量转换；数据——刷新、打开数据目录（hint 显示实际路径）、更新图标、检查可用性、
+  从 CLaunch 迁移）、
   关于（上色后的
   程序图标、名称与版本、GitHub、更新，以及底部的重启与退出按钮）。GPU 开关改动后提示重启生效。
 
@@ -435,9 +443,10 @@ shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `wr
 - 托盘左键和右键菜单的「打开」恢复主窗口（`showMainAtCursor`，和重复启动、全局快捷键一样
   出现在指针中心），并显示当前全局快捷键；菜单还有「设置」（`openSettings`）和
   「退出」（`App.Quit`）。
-- 主窗口标题只有 `appName`；安装目录放在托盘悬停提示 `instanceTitle(installDir())` 里。因为
-  标题不再唯一，`singleton_windows.go` 的 `findMainWindow` 按「标题 = appName + 进程 exe 所在
-  目录 = 本安装目录」枚举窗口，避免聚焦到另一个目录的副本。
+- 主窗口和设置窗口的标题来自外观里的「窗口标题」（`ui-state.json` 的 `title`，为空用
+  `appName`）；托盘悬停提示只显示这个标题，不带安装目录。标题由用户改，`singleton_windows.go`
+  的 `findMainWindow` 不再按标题找窗口：它枚举「进程 exe 所在目录 = 本安装目录」且带最大化框的
+  顶层窗口（设置窗口禁用了最大化），避免聚焦到另一个目录的副本。
 - 主窗口的 `OnClose` 交给 `view.handleClose`：开关打开且不在退出流程（`App.quitting`）时
   `PreventDefault` 并 `Hide`；否则关闭就是退出，同时销毁可能残留的托盘、关闭设置窗口，保证
   没有窗口让进程留在后台。`OnBeforeQuit` 在退出开始时置位 `quitting`，所以托盘的「退出」不会
@@ -469,8 +478,8 @@ shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `wr
   - `go-launcher-data.json` — store：`apps`、`categories`（页面，`slots` 存条目 guid，`null`
     表示空白）和 `settings`（`auto_time` / `auto_hide` / `always_on_top` /
     `absolute_paths` / `background_on_close`）
-  - `ui-state.json` — 窗口自身偏好：语言、主题、强调色、当前页面、GPU 绘制、滚轮切换页面、
-    不在任务栏显示、全局快捷键、自定义程序图标、背景图与背景透明度
+  - `ui-state.json` — 窗口自身偏好：语言、主题、强调色、窗口标题、当前页面、GPU 绘制、
+    滚轮切换页面、不在任务栏显示、全局快捷键、自定义程序图标、背景图与背景透明度
   - `window-state.json` — 两个窗口的几何信息，通过 MyGo 的 `WindowStateStore`
   - `cached-icons/` — 自动生成的图标（`writeIcon`，以及 `contentIcon` 从图片 / `.ico` 内容
     生成的图标）
@@ -535,7 +544,8 @@ shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `wr
   按压仍算点击。
 - 文本输入会保留现有内容，`tt.Type` 是追加。
 - `later` 排队的动作需要一帧；`tt.Click` 会让视图请求的帧跑完。
-- **设置窗口单独测试**：`newTestSettings` 构造 `ui.NewTester(v.settingsView, 560, 720)`。开关
+- **设置窗口单独测试**：`newTestSettings` 构造 `ui.NewTester(v.settingsView, 780, 640)`，
+  用 `openSettingsPage` 点侧栏打开要测的页面。开关
   使用独立的 `Toggle …` 标签以便点击；不要在测试里点主题，`SetSource` 会阻塞。强调色预设可以
   通过色板的 `Tomori` / `Anon` 等成员名标签点击。
 - **更新插件在测试里要替换**：`fakeUpdater` 换掉 `src/updates.go` 的 `checkForUpdates`、
@@ -571,7 +581,7 @@ shell 目标（`::{CLSID}`、`shell:`）没有文件，更新图标直接用 `wr
 | 路径 | 作用 |
 | --- | --- |
 | `mygo.json` | 应用名、标识、版本、入口包 `./src`、输出目录 |
-| `go.mod` / `go.sum` | Go 模块与依赖（MyGo 用 `replace` 指向 `../mygo`） |
+| `go.mod` / `go.sum` | Go 模块与依赖（MyGo 用发布版模块） |
 | `src/main.go` | 单实例保护、MyGo `WindowOptions`、`ui.View(v.view)`、文件拖入、store 监听 |
 | `src/app.go` | `App`：store、运行中的进程、启动/停止、图标、提示（toast）、`dispatch`、设置窗口 |
 | `src/store.go` | 数据文件：`AppItem` / `CategoryNode` / `Settings` / `AppStore`、`parseStore`、`loadStore`、`writeStoreAtomic`、路径辅助 |

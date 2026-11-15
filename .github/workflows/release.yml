@@ -16,11 +16,6 @@ concurrency:
   group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
-env:
-  # go.mod 的 replace 指向 ../mygo，这里固定 MyGo 的提交，构建才可复现。
-  MYGO_REPO: github.com/egoist/mygo
-  MYGO_COMMIT: 217fbc069ddc34a9cfec8f6db3ff2d2f1d1780b6
-
 jobs:
   release:
     name: Build MyGo Launcher and upload the update
@@ -28,16 +23,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # go.mod 用 replace 指向 ../mygo（$GITHUB_WORKSPACE 的上一级），本地开发时
-      # 是同一台机器上的 checkout；CI 里在这里补一个固定提交的克隆。
-      - name: Checkout MyGo beside the repo
-        shell: pwsh
-        run: |
-          $dest = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'mygo'
-          git clone --quiet "https://$env:MYGO_REPO.git" $dest
-          git -C $dest checkout --quiet $env:MYGO_COMMIT
-          "checked out MyGo at $env:MYGO_COMMIT -> $dest"
 
       - name: Set up Go
         uses: actions/setup-go@v5

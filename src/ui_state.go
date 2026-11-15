@@ -33,6 +33,9 @@ type uiPrefs struct {
 	// AppIcon is the program icon the user chose, kept in custom-icons;
 	// empty draws the icon from the accent color.
 	AppIcon string `json:"app_icon,omitempty"`
+	// Title is the name the windows and the tray icon show; empty is the
+	// app's own name.
+	Title string `json:"title,omitempty"`
 	// Background is the launcher's own picture, kept in custom-icons, and
 	// BackgroundOpacity how much of it shows over the content's color.
 	Background        string  `json:"background,omitempty"`
@@ -87,6 +90,7 @@ func readPrefs() (uiPrefs, bool) {
 		p.IconSize = "medium"
 	}
 	p.Shortcut = strings.TrimSpace(p.Shortcut)
+	p.Title = strings.TrimSpace(p.Title)
 	if !allowedIcon(p.AppIcon) {
 		p.AppIcon = ""
 	}
@@ -95,6 +99,15 @@ func readPrefs() (uiPrefs, bool) {
 	}
 	p.BackgroundOpacity = min(1, max(0, p.BackgroundOpacity))
 	return p, true
+}
+
+// appTitle is the title the main window, the settings window and the tray
+// icon show: the user's choice, or the app's name when none was made.
+func (v *view) appTitle() string {
+	if t := strings.TrimSpace(v.prefs.Title); t != "" {
+		return t
+	}
+	return appName
 }
 
 func savePrefs(p uiPrefs) {

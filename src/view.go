@@ -44,6 +44,10 @@ type view struct {
 	// customAccentOpen says the settings' custom accent picker shows.
 	customAccentOpen bool
 
+	// settingsPage is the page the settings sidebar shows; empty shows the
+	// first one.
+	settingsPage string
+
 	// dragHoverTab is the page an item being dragged rests on, and
 	// dragHoverSince when it came to rest there: the page shows itself after
 	// dragTabHoverDelay.
@@ -167,6 +171,11 @@ type view struct {
 	renameName    string
 	renameGUID    string // an item, when set
 	renameTabGUID string // a tab, when set
+
+	// titleOpen says the settings' window title dialog shows, titleDraft the
+	// title being typed.
+	titleOpen  bool
+	titleDraft string
 
 	confirmOpen   bool
 	confirmMsg    string

@@ -177,15 +177,15 @@ func moveWindowToCursor(hwnd uintptr) {
 // findMainWindow returns the HWND of the running copy's main window for this
 // install directory.
 //
-// The title is the app's name, the same for every install directory, so the
-// lookup walks the top-level windows and keeps the one titled appName whose
-// process runs from this directory: settings windows have another title, and
-// copies in other directories run another executable.
+// The title is the user's to change, so the lookup does not go by it: it walks
+// the top-level windows, keeps one whose process runs from this directory and
+// that can maximize, as the main window does and the settings window, made not
+// to maximize, does not. Copies in other directories run another executable.
 func findMainWindow() uintptr {
 	want := installDir()
 	var found uintptr
 	cb := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
-		if windowTitle(hwnd) != appName {
+		if !windowMaximizable(hwnd) {
 			return 1
 		}
 		var pid uint32
@@ -202,6 +202,16 @@ func findMainWindow() uintptr {
 	})
 	_ = windows.EnumWindows(cb, nil)
 	return found
+}
+
+// windowMaximizable reports whether a window's title bar has a maximize box.
+func windowMaximizable(hwnd uintptr) bool {
+	const (
+		gwlStyle      = ^uintptr(15) // GWL_STYLE (-16)
+		wsMaximizeBox = 0x00010000
+	)
+	style, _, _ := procGetWindowLongW.Call(hwnd, gwlStyle)
+	return style&wsMaximizeBox != 0
 }
 
 // windowTitle is the text of a window's title bar.

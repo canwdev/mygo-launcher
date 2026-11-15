@@ -86,12 +86,25 @@ func (v *view) search(c *ui.Context) {
 	}
 
 	ui.Modal(c, &v.searchOpen, func() {
-		ui.Column(c).Width(dialogWidth(c, 560)).Gap(10).Children(func() {
-			field := ui.Row(c).Height(40).Gap(8).AlignItems(ui.Center)
+		ui.Column(c).Width(dialogWidth(c, 560)).Gap(8).Children(func() {
+			// The field follows MyGo Music's search field: a rounded fill with
+			// the icon inside it, an accent edge and glow while it is focused,
+			// and the input filling the field so a click anywhere on it types.
+			field := ui.Row(c).Height(38).Radius(10).AlignItems(ui.Stretch)
+			if c.Focused(v.searchInput) {
+				field.Background(p.bg).Border(1, p.accent.Alpha(0.6)).
+					Shadow(0, 0, 0, 3, p.accent.Alpha(0.25))
+			} else {
+				field.Background(p.hover).Border(1, p.hairline)
+			}
 			field.Children(func() {
-				ui.Icon(c, iconSearch).Size(16, 16).TextColor(p.muted)
-				ui.TextInput(c, &v.searchQuery).Bind(&v.searchInput).AutoFocus().
-					Placeholder(m.SearchPrograms()).FontSize(14).Grow(1).
+				end := float32(10)
+				if v.searchQuery != "" {
+					end = 30
+				}
+				ui.TextInputBase(c, &v.searchQuery).Bind(&v.searchInput).AutoFocus().
+					Placeholder(m.SearchPrograms()).FontSize(14).Grow(1).MinWidth(0).
+					PaddingStart(34).PaddingEnd(end).Label(m.SearchPrograms()).
 					OnTextKey(func(k ui.TextKey) bool {
 						switch k.Key {
 						case ui.KeyDown:
@@ -112,8 +125,34 @@ func (v *view) search(c *ui.Context) {
 						}
 						return false
 					})
+				ui.Icon(c, iconSearch).Size(14, 14).TextColor(p.muted).
+					Absolute().Left(11).Top(12).IgnoreInput(true)
+				if v.searchQuery != "" {
+					x := ui.ButtonBase(c).Size(22, 22).Center().Absolute().Right(5).Top(8).
+						KeepFocus().FocusRing(false).Label(m.Clear())
+					fill := p.faint
+					if x.Hovered() {
+						fill = p.muted
+					}
+					x.Children(func() {
+						ui.Box(c).Size(14, 14).Radius(7).Center().Background(fill).Children(func() {
+							ui.Icon(c, iconX).Size(8, 8).TextColor(p.bg)
+						})
+					})
+					if x.Clicked() {
+						v.searchQuery = ""
+						v.searchChosen = 0
+						v.searchList.ScrollTo(0, ui.Start)
+						v.refresh()
+					}
+				}
 			})
 
+			// An empty query only shows the field: the list appears with what
+			// it found, or says there is nothing.
+			if strings.TrimSpace(v.searchQuery) == "" {
+				return
+			}
 			v.searchList.Selected = &v.searchChosen
 			v.searchList.Key = func(i int) any { return hits[i].guid }
 			v.searchList.Label = func(i int) string { return hits[i].name }
@@ -126,15 +165,8 @@ func (v *view) search(c *ui.Context) {
 			ui.List(c, &v.searchList, len(hits), func(i int) {
 				v.searchRow(c, hits[i], i)
 			}).Height(height).Children(func() {
-				msg := m.NoResults()
-				if strings.TrimSpace(v.searchQuery) == "" {
-					msg = m.TypeToSearch()
-				}
-				ui.Text(c, msg).FontSize(12).TextColor(p.muted).Padding(12)
+				ui.Text(c, m.NoResults()).FontSize(12).TextColor(p.muted).Padding(12)
 			})
-
-			ui.Text(c, m.SearchHelp()).
-				FontSize(11).TextColor(p.faint)
 		})
 	})
 }

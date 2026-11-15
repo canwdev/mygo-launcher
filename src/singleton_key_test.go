@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/hex"
-	"regexp"
 	"testing"
 )
 
@@ -17,23 +16,5 @@ func TestInstallKeyStableAndHex(t *testing.T) {
 	}
 	if _, err := hex.DecodeString(key1); err != nil {
 		t.Fatalf("installKey() must be valid hex: %v", err)
-	}
-}
-
-func TestInstanceTitleUsesFullDir(t *testing.T) {
-	got := instanceTitle(`C:\games\minecraft`)
-	want := "MyGo Launcher - C:\\games\\minecraft"
-	if got != want {
-		t.Fatalf("instanceTitle() = %q, want %q", got, want)
-	}
-	if instanceTitle(`C:\games\minecraft`) == instanceTitle(`D:\tools\photoshop`) {
-		t.Fatal("instanceTitle() must differ for different directories")
-	}
-}
-
-func TestInstanceTitleMatchesTrayPattern(t *testing.T) {
-	re := regexp.MustCompile(`^MyGo Launcher - .+$`)
-	if !re.MatchString(instanceTitle(installDir())) {
-		t.Fatalf("instanceTitle(installDir()) must match the tray tooltip pattern, got %q", instanceTitle(installDir()))
 	}
 }

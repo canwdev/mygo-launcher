@@ -12,7 +12,8 @@ import (
 // Window geometry of the first launch, before any state was kept: wide enough
 // for the item dialog's fields to fit without scrolling.
 const (
-	// appName is the app's name, shown in its title bars and menus.
+	// appName is the app's name: the default title of its windows and its
+	// name in menus.
 	appName = "MyGo Launcher"
 
 	defaultWindowWidth  = 720
@@ -67,7 +68,7 @@ func main() {
 		v.applyLanguage()
 		mygo.App.OnLocaleChanged(func(locale string) {
 			if app.settingsWin != nil {
-				app.settingsWin.SetTitle(locales.In(locale).Settings())
+				app.settingsWin.SetTitle(locales.In(locale).Settings() + " - " + v.appTitle())
 			}
 			v.syncTray() // the tray's menu says its items in the new language
 			app.refresh()
@@ -84,7 +85,7 @@ func main() {
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { app.quitting = true })
 		mygo.App.OnQuit(v.destroyTray)
 		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:     appName,
+			Title:     v.appTitle(),
 			Width:     defaultWindowWidth,
 			Height:    defaultWindowHeight,
 			MinWidth:  420,

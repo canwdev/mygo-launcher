@@ -22,9 +22,4 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-// The native UI is built on a local checkout of MyGo, which carries the
-// package ui APIs this app uses. Drop the replace directive to build against
-// the published module instead.
-replace github.com/egoist/mygo => ../mygo
-
 tool github.com/egoist/mygo/cmd/mygo

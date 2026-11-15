@@ -17,9 +17,7 @@ func (v *view) syncTray() {
 		return
 	}
 	menu := v.trayMenu()
-	// The window title no longer carries the install directory, so the tray's
-	// hover text is where it stays.
-	tip := instanceTitle(installDir())
+	tip := v.appTitle()
 	if v.tray == nil {
 		tray, err := mygo.NewTray(mygo.TrayOptions{
 			ID:      "main",

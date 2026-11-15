@@ -39,9 +39,3 @@ func installKey() string {
 	sum := sha256.Sum256([]byte(dir))
 	return hex.EncodeToString(sum[:])
 }
-
-// instanceTitle 返回实例的说明：应用名 + 完整安装目录，用作托盘悬停提示。
-// 窗口标题只有 appName；托盘提示保留安装位置，不同目录的副本也能分辨。
-func instanceTitle(dir string) string {
-	return appName + " - " + dir
-}

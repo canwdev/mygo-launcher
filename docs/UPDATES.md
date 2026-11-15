@@ -44,7 +44,7 @@ MyGo Music 相同：MyGo 的 updater 插件负责检查、展示和安装，`myg
    - 校验 tag 与 `mygo.json` 的版本一致；
    - 从 CHANGELOG 取出该版本说明；
    - 创建 **draft** Release；
-   - 在仓库旁检出固定提交的 MyGo，然后用 `MYGO_UPDATER_PRIVATE_KEY` 和 `GH_TOKEN` 执行
+   - 用 `MYGO_UPDATER_PRIVATE_KEY` 和 `GH_TOKEN` 执行
      `go tool mygo build -platform windows/amd64,windows/arm64 -upload`；
    - 为 x64 和 arm64 各生成安装包、应用归档、签名更新包和对应的
      `update-windows-<arch>.json`；
@@ -54,12 +54,12 @@ MyGo Music 相同：MyGo 的 updater 插件负责检查、展示和安装，`myg
 
 ## UPX（已弃用）
 
-曾在提交 `db2c8ec6e160e2669d56889a7d34a766833d5215` 中实现：CI 安装 UPX 5.3.0，给固定提交的
-MyGo 打补丁（`.github/patches/mygo-upx.patch`），以 `MYGO_UPX=upx` 在生成安装包、归档和签名
+曾在提交 `db2c8ec6e160e2669d56889a7d34a766833d5215` 中实现：CI 安装 UPX 5.3.0，给当时的
+MyGo 检出打补丁（`.github/patches/mygo-upx.patch`），以 `MYGO_UPX=upx` 在生成安装包、归档和签名
 更新包之前执行 `upx --best --lzma`，exe 从约 17MB 降到约 5.1MB。
 
 之后移除，原因是代价太大：UPX 用运行内存换体积，软件绘制下常驻内存约从 50MB 升到 90MB；
-同时要给固定提交的 MyGo 维护补丁，增加构建复杂度。当前发布包不再压缩。
+同时要维护 MyGo 补丁，增加构建复杂度。当前发布包不再压缩。
 
 本地验证签名打包：
 

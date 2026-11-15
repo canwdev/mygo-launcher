@@ -26,7 +26,7 @@ Download the installer or portable build for your architecture from [Releases](h
 - **Search and keyboard**: `Ctrl/Cmd+F` searches and Enter launches; arrows choose items and turn pages, letters choose items in grid order; PgUp/PgDn, Tab, Home/End, and 1–9 switch pages; Esc hides or minimizes; `Ctrl+,` opens settings; icon button tooltips show their keys
 - **Global hotkey**: recordable (function keys can be used alone) to show or hide the launcher from any window; a window called for by the hotkey, a second launch, or the tray appears centered on the pointer
 - **Tray**: closing the window keeps it running in the system tray; settings can make close quit instead; “Hide from taskbar” removes the taskbar button and disables minimize
-- **Appearance**: minimize after launching an item, always on top, light / dark / follow system, custom accent color; replaceable program icon and main window background picture (with adjustable opacity), with window and tray icons following the theme
+- **Appearance**: minimize after launching an item, always on top, light / dark / follow system, custom accent color; replaceable program icon and main window background picture (with adjustable opacity), and a custom window title, with window and tray icons following the theme
 - **Wheel**: switches pages by default, and Shift+wheel scrolls the grid; settings can invert this
 - **Right click**: Properties and the native shell menu for files and folders; the Recycle Bin can be emptied from its menu and its icon follows its state
 - **Language**: Simplified Chinese and English, chosen on first launch from the Windows display language
@@ -50,7 +50,7 @@ launch just exits and leaves the windows alone.
 
 ## Building
 
-Requires Go 1.27+. `go.mod` uses `replace` pointing at a local `../mygo` checkout; you can remove the `replace` to use the published module instead.
+Requires Go 1.27+.
 
 ```bash
 go tool mygo dev     # run in dev mode, restarting on code changes
@@ -63,7 +63,7 @@ Release, update signing, and installer details are in [docs/UPDATES.md](docs/UPD
 ## Credits
 
 - [MyGo](https://github.com/egoist/mygo): native UI and app framework
-- [MyGo Music](https://github.com/egoist/mygo-cloudmusic): reference for the UI design and overall style
+- [MyGo Music](https://github.com/egoist/mygo-music): reference for the UI design and overall style
 - [MyGO!!!!!](https://bang-dream.com/artist/mygo/): this project is not affiliated with the official group
 - [CLaunch](https://ss1.xrea.com/pyonkichi.g1.xrea.com/en/): style reference
 

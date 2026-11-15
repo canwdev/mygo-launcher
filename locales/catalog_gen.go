@@ -978,26 +978,6 @@ func (msgs Messages) NoResults() string {
 	return Catalog.Format(msgs.locale, "noResults", nil)
 }
 
-// TypeToSearch says "Type to search…"
-// in the language the app shows.
-func TypeToSearch() string { return In(i18n.Locale()).TypeToSearch() }
-
-// TypeToSearch says "Type to search…"
-// in the language of msgs.
-func (msgs Messages) TypeToSearch() string {
-	return Catalog.Format(msgs.locale, "typeToSearch", nil)
-}
-
-// SearchHelp says "↑↓ navigate · Enter launch · ⤢ locate · Esc close"
-// in the language the app shows.
-func SearchHelp() string { return In(i18n.Locale()).SearchHelp() }
-
-// SearchHelp says "↑↓ navigate · Enter launch · ⤢ locate · Esc close"
-// in the language of msgs.
-func (msgs Messages) SearchHelp() string {
-	return Catalog.Format(msgs.locale, "searchHelp", nil)
-}
-
 // LocateInTab says "Locate in page"
 // in the language the app shows.
 func LocateInTab() string { return In(i18n.Locale()).LocateInTab() }
@@ -1426,6 +1406,16 @@ func ProgramIcon() string { return In(i18n.Locale()).ProgramIcon() }
 // in the language of msgs.
 func (msgs Messages) ProgramIcon() string {
 	return Catalog.Format(msgs.locale, "programIcon", nil)
+}
+
+// WindowTitle says "Window title"
+// in the language the app shows.
+func WindowTitle() string { return In(i18n.Locale()).WindowTitle() }
+
+// WindowTitle says "Window title"
+// in the language of msgs.
+func (msgs Messages) WindowTitle() string {
+	return Catalog.Format(msgs.locale, "windowTitle", nil)
 }
 
 // ChooseIcon says "Choose icon…"

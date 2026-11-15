@@ -91,6 +91,7 @@ func TestLaunchUpdatesAvailability(t *testing.T) {
 func TestSettingsShowsAvailabilityCheck(t *testing.T) {
 	_, v, _ := newTestView(t, 720, 460)
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Data")
 	if !settings.HasText("Check availability") {
 		t.Fatalf("the data group must offer the availability check, texts %q", settings.Texts())
 	}
@@ -100,6 +101,7 @@ func TestSettingsShowsAvailabilityCheck(t *testing.T) {
 func TestSettingsShowsRestartAndExit(t *testing.T) {
 	_, v, _ := newTestView(t, 720, 460)
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "About")
 	for _, label := range []string{"Restart", "Exit"} {
 		if !settings.HasText(label) {
 			t.Fatalf("the about group must offer %q, texts %q", label, settings.Texts())

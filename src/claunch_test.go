@@ -329,6 +329,7 @@ func TestPlanLaunchReportsMissingPath(t *testing.T) {
 func TestViewSettingsShowsCLaunchMigration(t *testing.T) {
 	_, v, _ := newTestView(t, 720, 460)
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Data")
 	for _, text := range []string{"Migrate from CLaunch", "Choose CLaunch.ini…", "Create new pages from a CLaunch.ini"} {
 		if !settings.HasText(text) {
 			t.Fatalf("the data group must show %q, texts %q", text, settings.Texts())
@@ -355,6 +356,7 @@ func TestViewAppliesCLaunchImport(t *testing.T) {
 		t.Fatalf("the tab strip must show the imported tabs, texts %q", tt.Texts())
 	}
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Data")
 	if !settings.HasText(v.migrateStatus) {
 		t.Fatalf("the settings row must show %q, texts %q", v.migrateStatus, settings.Texts())
 	}

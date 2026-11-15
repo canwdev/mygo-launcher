@@ -49,15 +49,18 @@ func clickMenu(tt *ui.Tester, button, item string) error {
 // needs a real window, so the content is tested on its own.
 func newTestSettings(t *testing.T, v *view) *ui.Tester {
 	t.Helper()
-	tt := ui.NewTester(v.settingsView, 560, 720)
+	tt := ui.NewTester(v.settingsView, 780, 640)
 	tt.SetFocused(true)
 	return tt
 }
 
-// scrollSettingsToBehavior brings the lower part of the settings, where the
-// behavior switches are, into the window.
-func scrollSettingsToBehavior(settings *ui.Tester) {
-	settings.Scroll(280, 500, 0, 400)
+// openSettingsPage opens a page from the settings' sidebar.
+func openSettingsPage(t *testing.T, settings *ui.Tester, page string) {
+	t.Helper()
+	if err := settings.Click(page); err != nil {
+		t.Fatalf("open the %s page: %v", page, err)
+	}
+	settings.Frame()
 }
 
 // TestViewShowsItems 验证网格把 tab 里的条目画出来。
@@ -138,8 +141,11 @@ func TestViewSearch(t *testing.T) {
 	if err := tt.Click("Search"); err != nil {
 		t.Fatalf("open the search: %v", err)
 	}
-	if !tt.HasText("Type to search…") {
-		t.Fatalf("the search must show its hint, texts %q", tt.Texts())
+	if tt.HasText("Type to search") || tt.HasText("navigate") {
+		t.Fatalf("the search must not show hints, texts %q", tt.Texts())
+	}
+	if !tt.HasText("Search programs…") {
+		t.Fatalf("the field must show its placeholder, texts %q", tt.Texts())
 	}
 	tt.Type("bet")
 	if !tt.HasText("Beta") {
@@ -150,6 +156,12 @@ func TestViewSearch(t *testing.T) {
 	}
 	if app.store.Apps["b"] == nil {
 		t.Fatal("the store must not change while searching")
+	}
+	if err := tt.Click("Clear"); err != nil {
+		t.Fatalf("clear the search: %v", err)
+	}
+	if v.searchQuery != "" {
+		t.Fatalf("clearing must empty the query, got %q", v.searchQuery)
 	}
 }
 
@@ -522,6 +534,40 @@ func TestViewSettingsAppIconPicksFromShell(t *testing.T) {
 	}
 }
 
+// TestViewSettingsChangesWindowTitle 验证设置 → 外观的窗口标题：按钮打开输入框，
+// 确定后标题写进偏好，空标题回到应用名。
+func TestViewSettingsChangesWindowTitle(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	settings := newTestSettings(t, v)
+
+	if v.appTitle() != appName {
+		t.Fatalf("the default title must be the app name, got %q", v.appTitle())
+	}
+	if err := settings.Click("Edit"); err != nil {
+		t.Fatalf("open the title dialog: %v", err)
+	}
+	if !settings.HasText("Window title") {
+		t.Fatalf("the title dialog must open, texts %q", settings.Texts())
+	}
+	settings.Type("Work")
+	if err := settings.Click("OK"); err != nil {
+		t.Fatalf("confirm the title: %v", err)
+	}
+	if v.prefs.Title != "Work" {
+		t.Fatalf("the title must be remembered, got %q", v.prefs.Title)
+	}
+	if got := loadPrefs().Title; got != "Work" {
+		t.Fatalf("the title must be saved, got %q", got)
+	}
+	if !settings.HasText("Work") {
+		t.Fatalf("the row must show the new title, texts %q", settings.Texts())
+	}
+	v.prefs.Title = "  "
+	if v.appTitle() != appName {
+		t.Fatalf("a blank title must fall back to the app name, got %q", v.appTitle())
+	}
+}
+
 // TestViewSettingsChoosesLanguage 验证语言下拉框把选择写进 ui-state.json；
 // 无头环境没有应用语言可改，所以只检查偏好。
 func TestViewSettingsChoosesLanguage(t *testing.T) {
@@ -561,7 +607,7 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 		t.Fatal("running in the background must be on by default")
 	}
 	settings := newTestSettings(t, v)
-	scrollSettingsToBehavior(settings)
+	openSettingsPage(t, settings, "Behavior")
 
 	if err := settings.Click("Toggle keep running in the tray"); err != nil {
 		t.Fatalf("run in background: %v", err)
@@ -588,7 +634,7 @@ func TestViewSettingsTogglesTrayOnly(t *testing.T) {
 		t.Fatal("the tray-only mode must be off by default")
 	}
 	settings := newTestSettings(t, v)
-	scrollSettingsToBehavior(settings)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Toggle hide from taskbar"); err != nil {
 		t.Fatalf("tray only: %v", err)
 	}
@@ -630,7 +676,7 @@ func TestViewSettingsTogglesGPU(t *testing.T) {
 		t.Fatal("drawing in memory must be the default")
 	}
 	settings := newTestSettings(t, v)
-	scrollSettingsToBehavior(settings)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Toggle GPU drawing"); err != nil {
 		t.Fatalf("toggle GPU drawing: %v", err)
 	}
@@ -647,6 +693,7 @@ func TestViewSettingsTogglesWheelPages(t *testing.T) {
 		t.Fatal("the wheel must switch pages by default")
 	}
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Toggle wheel page switching"); err != nil {
 		t.Fatalf("toggle wheel page switching: %v", err)
 	}
@@ -844,6 +891,7 @@ func TestViewSettingsTogglesAutoHide(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
 	app.store.Settings.AutoHide = true
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 
 	if err := settings.Click("Toggle minimize after launching an item"); err != nil {
 		t.Fatalf("auto-hide: %v", err)
@@ -921,6 +969,7 @@ func TestViewSettingsTogglesAutoTiming(t *testing.T) {
 	app.store.Settings.AutoTime = true
 	v.runtimeOpen = true
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 
 	if err := settings.Click("Toggle timer"); err != nil {
 		t.Fatalf("timer: %v", err)
@@ -939,8 +988,7 @@ func TestViewSettingsTogglesAutoTiming(t *testing.T) {
 	}
 }
 
-// TestViewSettingsShowsItsChoices 验证设置窗口画出了分组与版本，并且主窗口的
-// Settings 入口存在。
+// TestViewSettingsShowsItsChoices 验证设置窗口用侧栏列出各页，每页画出它的内容。
 func TestViewSettingsShowsItsChoices(t *testing.T) {
 	_, v, tt := newTestView(t, 720, 460)
 	if !tt.HasText("Settings") {
@@ -951,16 +999,31 @@ func TestViewSettingsShowsItsChoices(t *testing.T) {
 	}
 
 	settings := newTestSettings(t, v)
-	for _, text := range []string{
-		"Settings", "Language", "Theme", "Accent color", "Keep running in the tray",
-		"Timer", "Minimize after launching an item",
-		"Always on top", "Absolute paths for new items", "Data directory",
-		"Version " + appVersion,
-		filepath.Join(absBase, dataDir),
-	} {
-		if !settings.HasText(text) {
-			t.Fatalf("the settings must show %q, texts %q", text, settings.Texts())
+	for _, page := range []string{"Appearance", "Behavior", "Data", "About"} {
+		if !settings.HasText(page) {
+			t.Fatalf("the sidebar must list %q, texts %q", page, settings.Texts())
 		}
+	}
+	pages := []struct {
+		name  string
+		texts []string
+	}{
+		{"Appearance", []string{"Language", "Theme", "Accent color", "Program icon"}},
+		{"Behavior", []string{"Timer", "Always on top", "Keep running in the tray"}},
+		{"Data", []string{"Paths", "Absolute paths for new items", "Data", "Data directory", filepath.Join(absBase, dataDir)}},
+		{"About", []string{"Version " + appVersion, "GitHub"}},
+	}
+	for _, page := range pages {
+		openSettingsPage(t, settings, page.name)
+		for _, text := range page.texts {
+			if !settings.HasText(text) {
+				t.Fatalf("the %s page must show %q, texts %q", page.name, text, settings.Texts())
+			}
+		}
+	}
+	openSettingsPage(t, settings, "Behavior")
+	if settings.HasText("Accent color") {
+		t.Fatalf("only the page shown must build, texts %q", settings.Texts())
 	}
 }
 
@@ -1119,9 +1182,8 @@ func TestSettingsUpdates(t *testing.T) {
 	available := ""
 	defer fakeUpdater(&checks, &downloads, &checked, &last, &available)()
 
-	tt := ui.NewTester(v.settingsView, 560, 1600)
-	tt.SetFocused(true)
-	tt.Frame()
+	tt := newTestSettings(t, v)
+	openSettingsPage(t, tt, "About")
 	if !tt.HasText("Not checked yet") {
 		t.Fatalf("the about section must say no check ran, texts %q", tt.Texts())
 	}
@@ -1250,10 +1312,14 @@ func TestViewShowsChineseTexts(t *testing.T) {
 
 	settings := newTestSettings(t, v)
 	settings.SetLocale("zh-Hans")
-	for _, text := range []string{"设置", "外观", "语言", "行为", "路径", "数据", "关于"} {
+	for _, text := range []string{"外观", "语言", "行为", "数据", "关于"} {
 		if !settings.HasText(text) {
 			t.Fatalf("the settings must say %q in Chinese, texts %q", text, settings.Texts())
 		}
+	}
+	openSettingsPage(t, settings, "数据")
+	if !settings.HasText("路径") || !settings.HasText("数据目录") {
+		t.Fatalf("the data page must say its groups in Chinese, texts %q", settings.Texts())
 	}
 }
 

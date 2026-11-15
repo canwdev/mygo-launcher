@@ -52,6 +52,7 @@ func TestViewSettingsRecordsShortcut(t *testing.T) {
 	})
 
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Not set"); err != nil {
 		t.Fatalf("start recording: %v", err)
 	}
@@ -97,6 +98,7 @@ func TestViewSettingsRecordsFunctionKey(t *testing.T) {
 	})
 
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Not set"); err != nil {
 		t.Fatalf("start recording: %v", err)
 	}
@@ -127,6 +129,7 @@ func TestViewSettingsRejectsTakenShortcut(t *testing.T) {
 	})
 
 	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Not set"); err != nil {
 		t.Fatalf("start recording: %v", err)
 	}
