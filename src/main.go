@@ -84,6 +84,9 @@ func main() {
 		})
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { app.quitting = true })
 		mygo.App.OnQuit(v.destroyTray)
+		// Where this launch opens: the place the preference names, which
+		// --at-cursor overrides with the pointer.
+		place := v.startupPlace(opts)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     v.appTitle(),
 			Width:     defaultWindowWidth,
@@ -95,9 +98,10 @@ func main() {
 			StateKey: windowStateKey,
 			// The store's always-on-top setting applies from the first frame.
 			AlwaysOnTop: app.store.Settings.AlwaysOnTop,
-			// A silent launch keeps it hidden; a launch at the pointer opens it
-			// once it has its place, without a flash at the saved position.
-			Hidden:  opts.silent || opts.atCursor,
+			// A silent launch keeps it hidden; a window opening anywhere but
+			// its saved position opens once it has its place, without a flash
+			// at the old one.
+			Hidden:  opts.silent || place != placeLast,
 			Content: ui.View(v.view),
 			// The tray-only mode: no taskbar button and no minimize, so the
 			// window is reached from the tray or the shortcut alone.
@@ -109,13 +113,15 @@ func main() {
 		// turn, so both hold the window by then.
 		app.win, v.win = win, win
 		v.updateAppIcons()
+		// The window paints at this opacity from its first frame.
+		v.applyWindowOpacity()
 
 		win.OnClose(func(e *mygo.CloseEvent) { v.handleClose(e) })
 		win.OnFileDrop(func(e *mygo.FileDropEvent) {
 			app.addPaths(e.Paths, v.prefs.ActiveTab)
 		})
-		if opts.atCursor {
-			win.OnReadyToShow(v.showMainAtCursor)
+		if place != placeLast {
+			win.OnReadyToShow(func() { v.showMainAt(place) })
 		}
 		v.syncTray()
 		v.registerSavedShortcut()

@@ -1438,6 +1438,16 @@ func (msgs Messages) SystemIcon() string {
 	return Catalog.Format(msgs.locale, "systemIcon", nil)
 }
 
+// WindowOpacity says "Window opacity"
+// in the language the app shows.
+func WindowOpacity() string { return In(i18n.Locale()).WindowOpacity() }
+
+// WindowOpacity says "Window opacity"
+// in the language of msgs.
+func (msgs Messages) WindowOpacity() string {
+	return Catalog.Format(msgs.locale, "windowOpacity", nil)
+}
+
 // Background says "Background"
 // in the language the app shows.
 func Background() string { return In(i18n.Locale()).Background() }
@@ -1666,6 +1676,56 @@ func WheelPagesHint() string { return In(i18n.Locale()).WheelPagesHint() }
 // in the language of msgs.
 func (msgs Messages) WheelPagesHint() string {
 	return Catalog.Format(msgs.locale, "wheelPagesHint", nil)
+}
+
+// WindowPosition says "Window position"
+// in the language the app shows.
+func WindowPosition() string { return In(i18n.Locale()).WindowPosition() }
+
+// WindowPosition says "Window position"
+// in the language of msgs.
+func (msgs Messages) WindowPosition() string {
+	return Catalog.Format(msgs.locale, "windowPosition", nil)
+}
+
+// WindowPositionHint says "Where the window opens when the launcher starts"
+// in the language the app shows.
+func WindowPositionHint() string { return In(i18n.Locale()).WindowPositionHint() }
+
+// WindowPositionHint says "Where the window opens when the launcher starts"
+// in the language of msgs.
+func (msgs Messages) WindowPositionHint() string {
+	return Catalog.Format(msgs.locale, "windowPositionHint", nil)
+}
+
+// LastPosition says "Last position"
+// in the language the app shows.
+func LastPosition() string { return In(i18n.Locale()).LastPosition() }
+
+// LastPosition says "Last position"
+// in the language of msgs.
+func (msgs Messages) LastPosition() string {
+	return Catalog.Format(msgs.locale, "lastPosition", nil)
+}
+
+// AtCursor says "At cursor"
+// in the language the app shows.
+func AtCursor() string { return In(i18n.Locale()).AtCursor() }
+
+// AtCursor says "At cursor"
+// in the language of msgs.
+func (msgs Messages) AtCursor() string {
+	return Catalog.Format(msgs.locale, "atCursor", nil)
+}
+
+// ScreenCenter says "Screen center"
+// in the language the app shows.
+func ScreenCenter() string { return In(i18n.Locale()).ScreenCenter() }
+
+// ScreenCenter says "Screen center"
+// in the language of msgs.
+func (msgs Messages) ScreenCenter() string {
+	return Catalog.Format(msgs.locale, "screenCenter", nil)
 }
 
 // ToggleWheelPages says "Toggle wheel page switching"

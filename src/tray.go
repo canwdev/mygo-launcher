@@ -30,9 +30,9 @@ func (v *view) syncTray() {
 			return
 		}
 		v.tray = tray
-		// A click brings the window back at the pointer; Windows opens the
-		// menu on a right click, as the app asks.
-		tray.OnClick(v.showMainAtCursor)
+		// A click brings the window back where the settings say; Windows
+		// opens the menu on a right click, as the app asks.
+		tray.OnClick(v.showMainAtPreference)
 		return
 	}
 	v.tray.SetMenu(menu)
@@ -52,7 +52,7 @@ func (v *view) destroyTray() {
 func (v *view) trayMenu() *mygo.Menu {
 	m := locales.In(mygo.App.Locale())
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Label: m.OpenMain(), Accelerator: v.prefs.Shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { v.showMainAtCursor() }},
+		{Label: m.OpenMain(), Accelerator: v.prefs.Shortcut, Click: func(*mygo.MenuItem, *mygo.Window) { v.showMainAtPreference() }},
 		{Label: m.Settings(), Click: func(*mygo.MenuItem, *mygo.Window) { v.openSettings() }},
 		{Type: mygo.MenuItemSeparator},
 		{Label: m.Exit(), Click: func(*mygo.MenuItem, *mygo.Window) { mygo.App.Quit() }},
@@ -112,7 +112,7 @@ func (v *view) setBackgroundOnClose(on bool) {
 	}
 	v.syncTray()
 	if !on && v.app.win != nil && !v.app.win.IsVisible() {
-		v.showMain()
+		v.showMainAtPreference()
 	}
 }
 

@@ -272,6 +272,16 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 				v.openTitleDialog()
 			}
 		})
+		// The window's own opacity comes first: it fades everything, the
+		// picture below included, and needs no picture to say something.
+		row(m.WindowOpacity(), "", func() {
+			value := windowTransparency(v.prefs.WindowOpacity)
+			slider := ui.Slider(c.Key("window-opacity"), &value, 0, 1-minWindowOpacity).
+				Width(150).Label(m.WindowOpacity())
+			if slider.Changed() {
+				v.setWindowOpacity(windowOpacityFrom(value))
+			}
+		})
 		row(m.Background(), "", func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				if ui.Button(c, m.ChooseBackground()).Clicked() {
@@ -284,16 +294,17 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 				}
 			})
 		})
-		row(m.BackgroundOpacity(), "", func() {
-			value := v.prefs.BackgroundOpacity
-			slider := ui.Slider(c.Key("background-opacity"), &value, 0.05, 0.9).
-				Width(150).Label(m.BackgroundOpacity())
-			if slider.Changed() {
-				v.prefs.BackgroundOpacity = value
-				v.savePrefs()
-				v.app.refresh()
-			}
-		})
+		// The picture's opacity only says something once there is a picture.
+		if v.prefs.Background != "" {
+			row(m.BackgroundOpacity(), "", func() {
+				value := v.prefs.BackgroundOpacity
+				slider := ui.Slider(c.Key("background-opacity"), &value, 0.05, 0.9).
+					Width(150).Label(m.BackgroundOpacity())
+				if slider.Changed() {
+					v.setBackgroundOpacity(value)
+				}
+			})
+		}
 	})
 }
 
@@ -329,6 +340,19 @@ func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group setting
 		row(m.WheelPages(), m.WheelPagesHint(), func() {
 			if ui.Switch(c, &v.prefs.WheelPages).Label(m.ToggleWheelPages()).Changed() {
 				v.setWheelPages(v.prefs.WheelPages)
+			}
+		})
+		row(m.WindowPosition(), m.WindowPositionHint(), func() {
+			places := []string{"last", "cursor", "center"}
+			i := 0
+			for k, place := range places {
+				if place == v.prefs.WindowPosition {
+					i = k
+				}
+			}
+			if segmented(c.Key("window-position"), &i, m.LastPosition(), m.AtCursor(), m.ScreenCenter()) {
+				v.prefs.WindowPosition = places[i]
+				v.changedSettings()
 			}
 		})
 		row(m.GpuDrawing(), m.GpuDrawingHint(), func() {

@@ -40,6 +40,15 @@ type uiPrefs struct {
 	// BackgroundOpacity how much of it shows over the content's color.
 	Background        string  `json:"background,omitempty"`
 	BackgroundOpacity float64 `json:"background_opacity,omitempty"`
+	// WindowOpacity is how opaque the whole window is, texts included: 1 is
+	// fully opaque, the default, and lower values let the desktop show
+	// through. It needs no restart; the window is layered for it.
+	WindowOpacity float64 `json:"window_opacity,omitempty"`
+	// WindowPosition is where the window shows whenever it is brought up: the
+	// pointer (the default), the middle of the display the pointer is on, or
+	// where it was left. A second launch of a copy that is already running
+	// still brings its window to the pointer of that copy.
+	WindowPosition string `json:"window_position,omitempty"`
 }
 
 func defaultPrefs() uiPrefs {
@@ -49,6 +58,8 @@ func defaultPrefs() uiPrefs {
 		IconSize:          "medium",
 		WheelPages:        true,
 		BackgroundOpacity: 0.4,
+		WindowOpacity:     1,
+		WindowPosition:    "cursor",
 	}
 }
 
@@ -98,6 +109,19 @@ func readPrefs() (uiPrefs, bool) {
 		p.Background = ""
 	}
 	p.BackgroundOpacity = min(1, max(0, p.BackgroundOpacity))
+	// Zero is no window at all, the zero value of a file that never held one:
+	// it reads as fully opaque.
+	if p.WindowOpacity <= 0 || p.WindowOpacity > 1 {
+		p.WindowOpacity = 1
+	}
+	if p.WindowOpacity < minWindowOpacity {
+		p.WindowOpacity = minWindowOpacity
+	}
+	switch p.WindowPosition {
+	case "last", "cursor", "center":
+	default:
+		p.WindowPosition = "cursor"
+	}
 	return p, true
 }
 

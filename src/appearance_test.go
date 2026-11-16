@@ -228,16 +228,47 @@ func TestPrefsAppearanceDefaults(t *testing.T) {
 	}
 }
 
-// TestSettingsShowsAppearanceRows 验证外观底部有程序图标、背景和透明度三行。
+// indexOfText is where texts first say text, or -1 when they never do.
+func indexOfText(texts []string, text string) int {
+	for i, t := range texts {
+		if t == text {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestSettingsShowsAppearanceRows 验证外观底部有窗口透明度、程序图标与背景三行，
+// 背景透明度只在选了背景图片之后出现。
 func TestSettingsShowsAppearanceRows(t *testing.T) {
-	_, v, _ := newTestView(t, 720, 460)
+	app, v, _ := newTestView(t, 720, 460)
 	settings := newTestSettings(t, v)
-	for _, label := range []string{"Program icon", "Background", "Background opacity"} {
+	for _, label := range []string{"Window opacity", "Program icon", "Background"} {
 		if !settings.HasText(label) {
 			t.Fatalf("the appearance group must show %q, texts %q", label, settings.Texts())
 		}
 	}
+	if settings.HasText("Background opacity") {
+		t.Fatalf("the picture's opacity must wait for a picture, texts %q", settings.Texts())
+	}
 	if !settings.HasText("Choose icon…") || !settings.HasText("Choose image…") {
 		t.Fatalf("the rows must offer their pickers, texts %q", settings.Texts())
+	}
+	// The window's opacity sits above the picture it fades.
+	if at, bg := indexOfText(settings.Texts(), "Window opacity"), indexOfText(settings.Texts(), "Background"); at > bg {
+		t.Fatalf("the window opacity belongs above the background, texts %q", settings.Texts())
+	}
+
+	// Choosing a picture brings its opacity along.
+	src := filepath.Join(absBase, "row-wall.png")
+	writePNG(t, src, 40, 20, color.NRGBA{R: 255, A: 255})
+	stored, err := app.customBackground(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.prefs.Background = stored
+	settings.Frame()
+	if !settings.HasText("Background opacity") {
+		t.Fatalf("a chosen picture must show its opacity, texts %q", settings.Texts())
 	}
 }
