@@ -78,7 +78,7 @@ func (v *view) itemDialog(c *ui.Context) {
 	if v.editNew {
 		title = m.CreateItem()
 	}
-	ui.Modal(c, &v.editOpen, func() {
+	v.modal(c, &v.editOpen, func() {
 		ui.Column(c).Width(dialogWidth(c, 480)).Gap(12).Children(func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, title).FontSize(17).FontWeight(700)
@@ -252,7 +252,7 @@ func (v *view) runtimeDialog(c *ui.Context) {
 	}
 	preview := formatRuntime(int64(minutes) * 60000)
 
-	ui.Modal(c, &v.runtimeOpen, func() {
+	v.modal(c, &v.runtimeOpen, func() {
 		ui.Column(c).Width(dialogWidth(c, 460)).Gap(10).Children(func() {
 			ui.Text(c, m.EditRuntime()).FontSize(17).FontWeight(700)
 
@@ -313,7 +313,7 @@ func (v *view) renameDialog(c *ui.Context) {
 	if !v.renameOpen {
 		return
 	}
-	ui.Modal(c, &v.renameOpen, func() {
+	v.modal(c, &v.renameOpen, func() {
 		ui.Column(c).Width(dialogWidth(c, 380)).Gap(12).Children(func() {
 			ui.Text(c, v.renameTitle).FontSize(17).FontWeight(700)
 			if ui.TextInput(c, &v.renameName).AutoFocus().Submitted() {

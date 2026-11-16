@@ -156,13 +156,33 @@ func accentText(c ui.Color) ui.Color {
 	return ui.Hex("#ffffff")
 }
 
-// applyPalette colors the frame's theme with the palette and returns it. The
+// applyPalette colours the frame with the accent and returns the palette. The
 // appearance itself (system, light or dark) is the window's, set by applyTheme.
+// With a material behind the window the panes leave their background to the
+// window, which paints it part see-through (see view.windowFill).
 func applyPalette(c *ui.Context, accent string) palette {
 	t := *c.Theme()
 	p := paletteFor(&t, accent)
+	// Every accent the theme knows follows the palette: MyGo's own defaults
+	// would otherwise show up on a pressed or hovered button, and in a window
+	// that is not drawn as active.
 	t.Accent, t.AccentText = p.accent, p.onAccent
+	t.InactiveAccent = p.accent
+	toward := ui.RGBA(0, 0, 0, 1)
+	if p.dark {
+		toward = ui.RGBA(255, 255, 255, 1)
+	}
+	t.AccentHover = p.accent.Mix(toward, 0.16)
+	t.AccentPressed = p.accent.Mix(toward, 0.32)
 	t.Selection = p.accent.Alpha(0.3)
+	// The theme's background is what MyGo's own panels paint: text fields,
+	// popovers and dialogs. They take the palette's content color.
+	t.Background = p.bg
+	// Tooltips and toasts are the theme turned over by default, which leaves
+	// them a dark pill in the light appearance. They follow the palette
+	// instead: light over light, dark over dark, with the text its own color.
+	t.Inverse = p.sidebar
+	t.InverseText = p.text
 	c.SetTheme(&t)
 	return p
 }

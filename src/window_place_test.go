@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 // TestStartupPlace 验证窗口开在哪里：偏好决定上次位置、指针处与屏幕中央，
@@ -78,6 +79,37 @@ func TestPrefsWindowOpacity(t *testing.T) {
 	}
 }
 
+// TestPrefsWindowMaterial 验证背景材质的默认值与未知值：默认没有材质，
+// 读到的未知材质改回没有。
+func TestPrefsWindowMaterial(t *testing.T) {
+	newTestApp(t)
+	path := filepath.Join(dataBase(), uiStateFile)
+	if got := loadPrefs().WindowMaterial; got != "" {
+		t.Fatalf("without a value there is no material, got %q", got)
+	}
+	if err := os.WriteFile(path, []byte(`{"window_material":"mica"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadPrefs().WindowMaterial; got != "mica" {
+		t.Fatalf("the saved material must load, got %q", got)
+	}
+	if err := os.WriteFile(path, []byte(`{"window_material":"wood"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadPrefs().WindowMaterial; got != "" {
+		t.Fatalf("an unknown material must fall back to none, got %q", got)
+	}
+}
+
+// TestWindowMaterial 验证材质 id 到 MyGo 材质的映射。
+func TestWindowMaterial(t *testing.T) {
+	for id, want := range map[string]string{"": "", "mica": "mica", "acrylic": "acrylic", "wood": ""} {
+		if got := string(windowMaterial(id)); got != want {
+			t.Fatalf("windowMaterial(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
 // TestWindowTransparency 验证透明度与不透明度的换算：越高越透明，两端都不会
 // 越过可用的范围。
 func TestWindowTransparency(t *testing.T) {
@@ -99,6 +131,33 @@ func TestWindowTransparency(t *testing.T) {
 		if got := windowOpacityFrom(test.want); math.Abs(got-want) > 1e-9 {
 			t.Fatalf("windowOpacityFrom(%v) = %v, want %v", test.want, got, want)
 		}
+	}
+}
+
+// TestSurfaceFollowsMaterial 验证有材质时面板不再画底色（半透明的那层由窗口
+// 自己的底色负责，画两遍就叠厚了），没有材质时原样画。
+func TestSurfaceFollowsMaterial(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	white := ui.RGBA(255, 255, 255, 1)
+	if got := v.surface(white); got != white {
+		t.Fatalf("without a material the pane paints the color, got %+v", got)
+	}
+	v.material = true
+	if got := v.surface(white); got.A != 0 {
+		t.Fatalf("with a material the pane leaves the tint to the window, got %+v", got)
+	}
+	// The window is what paints the tint: the palette's color, part see-through,
+	// so texts keep a known tone and the material still shows.
+	fill := v.windowFill(white)
+	if fill.A == 0 || fill.A == 255 {
+		t.Fatalf("the window must tint itself over the material, got %+v", fill)
+	}
+	if fill.R != white.R || fill.G != white.G || fill.B != white.B {
+		t.Fatalf("the tint keeps the palette's color, got %+v", fill)
+	}
+	v.material = false
+	if got := v.windowFill(white); got != white {
+		t.Fatalf("without a material the window paints the color, got %+v", got)
 	}
 }
 

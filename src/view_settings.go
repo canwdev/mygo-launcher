@@ -67,6 +67,7 @@ const settingsSidebarWidth = 180
 // ui-state.json, grouped in cards as MyGo Music groups its own.
 func (v *view) settingsView(c *ui.Context) {
 	v.lang = c.Locale()
+	// The settings window has no material of its own.
 	p := applyPalette(c, v.prefs.Accent)
 	v.pal = p
 	m := v.msgs()
@@ -157,10 +158,13 @@ func (v *view) settingsNavItem(c *ui.Context, p palette, sec settingsSection, se
 	}
 }
 
-// settingsAppearance is the page of the language, the theme and the accent,
-// the grid's icons, and the launcher's own icon, title and background.
+// settingsAppearance is the page of the language, the theme and the accent, the
+// window's material, opacity and background, and then the launcher's own marks:
+// the grid's icon size, its icon and its window title.
 func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group settingsGroup, row settingsRow) {
 	p := v.pal
+	// The page's own title already says appearance; only the card below it
+	// carries one.
 	group("", func() {
 		row(m.Language(), "", func() {
 			chinese, english := m.SimplifiedChinese(), m.English()
@@ -235,6 +239,59 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 				})
 			})
 		})
+		row(m.WindowMaterial(), m.WindowMaterialHint(), func() {
+			materials := []string{"", "mica", "acrylic"}
+			i := 0
+			for k, material := range materials {
+				if material == v.prefs.WindowMaterial {
+					i = k
+				}
+			}
+			if segmented(c.Key("window-material"), &i, m.MaterialNone(), m.MaterialMica(), m.MaterialAcrylic()) {
+				v.prefs.WindowMaterial = materials[i]
+				v.savePrefs()
+				// The window is created with its material, so the new one
+				// needs a fresh window: the app restarts itself.
+				mygo.App.Relaunch()
+			}
+		})
+		// The window's own opacity comes first: it fades everything, the
+		// picture below included, and needs no picture to say something.
+		row(m.WindowOpacity(), "", func() {
+			value := windowTransparency(v.prefs.WindowOpacity)
+			slider := ui.Slider(c.Key("window-opacity"), &value, 0, 1-minWindowOpacity).
+				Width(150).Label(m.WindowOpacity())
+			if slider.Changed() {
+				v.setWindowOpacity(windowOpacityFrom(value))
+			}
+		})
+		row(m.Background(), "", func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if ui.Button(c, m.ChooseBackground()).Clicked() {
+					v.chooseBackground()
+				}
+				if v.prefs.Background != "" {
+					if ui.Button(c, m.Clear()).Clicked() {
+						v.clearBackground()
+					}
+				}
+			})
+		})
+		// The picture's opacity only says something once there is a picture.
+		if v.prefs.Background != "" {
+			row(m.BackgroundOpacity(), "", func() {
+				value := v.prefs.BackgroundOpacity
+				slider := ui.Slider(c.Key("background-opacity"), &value, 0.05, 0.9).
+					Width(150).Label(m.BackgroundOpacity())
+				if slider.Changed() {
+					v.setBackgroundOpacity(value)
+				}
+			})
+		}
+	})
+	// The launcher's own marks: the grid's icons, the icon it shows in the
+	// system, and the title of its window.
+	group(m.Custom(), func() {
 		row(m.IconSize(), m.IconSizeHint(), func() {
 			sizes := []string{"small", "medium", "large"}
 			i := 1
@@ -272,39 +329,6 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 				v.openTitleDialog()
 			}
 		})
-		// The window's own opacity comes first: it fades everything, the
-		// picture below included, and needs no picture to say something.
-		row(m.WindowOpacity(), "", func() {
-			value := windowTransparency(v.prefs.WindowOpacity)
-			slider := ui.Slider(c.Key("window-opacity"), &value, 0, 1-minWindowOpacity).
-				Width(150).Label(m.WindowOpacity())
-			if slider.Changed() {
-				v.setWindowOpacity(windowOpacityFrom(value))
-			}
-		})
-		row(m.Background(), "", func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if ui.Button(c, m.ChooseBackground()).Clicked() {
-					v.chooseBackground()
-				}
-				if v.prefs.Background != "" {
-					if ui.Button(c, m.Clear()).Clicked() {
-						v.clearBackground()
-					}
-				}
-			})
-		})
-		// The picture's opacity only says something once there is a picture.
-		if v.prefs.Background != "" {
-			row(m.BackgroundOpacity(), "", func() {
-				value := v.prefs.BackgroundOpacity
-				slider := ui.Slider(c.Key("background-opacity"), &value, 0.05, 0.9).
-					Width(150).Label(m.BackgroundOpacity())
-				if slider.Changed() {
-					v.setBackgroundOpacity(value)
-				}
-			})
-		}
 	})
 }
 
@@ -332,16 +356,6 @@ func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group setting
 				v.app.save()
 			}
 		})
-		row(m.AlwaysOnTop(), "", func() {
-			if ui.Switch(c, &s.AlwaysOnTop).Label(m.ToggleAlwaysOnTop()).Changed() {
-				v.app.setAlwaysOnTop(s.AlwaysOnTop)
-			}
-		})
-		row(m.WheelPages(), m.WheelPagesHint(), func() {
-			if ui.Switch(c, &v.prefs.WheelPages).Label(m.ToggleWheelPages()).Changed() {
-				v.setWheelPages(v.prefs.WheelPages)
-			}
-		})
 		row(m.WindowPosition(), m.WindowPositionHint(), func() {
 			places := []string{"last", "cursor", "center"}
 			i := 0
@@ -353,6 +367,16 @@ func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group setting
 			if segmented(c.Key("window-position"), &i, m.LastPosition(), m.AtCursor(), m.ScreenCenter()) {
 				v.prefs.WindowPosition = places[i]
 				v.changedSettings()
+			}
+		})
+		row(m.AlwaysOnTop(), "", func() {
+			if ui.Switch(c, &s.AlwaysOnTop).Label(m.ToggleAlwaysOnTop()).Changed() {
+				v.app.setAlwaysOnTop(s.AlwaysOnTop)
+			}
+		})
+		row(m.WheelPages(), m.WheelPagesHint(), func() {
+			if ui.Switch(c, &v.prefs.WheelPages).Label(m.ToggleWheelPages()).Changed() {
+				v.setWheelPages(v.prefs.WheelPages)
 			}
 		})
 		row(m.GpuDrawing(), m.GpuDrawingHint(), func() {

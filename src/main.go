@@ -102,7 +102,12 @@ func main() {
 			// its saved position opens once it has its place, without a flash
 			// at the old one.
 			Hidden:  opts.silent || place != placeLast,
-			Content: ui.View(v.view),
+			// A material draws behind the window, which is transparent for
+			// it; the view lets it through its panes. Without one the window
+			// stays opaque.
+			Transparent: v.prefs.WindowMaterial != "",
+			Vibrancy:    windowMaterial(v.prefs.WindowMaterial),
+			Content:     ui.View(v.view),
 			// The tray-only mode: no taskbar button and no minimize, so the
 			// window is reached from the tray or the shortcut alone.
 			SkipTaskbar:     v.prefs.TrayOnly,

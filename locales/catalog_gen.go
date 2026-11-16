@@ -1378,6 +1378,16 @@ func (msgs Messages) CustomAccent() string {
 	return Catalog.Format(msgs.locale, "customAccent", nil)
 }
 
+// Custom says "Custom"
+// in the language the app shows.
+func Custom() string { return In(i18n.Locale()).Custom() }
+
+// Custom says "Custom"
+// in the language of msgs.
+func (msgs Messages) Custom() string {
+	return Catalog.Format(msgs.locale, "custom", nil)
+}
+
 // IconSize says "Icon size"
 // in the language the app shows.
 func IconSize() string { return In(i18n.Locale()).IconSize() }
@@ -1436,6 +1446,56 @@ func SystemIcon() string { return In(i18n.Locale()).SystemIcon() }
 // in the language of msgs.
 func (msgs Messages) SystemIcon() string {
 	return Catalog.Format(msgs.locale, "systemIcon", nil)
+}
+
+// WindowMaterial says "Background material"
+// in the language the app shows.
+func WindowMaterial() string { return In(i18n.Locale()).WindowMaterial() }
+
+// WindowMaterial says "Background material"
+// in the language of msgs.
+func (msgs Messages) WindowMaterial() string {
+	return Catalog.Format(msgs.locale, "windowMaterial", nil)
+}
+
+// WindowMaterialHint says "Windows 11 only"
+// in the language the app shows.
+func WindowMaterialHint() string { return In(i18n.Locale()).WindowMaterialHint() }
+
+// WindowMaterialHint says "Windows 11 only"
+// in the language of msgs.
+func (msgs Messages) WindowMaterialHint() string {
+	return Catalog.Format(msgs.locale, "windowMaterialHint", nil)
+}
+
+// MaterialNone says "None"
+// in the language the app shows.
+func MaterialNone() string { return In(i18n.Locale()).MaterialNone() }
+
+// MaterialNone says "None"
+// in the language of msgs.
+func (msgs Messages) MaterialNone() string {
+	return Catalog.Format(msgs.locale, "materialNone", nil)
+}
+
+// MaterialMica says "Mica"
+// in the language the app shows.
+func MaterialMica() string { return In(i18n.Locale()).MaterialMica() }
+
+// MaterialMica says "Mica"
+// in the language of msgs.
+func (msgs Messages) MaterialMica() string {
+	return Catalog.Format(msgs.locale, "materialMica", nil)
+}
+
+// MaterialAcrylic says "Acrylic"
+// in the language the app shows.
+func MaterialAcrylic() string { return In(i18n.Locale()).MaterialAcrylic() }
+
+// MaterialAcrylic says "Acrylic"
+// in the language of msgs.
+func (msgs Messages) MaterialAcrylic() string {
+	return Catalog.Format(msgs.locale, "materialAcrylic", nil)
 }
 
 // WindowOpacity says "Window opacity"

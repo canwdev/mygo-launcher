@@ -44,6 +44,10 @@ type view struct {
 	// customAccentOpen says the settings' custom accent picker shows.
 	customAccentOpen bool
 
+	// material says a vibrancy material shows behind this frame's window, so
+	// the panes paint see-through and leave it visible.
+	material bool
+
 	// settingsPage is the page the settings sidebar shows; empty shows the
 	// first one.
 	settingsPage string
@@ -288,9 +292,14 @@ func (v *view) view(c *ui.Context) {
 	v.keyboardFocus = v.keyboardNav && !v.overlayOpen()
 	v.bgWindowW, v.bgWindowH = c.Size()
 
+	// Without a backdrop the material reports nothing, and the window keeps
+	// its own background.
+	v.material = c.Vibrancy()
 	p := applyPalette(c, v.prefs.Accent)
 	v.pal = p
-	c.Root().Background(p.bg)
+	// The material paints behind the whole window: the top bar shows it as it
+	// is, and the content below it lays the palette's tint over its own area.
+	c.Root().Background(v.surface(p.bg))
 
 	page := ui.Column(c).Fill()
 	page.HandleInput(v.pageInput)
@@ -312,7 +321,10 @@ func (v *view) view(c *ui.Context) {
 	}
 	page.Children(func() {
 		v.header(c)
-		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Background(p.bg).Children(func() {
+		// The content lays the palette's tint over the material, at
+		// materialTintAlpha, so the grid's texts keep a known tone. The top
+		// bar above it paints nothing and shows the material itself.
+		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Background(v.windowFill(p.bg)).Children(func() {
 			v.body(c)
 			v.folderMenu(c)
 			v.busyLine(c)
@@ -511,7 +523,7 @@ func (v *view) body(c *ui.Context) {
 				if !isActive && !v.itemDragging {
 					continue
 				}
-				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.pal.bg)
+				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.surface(v.pal.bg))
 				if v.backgroundShown() {
 					page.Draw(v.drawBackground)
 				}

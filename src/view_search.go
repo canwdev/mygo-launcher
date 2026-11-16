@@ -85,7 +85,7 @@ func (v *view) search(c *ui.Context) {
 		v.searchChosen = max(0, len(hits)-1)
 	}
 
-	ui.Modal(c, &v.searchOpen, func() {
+	v.modal(c, &v.searchOpen, func() {
 		ui.Column(c).Width(dialogWidth(c, 560)).Gap(8).Children(func() {
 			// The field follows MyGo Music's search field: a rounded fill with
 			// the icon inside it, an accent edge and glow while it is focused,

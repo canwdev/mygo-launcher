@@ -202,6 +202,60 @@ func TestViewDrawsCustomBackground(t *testing.T) {
 	}
 }
 
+// TestThemeAccentStates 验证强调色的常态、悬浮、按下与失焦态都取自调色板：
+// 不然按钮悬停时会闪回 MyGo 默认的蓝色。
+func TestThemeAccentStates(t *testing.T) {
+	newTestApp(t)
+	var theme ui.Theme
+	tt := ui.NewTester(func(c *ui.Context) {
+		applyPalette(c, "#ff0000")
+		theme = *c.Theme()
+	}, 200, 120)
+	tt.Frame()
+	for name, col := range map[string]ui.Color{
+		"accent":   theme.Accent,
+		"hover":    theme.AccentHover,
+		"pressed":  theme.AccentPressed,
+		"inactive": theme.InactiveAccent,
+	} {
+		if col.R <= col.G || col.R <= col.B {
+			t.Fatalf("the %s color must follow the accent, got %+v", name, col)
+		}
+	}
+}
+
+// TestTooltipsFollowTheTheme 验证 tooltip 与 toast 用调色板的浮层色，而不是
+// MyGo 默认的反色：浅色主题下是浅色胶囊配深色字，深色主题下相反；文字始终不透明。
+func TestTooltipsFollowTheTheme(t *testing.T) {
+	newTestApp(t)
+	for _, dark := range []bool{false, true} {
+		var theme ui.Theme
+		tt := ui.NewTester(func(c *ui.Context) {
+			th := *c.Theme()
+			th.Dark = dark
+			c.SetTheme(&th)
+			applyPalette(c, "")
+			theme = *c.Theme()
+		}, 200, 120)
+		tt.Frame()
+		if theme.InverseText.A != 255 {
+			t.Fatalf("dark=%v: the tooltip text must stay opaque, got %+v", dark, theme.InverseText)
+		}
+		if theme.Inverse.A != 255 {
+			t.Fatalf("dark=%v: the tooltip must have a fill of its own, got %+v", dark, theme.Inverse)
+		}
+		// The pill sits on the window's side of the scale: light over a light
+		// appearance, dark over a dark one, so it reads as part of the app.
+		lum := func(c ui.Color) int { return int(c.R) + int(c.G) + int(c.B) }
+		if dark && lum(theme.Inverse) > lum(theme.InverseText) {
+			t.Fatalf("the dark appearance needs an inverse text lighter than its pill, got %+v on %+v", theme.InverseText, theme.Inverse)
+		}
+		if !dark && lum(theme.Inverse) < lum(theme.InverseText) {
+			t.Fatalf("the light appearance needs an inverse text darker than its pill, got %+v on %+v", theme.InverseText, theme.Inverse)
+		}
+	}
+}
+
 // TestPrefsAppearanceDefaults 验证背景透明度的默认与清理，以及非应用目录的
 // 图标路径不会被采用。
 func TestPrefsAppearanceDefaults(t *testing.T) {
@@ -243,7 +297,7 @@ func indexOfText(texts []string, text string) int {
 func TestSettingsShowsAppearanceRows(t *testing.T) {
 	app, v, _ := newTestView(t, 720, 460)
 	settings := newTestSettings(t, v)
-	for _, label := range []string{"Window opacity", "Program icon", "Background"} {
+	for _, label := range []string{"Background material", "Window opacity", "Program icon", "Background"} {
 		if !settings.HasText(label) {
 			t.Fatalf("the appearance group must show %q, texts %q", label, settings.Texts())
 		}
@@ -257,6 +311,20 @@ func TestSettingsShowsAppearanceRows(t *testing.T) {
 	// The window's opacity sits above the picture it fades.
 	if at, bg := indexOfText(settings.Texts(), "Window opacity"), indexOfText(settings.Texts(), "Background"); at > bg {
 		t.Fatalf("the window opacity belongs above the background, texts %q", settings.Texts())
+	}
+	// The launcher's own marks are a card of their own, titled Custom, under
+	// the appearance card.
+	title := indexOfText(settings.Texts(), "Custom")
+	if title < 0 {
+		t.Fatalf("the icon rows need a title of their own, texts %q", settings.Texts())
+	}
+	if bg := indexOfText(settings.Texts(), "Background"); title < bg {
+		t.Fatalf("the icon card belongs under the appearance rows, texts %q", settings.Texts())
+	}
+	for _, label := range []string{"Icon size", "Program icon", "Window title"} {
+		if at := indexOfText(settings.Texts(), label); at < title {
+			t.Fatalf("%q belongs in the icon card, texts %q", label, settings.Texts())
+		}
 	}
 
 	// Choosing a picture brings its opacity along.

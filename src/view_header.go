@@ -28,7 +28,7 @@ func (v *view) header(c *ui.Context) {
 		base = p.bg
 	}
 	bar := ui.Row(c).Height(50).Padding(0, 12).Gap(8).AlignItems(ui.Center).
-		Background(base).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline)
+		Background(v.surface(base)).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline)
 	if shown {
 		bar.Draw(v.drawBackground)
 	}

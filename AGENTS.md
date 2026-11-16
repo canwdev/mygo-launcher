@@ -59,9 +59,35 @@ store 和 view 自己的字段来搭界面，帧之间只保留这些字段。�
 ### 配色与主题
 
 `src/theme.go` 的 `palette` 给浅色/深色两套背景、侧栏、文字、分隔线、悬停色；`applyPalette`
-每帧复制 `c.Theme()`，只覆盖 `Accent`、`AccentText`、`Selection`，明暗仍由 MyGo 的 ThemeSource
-决定。强调色来自 `ui-state.json` 的 `accent`（`bang-1`…`bang-5`，即 MyGO!!!!! 五位成员的配色，
+每帧复制 `c.Theme()`，覆盖 `Accent`、`AccentText`、`AccentHover`、`AccentPressed`、
+`InactiveAccent` 和 `Selection`（只设 `Accent` 的话，按钮悬停或窗口失焦会闪回 MyGo 默认的蓝色），
+明暗仍由 MyGo 的 ThemeSource 决定。强调色来自 `ui-state.json` 的 `accent`（`bang-1`…`bang-5`，即 MyGO!!!!! 五位成员的配色，
 各有明暗两套；或自定义 `#rrggbb`），`accentText` 按亮度选字色。
+
+### 背景材质
+
+设置 → 外观的「背景材质」（`ui-state.json` 的 `window_material`：空 / `mica` / `acrylic`）让
+Windows 11 在窗口背后画系统材质（Mica、Acrylic）；Win10 没有，MyGo 报告没材质。
+
+- 窗口创建时带 `Transparent` + `Vibrancy`，所以改材质要重启才生效（设置里换材质直接
+  `mygo.App.Relaunch()`，不提示「重启后生效」）。
+- `c.Vibrancy()` 报告本帧是否真有材质。有材质时根节点和顶栏都是透明的，材质原样露出来；**只有内容
+  列**（`body()` 外面那层 `ui.Column`）画半透明底色 `v.windowFill(p.bg)`（`src/window_material.go`，
+  透明度是 `materialTintAlpha`，调它即可更透或更实），网格里的字才有已知的明暗可依。
+  **别把根节点或内容列都设成透明**——那样谁也画不出这层底色，内容区就完全裸在材质上，鲜艳壁纸下字
+  看不清（踩过两次：「底色消失」的根因就是根节点被设成 `ui.Transparent`）。
+- 有材质时窗格（`v.surface(...)`）返回 `ui.Transparent`：顶栏、`body()` 里每页的绝对定位层都走它，
+  这样露出来的才是材质本身；漏一个就在磨砂背景上留一块纯色（当初内容区那片白就是页面层直接画
+  `v.pal.bg` 造成的）。内容列是唯一例外，它画 `windowFill`。
+- `Theme.Background` 仍是调色板底色（不透明）：它是 MyGo 自己的对话框（`coreModal`）、弹出面板
+  （`stylePanel`）、输入框的底色，设成透明会让这些面板没有底。tooltip 与 toast 另走
+  `t.Inverse` / `t.InverseText`（见下）。
+- tooltip / toast 取色是 `ui.(*Theme).inverse()`：`Inverse` 和 `InverseText` 都必须显式设成调色板
+  的浮层色（`p.sidebar` / `p.text`），否则 MyGo 回退到「反色」——浅色主题下就是一颗深色胶囊，跟不
+  随主题；只设 `InverseText` 而 `Background` 透明时更会变成「黑胶囊 + 看不见的字」。
+- 主窗口的对话框都走 `v.modal(...)`（`src/view_modal.go`），它和 `ui.Modal` 一样用
+  `ui.DialogBase`，只是面板画调色板底色。设置窗口的对话框仍可直接用 `ui.Modal`（那边没有材质）。
+- 设置窗口不参与（单独创建，没有材质），调色板按 `material=false` 应用。
 
 ### 布局
 
@@ -189,10 +215,11 @@ store 和 view 自己的字段来搭界面，帧之间只保留这些字段。�
   640×420），`StateKey: "settings-sections"`，无最大/最小化，标题「设置 - <标题>」。
 - 左侧 180 DIP 导航 + 右侧内容页，当前页存在 `view.settingsPage`。`app.win` 为 nil 时
   `openSettings` 返回，测试用 `ui.NewTester(v.settingsView, 780, 640)` + `openSettingsPage`。
-- `App.refresh` 同时刷新主窗口和设置窗口。页面：外观（语言、主题、强调色、图标大小、程序图标、
-  窗口标题、窗口透明度、背景与背景透明度）、行为（快捷键、计时器、启动后最小化、置顶、滚轮
-  切页、窗口位置、GPU 绘制、关闭后在托盘运行、不在任务栏显示）、数据（路径与数据两组）、关于
-  （图标、版本、GitHub、更新、重启、退出）。GPU 改动后提示重启生效。
+- `App.refresh` 同时刷新主窗口和设置窗口。页面：外观（第一张卡不设小标题：语言、主题、强调色、
+  背景材质、窗口透明度、背景与背景透明度；第二张小标题「自定义」：图标大小、程序图标、窗口标题）、
+  行为（快捷键、计时器、启动后最小化、窗口位置、置顶、滚轮切页、GPU 绘制、关闭后在托盘运行、
+  不在任务栏显示）、数据（路径与数据两组）、关于（图标、版本、GitHub、更新、重启、退出）。
+  GPU 改动后提示重启生效。
 
 ## 启动参数与窗口位置
 

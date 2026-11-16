@@ -44,6 +44,10 @@ type uiPrefs struct {
 	// fully opaque, the default, and lower values let the desktop show
 	// through. It needs no restart; the window is layered for it.
 	WindowOpacity float64 `json:"window_opacity,omitempty"`
+	// WindowMaterial is the translucent material behind the window, empty for
+	// none, "mica" or "acrylic" on Windows 11. The window is created with it,
+	// so a change applies on the next start.
+	WindowMaterial string `json:"window_material,omitempty"`
 	// WindowPosition is where the window shows whenever it is brought up: the
 	// pointer (the default), the middle of the display the pointer is on, or
 	// where it was left. A second launch of a copy that is already running
@@ -116,6 +120,11 @@ func readPrefs() (uiPrefs, bool) {
 	}
 	if p.WindowOpacity < minWindowOpacity {
 		p.WindowOpacity = minWindowOpacity
+	}
+	switch p.WindowMaterial {
+	case "mica", "acrylic":
+	default:
+		p.WindowMaterial = ""
 	}
 	switch p.WindowPosition {
 	case "last", "cursor", "center":
