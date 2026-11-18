@@ -11,6 +11,11 @@ import (
 	"go-launcher/locales"
 )
 
+// relaunchApp restarts the app with the preferences it now has. A setting that
+// is read once, as the drawing backend or the window's material, needs the new
+// process; tests replace it, as they do the system dialogs.
+var relaunchApp = func() { mygo.App.Relaunch() }
+
 // openSettings shows the settings window, opening it the first time. In tests
 // there is no window to open: settingsView is driven directly instead.
 func (v *view) openSettings() {
@@ -252,7 +257,7 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 				v.savePrefs()
 				// The window is created with its material, so the new one
 				// needs a fresh window: the app restarts itself.
-				mygo.App.Relaunch()
+				relaunchApp()
 			}
 		})
 		// The window's own opacity comes first: it fades everything, the
@@ -382,7 +387,9 @@ func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group setting
 		row(m.GpuDrawing(), m.GpuDrawingHint(), func() {
 			if ui.Switch(c, &v.prefs.GPU).Label(m.ToggleGpuDrawing()).Changed() {
 				v.changedSettings()
-				v.app.notify(m.RestartToApply())
+				// The backend is picked before the window opens, so the new
+				// one needs a fresh process: the app restarts itself.
+				relaunchApp()
 			}
 		})
 		row(m.BackgroundOnClose(), "", func() {

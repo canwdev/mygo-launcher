@@ -91,7 +91,6 @@
   "subtractHalfHour": "Subtract 30 minutes from the input",
   "addHalfHour": "Add 30 minutes to the input",
   "runtimeInvalid": "Runtime must be a number of minutes",
-  "restartToApply": "Restart the app to apply",
   "searchPrograms": "Search programs…",
   "noResults": "No results",
   "locateInTab": "Locate in page",

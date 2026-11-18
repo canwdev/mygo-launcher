@@ -948,16 +948,6 @@ func (msgs Messages) RuntimeInvalid() string {
 	return Catalog.Format(msgs.locale, "runtimeInvalid", nil)
 }
 
-// RestartToApply says "Restart the app to apply"
-// in the language the app shows.
-func RestartToApply() string { return In(i18n.Locale()).RestartToApply() }
-
-// RestartToApply says "Restart the app to apply"
-// in the language of msgs.
-func (msgs Messages) RestartToApply() string {
-	return Catalog.Format(msgs.locale, "restartToApply", nil)
-}
-
 // SearchPrograms says "Search programs…"
 // in the language the app shows.
 func SearchPrograms() string { return In(i18n.Locale()).SearchPrograms() }

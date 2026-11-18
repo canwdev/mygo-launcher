@@ -669,12 +669,18 @@ func TestTrayOnlyNeedsBackgroundAtStartup(t *testing.T) {
 	}
 }
 
-// TestViewSettingsTogglesGPU 验证设置里的 GPU 绘制开关写回 ui-state.json，默认关闭。
+// TestViewSettingsTogglesGPU 验证设置里的 GPU 绘制开关写回 ui-state.json、默认关闭，
+// 换绘图方式要重启才生效，所以开关一动就重启程序。
 func TestViewSettingsTogglesGPU(t *testing.T) {
 	_, v, _ := newTestView(t, 720, 460)
 	if v.prefs.GPU {
 		t.Fatal("drawing in memory must be the default")
 	}
+	old := relaunchApp
+	relaunched := 0
+	relaunchApp = func() { relaunched++ }
+	t.Cleanup(func() { relaunchApp = old })
+
 	settings := newTestSettings(t, v)
 	openSettingsPage(t, settings, "Behavior")
 	if err := settings.Click("Toggle GPU drawing"); err != nil {
@@ -682,6 +688,9 @@ func TestViewSettingsTogglesGPU(t *testing.T) {
 	}
 	if !v.prefs.GPU || !loadPrefs().GPU {
 		t.Fatal("the GPU preference must be kept")
+	}
+	if relaunched != 1 {
+		t.Fatalf("the app must restart itself once, restarted %d times", relaunched)
 	}
 }
 
@@ -1529,6 +1538,68 @@ func TestViewDragOverTabShowsIt(t *testing.T) {
 	tt.Frame()
 	if got := tabSlots(app, 0); len(got) != 1 || got[0] != "b" {
 		t.Fatalf("the first page = %v, want the drop not to repeat", got)
+	}
+}
+
+// TestViewDragHidesOtherPages 验证拖着条目时为了保住拖动而建着的其他页面一点也
+// 不画：窗口有材质时当前页是透明的，别的页面的条目就会从材质里透出来（只有开了
+// 背景材质才看得见），所以那些页面只能留着状态，不能留下颜色。
+func TestViewDragHidesOtherPages(t *testing.T) {
+	app, v, tt := newTestView(t, 720, 520)
+	if err := tt.Click("Add page"); err != nil {
+		t.Fatalf("add a page: %v", err)
+	}
+	app.store.Categories[1].Name = "Second"
+	if err := tt.Click("Default"); err != nil {
+		t.Fatalf("show the first page: %v", err)
+	}
+	tt.SetVibrancy(true)
+	tt.Frame()
+	second := app.store.Categories[1].GUID
+
+	alpha, ok := tt.Find("Alpha")
+	if !ok {
+		t.Fatal("no Alpha row")
+	}
+	beta, ok := tt.Find("Beta")
+	if !ok {
+		t.Fatal("no Beta row")
+	}
+	chip, ok := tt.Find("Second")
+	if !ok {
+		t.Fatal("no Second page")
+	}
+	// Hold a drag over the other page's chip, until it shows: the first page
+	// stays built so the drag goes on, though it is no longer shown.
+	x1, y1 := alpha.X+alpha.W/2, alpha.Y+alpha.H/2
+	x2, y2 := chip.X+chip.W/2, chip.Y+chip.H/2
+	tt.Press(x1, y1)
+	for i := 1; i <= 8; i++ {
+		tt.Move(x1+(x2-x1)*float32(i)/8, y1+(y2-y1)*float32(i)/8)
+	}
+	tt.Advance(2 * time.Second)
+	tt.Frame()
+	if v.prefs.ActiveTab != second {
+		t.Fatalf("resting on a page must show it, active %q want %q", v.prefs.ActiveTab, second)
+	}
+
+	// Beta's cell is far from the pointer: with the page under the copy not
+	// painted, the cell's box holds one flat color, the tint over the
+	// material. Were it painted, its icon and name would break the flatness.
+	img := tt.Image()
+	first := img.At(int(beta.X+beta.W*0.3), int(beta.Y+beta.H*0.15))
+	flat := true
+	for x := int(beta.X + beta.W*0.15); flat && x < int(beta.X+beta.W*0.85); x++ {
+		for y := int(beta.Y + beta.H*0.1); flat && y < int(beta.Y+beta.H*0.5); y++ {
+			if img.At(x, y) != first {
+				flat = false
+			}
+		}
+	}
+	tt.Release(x2, y2)
+	tt.Frame()
+	if !flat {
+		t.Fatalf("a page kept for the drag must paint nothing, %v broke the cell's flatness", img.At(int(beta.X+beta.W*0.5), int(beta.Y+beta.H*0.2)))
 	}
 }
 

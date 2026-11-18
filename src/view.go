@@ -511,8 +511,11 @@ func (v *view) body(c *ui.Context) {
 	tabs := v.app.store.Categories
 	ui.Box(c).Grow(1).Children(func() {
 		// The pages kept mounted while an item is dragged go under the active
-		// one, which paints last over them, so that its background hides them
-		// while its drag keeps painting the copy the pointer follows.
+		// one, which paints last over them. They themselves paint nothing: a
+		// page that only keeps a drag alive must never be seen, and with a
+		// material behind the window the active page paints no background
+		// either, so it could not hide them. The copy that follows the pointer
+		// is painted from the dragged cell itself, not through its page.
 		for activePass := 0; activePass < 2; activePass++ {
 			for i := range tabs {
 				tab := &tabs[i]
@@ -524,6 +527,9 @@ func (v *view) body(c *ui.Context) {
 					continue
 				}
 				page := ui.Box(c).Key(tab.GUID).Absolute().Fill().Background(v.surface(v.pal.bg))
+				if !isActive {
+					page = page.Invisible()
+				}
 				if v.backgroundShown() {
 					page.Draw(v.drawBackground)
 				}

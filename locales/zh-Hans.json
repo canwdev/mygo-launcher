@@ -91,7 +91,6 @@
   "subtractHalfHour": "从输入中减去 30 分钟",
   "addHalfHour": "从输入中增加 30 分钟",
   "runtimeInvalid": "运行时长必须是分钟数",
-  "restartToApply": "重启应用后生效",
   "searchPrograms": "搜索程序…",
   "noResults": "没有结果",
   "locateInTab": "在页面中定位",
