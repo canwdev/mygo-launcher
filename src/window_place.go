@@ -45,18 +45,38 @@ const (
 	placeCenter windowPlace = "center"
 )
 
-// startupPlace is where the window opens: --at-cursor asks for the pointer
-// whatever the preference says, which otherwise picks between the saved
-// position, the pointer and the middle of the display.
+// startupPlace is where the window opens: --position asks for a place whatever
+// the preference says, which otherwise picks between the saved position, the
+// pointer and the middle of the display.
 func (v *view) startupPlace(opts launchOptions) windowPlace {
-	if opts.atCursor {
-		return placeCursor
+	if opts.place != "" {
+		return opts.place
 	}
 	switch place := windowPlace(v.prefs.WindowPosition); place {
 	case placeLast, placeCenter:
 		return place
 	}
 	return placeCursor
+}
+
+// startupWindow is how a launch opens its window.
+type startupWindow struct {
+	hidden bool
+	// showAt is where to show it once it is ready; empty means it needs no
+	// positioning, as it shows by itself or stays hidden.
+	showAt windowPlace
+}
+
+// startupWindowFor decides how a launch opens. A silent launch stays hidden,
+// and a window opening anywhere but its saved position shows once it has its
+// place. A silent launch must not be shown on ready: MyGo fires OnReadyToShow
+// even for a window created Hidden.
+func startupWindowFor(silent bool, place windowPlace) startupWindow {
+	w := startupWindow{hidden: silent || place != placeLast}
+	if !silent && place != placeLast {
+		w.showAt = place
+	}
+	return w
 }
 
 // showMainAtPreference brings the main window up where the preference says:

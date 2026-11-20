@@ -26,6 +26,7 @@ Download the installer or portable build for your architecture from [Releases](h
 - **Search and keyboard**: `Ctrl/Cmd+F` searches and Enter launches; arrows choose items and turn pages, letters choose items in grid order; PgUp/PgDn, Tab, Home/End, and 1–9 switch pages; Esc hides or minimizes; `Ctrl+,` opens settings; icon button tooltips show their keys
 - **Global hotkey**: recordable (function keys can be used alone) to show or hide the launcher from any window; a window called for by the hotkey, a second launch, or the tray appears where the window position setting says: at the pointer (the default), in the middle of the screen the pointer is on, or where it was last
 - **Tray**: closing the window keeps it running in the system tray; settings can make close quit instead; “Hide from taskbar” removes the taskbar button and disables minimize
+- **Start at login**: starts in the background when you sign in to Windows; open it from the tray, the hotkey, or by launching it again. Task Manager’s Startup page can turn it off
 - **Appearance**: minimize after launching an item, always on top, light / dark / follow system, custom accent color; replaceable program icon and main window background picture (with adjustable opacity), whole-window opacity, a Windows 11 backdrop (Mica or Acrylic), and a custom window title, with window and tray icons following the theme
 - **Wheel**: switches pages by default, and Shift+wheel scrolls the grid; settings can invert this
 - **Right click**: Properties and the native shell menu for files and folders; the Recycle Bin can be emptied from its menu and its icon follows its state
@@ -40,13 +41,9 @@ to delete it. Manual edits to `go-launcher-data.json` take effect immediately.
 ## Command line
 
 ```bash
-"MyGo Launcher.exe" --silent      # start without showing the main window
-"MyGo Launcher.exe" --at-cursor   # show the main window at the pointer
+"MyGo Launcher.exe" --silent              # start without showing the main window
+"MyGo Launcher.exe" --position center     # place this launch: last, cursor, or center
 ```
-
-When both are passed, silent wins. If the app is already running, launching it again acts like
-`--at-cursor`: the existing window moves to the pointer and takes focus. With `--silent` the second
-launch just exits and leaves the windows alone.
 
 ## Building
 

@@ -1668,6 +1668,76 @@ func (msgs Messages) Behavior() string {
 	return Catalog.Format(msgs.locale, "behavior", nil)
 }
 
+// OpenAtLogin says "Start at login"
+// in the language the app shows.
+func OpenAtLogin() string { return In(i18n.Locale()).OpenAtLogin() }
+
+// OpenAtLogin says "Start at login"
+// in the language of msgs.
+func (msgs Messages) OpenAtLogin() string {
+	return Catalog.Format(msgs.locale, "openAtLogin", nil)
+}
+
+// OpenAtLoginHint says "Open in the background when you sign in to Windows"
+// in the language the app shows.
+func OpenAtLoginHint() string { return In(i18n.Locale()).OpenAtLoginHint() }
+
+// OpenAtLoginHint says "Open in the background when you sign in to Windows"
+// in the language of msgs.
+func (msgs Messages) OpenAtLoginHint() string {
+	return Catalog.Format(msgs.locale, "openAtLoginHint", nil)
+}
+
+// ToggleOpenAtLogin says "Toggle start at login"
+// in the language the app shows.
+func ToggleOpenAtLogin() string { return In(i18n.Locale()).ToggleOpenAtLogin() }
+
+// ToggleOpenAtLogin says "Toggle start at login"
+// in the language of msgs.
+func (msgs Messages) ToggleOpenAtLogin() string {
+	return Catalog.Format(msgs.locale, "toggleOpenAtLogin", nil)
+}
+
+// OpenAtLoginFailed says "Cannot change the start-at-login setting"
+// in the language the app shows.
+func OpenAtLoginFailed() string { return In(i18n.Locale()).OpenAtLoginFailed() }
+
+// OpenAtLoginFailed says "Cannot change the start-at-login setting"
+// in the language of msgs.
+func (msgs Messages) OpenAtLoginFailed() string {
+	return Catalog.Format(msgs.locale, "openAtLoginFailed", nil)
+}
+
+// StartupAndWindow says "Startup and window"
+// in the language the app shows.
+func StartupAndWindow() string { return In(i18n.Locale()).StartupAndWindow() }
+
+// StartupAndWindow says "Startup and window"
+// in the language of msgs.
+func (msgs Messages) StartupAndWindow() string {
+	return Catalog.Format(msgs.locale, "startupAndWindow", nil)
+}
+
+// Actions says "Actions"
+// in the language the app shows.
+func Actions() string { return In(i18n.Locale()).Actions() }
+
+// Actions says "Actions"
+// in the language of msgs.
+func (msgs Messages) Actions() string {
+	return Catalog.Format(msgs.locale, "actions", nil)
+}
+
+// BackgroundAndPerformance says "Background and performance"
+// in the language the app shows.
+func BackgroundAndPerformance() string { return In(i18n.Locale()).BackgroundAndPerformance() }
+
+// BackgroundAndPerformance says "Background and performance"
+// in the language of msgs.
+func (msgs Messages) BackgroundAndPerformance() string {
+	return Catalog.Format(msgs.locale, "backgroundAndPerformance", nil)
+}
+
 // AutoTiming says "Timer"
 // in the language the app shows.
 func AutoTiming() string { return In(i18n.Locale()).AutoTiming() }

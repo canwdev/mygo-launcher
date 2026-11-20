@@ -8,6 +8,15 @@ LangString MYGO_MOVE_FAILED ${LANG_ENGLISH} "The launcher's old data could not b
 LangString MYGO_MOVE_FAILED ${LANG_SIMPCHINESE} "未能把启动器的旧数据搬到用户数据目录。为避免数据丢失，卸载已停止。"
 
 !macro customUnInstall
+  ; Starting at login is a Run entry of this launcher, which MyGo's
+  ; uninstaller does not remove. Delete it only while it starts this copy, so
+  ; the entry of a portable copy sharing the identifier stays.
+  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.canwdev.golauncher"
+  StrCmp $0 '"$INSTDIR\MyGo Launcher.exe" --mygo-opened-at-login' 0 mygo_run_done
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "com.canwdev.golauncher"
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run" "com.canwdev.golauncher"
+  mygo_run_done:
+
   ; Older versions kept mygo-launcher-data in $INSTDIR. Move whatever is
   ; left there into the user's folder before the folder goes, so both
   ; answers below keep their meaning.

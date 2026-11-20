@@ -608,6 +608,9 @@ func TestViewSettingsTogglesBackgroundOnClose(t *testing.T) {
 	}
 	settings := newTestSettings(t, v)
 	openSettingsPage(t, settings, "Behavior")
+	// The groups push the row below the window: scroll the page to it.
+	settings.Scroll(600, 400, 0, 400)
+	settings.Frame()
 
 	if err := settings.Click("Toggle keep running in the tray"); err != nil {
 		t.Fatalf("run in background: %v", err)
@@ -635,6 +638,9 @@ func TestViewSettingsTogglesTrayOnly(t *testing.T) {
 	}
 	settings := newTestSettings(t, v)
 	openSettingsPage(t, settings, "Behavior")
+	// The groups push the last row below the window: scroll the page to it.
+	settings.Scroll(600, 400, 0, 400)
+	settings.Frame()
 	if err := settings.Click("Toggle hide from taskbar"); err != nil {
 		t.Fatalf("tray only: %v", err)
 	}
@@ -994,6 +1000,35 @@ func TestViewSettingsTogglesAutoTiming(t *testing.T) {
 	}
 	if !app.store.Settings.AutoTime {
 		t.Fatal("the auto timing toggle must turn the setting back on")
+	}
+}
+
+// TestViewSettingsGroupsBehavior 验证行为页分成启动与窗口、操作、后台与性能三组，
+// 每组的第一行在自己的标题之后。
+func TestViewSettingsGroupsBehavior(t *testing.T) {
+	_, v, _ := newTestView(t, 720, 460)
+	settings := newTestSettings(t, v)
+	openSettingsPage(t, settings, "Behavior")
+
+	texts := settings.Texts()
+	groups := []struct {
+		title string
+		first string
+	}{
+		{"Startup and window", "Start at login"},
+		{"Actions", "Minimize after launching an item"},
+		{"Background and performance", "GPU drawing"},
+	}
+	last := -1
+	for _, group := range groups {
+		title, first := indexOfText(texts, group.title), indexOfText(texts, group.first)
+		if title < 0 || first < 0 {
+			t.Fatalf("the behavior page must show the %q group with %q, texts %q", group.title, group.first, texts)
+		}
+		if title < last || first < title {
+			t.Fatalf("%q must follow its title in order, texts %q", group.first, texts)
+		}
+		last = title
 	}
 }
 

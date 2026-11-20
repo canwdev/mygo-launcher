@@ -22,17 +22,22 @@ const (
 
 func main() {
 	opts := parseLaunchArgs(os.Args[1:])
+	// The system passes its login flag on the command line; MyGo strips it from
+	// os.Args before main runs and reports it here.
+	atLogin := mygo.App.WasOpenedAtLogin()
+	silent := opts.silent || atLogin
 
 	// Where the store, the icon cache and the window's preferences live: in
 	// the user's folder for an installed copy, beside the executable for a
 	// portable one. Everything below reads the data.
 	prepareDataBase()
+	prefs := loadPrefs()
 
 	// The renderer is chosen when the window opens: draw in memory unless the
 	// GPU drawing preference, off by default, asks for the GPU. MYGO_GPU still
 	// overrides the preference for development.
 	if os.Getenv("MYGO_GPU") == "" {
-		if loadPrefs().GPU {
+		if prefs.GPU {
 			_ = os.Setenv("MYGO_GPU", "1")
 		} else {
 			_ = os.Setenv("MYGO_GPU", "0")
@@ -46,9 +51,12 @@ func main() {
 	if ok, err := acquireSingleton(key); err != nil {
 		log.Fatalf("single-instance check failed: %v", err)
 	} else if !ok {
-		// The running copy takes a launch of its own: it brings its window to
-		// the pointer, like --at-cursor, unless asked to stay silent.
-		activateExistingInstance(existingInstanceOpts(opts))
+		// A silent launch, and one at login, leaves the running copy alone;
+		// any other second launch brings its window to the place --position
+		// names, the pointer otherwise.
+		if !silent {
+			activateExistingInstance(existingInstanceOpts(opts))
+		}
 		return
 	}
 	defer releaseSingleton()
@@ -84,9 +92,10 @@ func main() {
 		})
 		mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { app.quitting = true })
 		mygo.App.OnQuit(v.destroyTray)
-		// Where this launch opens: the place the preference names, which
-		// --at-cursor overrides with the pointer.
+		// Where this launch opens: --position, or the place the preference names.
 		place := v.startupPlace(opts)
+		// A silent launch, at login or by --silent, stays in the background.
+		startup := startupWindowFor(silent, place)
 		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:     v.appTitle(),
 			Width:     defaultWindowWidth,
@@ -98,10 +107,10 @@ func main() {
 			StateKey: windowStateKey,
 			// The store's always-on-top setting applies from the first frame.
 			AlwaysOnTop: app.store.Settings.AlwaysOnTop,
-			// A silent launch keeps it hidden; a window opening anywhere but
+			// A silent start keeps it hidden; a window opening anywhere but
 			// its saved position opens once it has its place, without a flash
 			// at the old one.
-			Hidden:  opts.silent || place != placeLast,
+			Hidden: startup.hidden,
 			// A material draws behind the window, which is transparent for
 			// it; the view lets it through its panes. Without one the window
 			// stays opaque.
@@ -125,8 +134,11 @@ func main() {
 		win.OnFileDrop(func(e *mygo.FileDropEvent) {
 			app.addPaths(e.Paths, v.prefs.ActiveTab)
 		})
-		if place != placeLast {
-			win.OnReadyToShow(func() { v.showMainAt(place) })
+		// MyGo fires OnReadyToShow even for a window created Hidden, so a
+		// silent launch must not register it: showing there would pop the
+		// window it keeps in the background.
+		if startup.showAt != "" {
+			win.OnReadyToShow(func() { v.showMainAt(startup.showAt) })
 		}
 		v.syncTray()
 		v.registerSavedShortcut()

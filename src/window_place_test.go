@@ -11,7 +11,7 @@ import (
 )
 
 // TestStartupPlace 验证窗口开在哪里：偏好决定上次位置、指针处与屏幕中央，
-// --at-cursor 总是压过偏好；未知的值退回指针处。
+// --position 总是压过偏好；未知的值退回指针处。
 func TestStartupPlace(t *testing.T) {
 	tests := []struct {
 		pref string
@@ -21,8 +21,9 @@ func TestStartupPlace(t *testing.T) {
 		{"last", launchOptions{}, placeLast},
 		{"cursor", launchOptions{}, placeCursor},
 		{"center", launchOptions{}, placeCenter},
-		{"last", launchOptions{atCursor: true}, placeCursor},
-		{"center", launchOptions{atCursor: true}, placeCursor},
+		{"last", launchOptions{place: placeCenter}, placeCenter},
+		{"center", launchOptions{place: placeLast}, placeLast},
+		{"center", launchOptions{place: placeCursor}, placeCursor},
 		{"", launchOptions{}, placeCursor},
 		{"elsewhere", launchOptions{}, placeCursor},
 	}
@@ -32,6 +33,62 @@ func TestStartupPlace(t *testing.T) {
 		if got := v.startupPlace(test.opts); got != test.want {
 			t.Fatalf("startupPlace(%q, %+v) = %q, want %q", test.pref, test.opts, got, test.want)
 		}
+	}
+}
+
+// TestStartupWindow 验证登录静默时窗口保持隐藏且不注册就绪显示；普通启动在
+// 非上次位置时显示一次。
+func TestStartupWindow(t *testing.T) {
+	tests := []struct {
+		silent bool
+		place  windowPlace
+		hidden bool
+		showAt windowPlace
+	}{
+		{false, placeLast, false, ""},
+		{false, placeCursor, true, placeCursor},
+		{false, placeCenter, true, placeCenter},
+		{true, placeLast, true, ""},
+		{true, placeCursor, true, ""},
+		{true, placeCenter, true, ""},
+	}
+	for _, test := range tests {
+		got := startupWindowFor(test.silent, test.place)
+		if got.hidden != test.hidden || got.showAt != test.showAt {
+			t.Fatalf("startupWindowFor(%v, %q) = %+v, want hidden %v, showAt %q",
+				test.silent, test.place, got, test.hidden, test.showAt)
+		}
+	}
+}
+
+// TestPlaceWindowAtCursor 验证窗口居中于光标，并在工作区边缘收住。
+func TestPlaceWindowAtCursor(t *testing.T) {
+	work := mygo.Rectangle{X: 0, Y: 0, Width: 1920, Height: 1040}
+	tests := []struct {
+		name   string
+		cursor mygo.Point
+		wantX  int
+		wantY  int
+	}{
+		{"middle", mygo.Point{X: 960, Y: 520}, 600, 260},
+		{"top left", mygo.Point{X: 100, Y: 100}, 0, 0},
+		{"bottom right", mygo.Point{X: 1900, Y: 1030}, 1200, 520},
+	}
+	for _, test := range tests {
+		x, y := placeWindowAtCursor(720, 520, test.cursor, work)
+		if x != test.wantX || y != test.wantY {
+			t.Fatalf("%s: placeWindowAtCursor = (%d, %d), want (%d, %d)", test.name, x, y, test.wantX, test.wantY)
+		}
+	}
+
+	x, y := placeWindowAtCursor(2000, 2000, mygo.Point{X: 900, Y: 500}, work)
+	if x != work.X || y != work.Y {
+		t.Fatalf("a window larger than the work area starts at its edge, got (%d, %d)", x, y)
+	}
+
+	x, y = placeWindowAtCursor(720, 520, mygo.Point{X: 500, Y: 400}, mygo.Rectangle{})
+	if x != 140 || y != 140 {
+		t.Fatalf("without a work area the window centers on the pointer, got (%d, %d)", x, y)
 	}
 }
 

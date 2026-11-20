@@ -20,6 +20,10 @@ type view struct {
 
 	prefs uiPrefs
 
+	// openAtLogin is what the user's Run entry says about starting the
+	// launcher at login, read when the settings open and after each change.
+	openAtLogin bool
+
 	// pal is the palette the frame draws with, from the theme's appearance.
 	pal palette
 

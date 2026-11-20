@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/egoist/mygo"
 	"golang.org/x/sys/windows"
 )
 
@@ -120,8 +121,9 @@ func releaseSingleton() {
 // activateExistingInstance locates the main window of the already running copy
 // for the same install directory and brings it to the foreground, so a second
 // launch focuses the existing app instead of popping a dialog. The window moves
-// to the pointer first, since a second launch behaves like --at-cursor; a silent
-// launch changes nothing. The process then exits without starting a new UI.
+// to the place the launch names, the pointer when it names none; --position last
+// leaves it where it is, and a silent launch changes nothing. The process then
+// exits without starting a new UI.
 func activateExistingInstance(opts launchOptions) {
 	hwnd := findMainWindow()
 	if hwnd == 0 || opts.silent {
@@ -129,7 +131,14 @@ func activateExistingInstance(opts launchOptions) {
 	}
 	// Restore the window if it was minimized, then ask Windows to focus it.
 	procShowWindow.Call(hwnd, swRestore)
-	moveWindowToCursor(hwnd)
+	switch opts.place {
+	case placeLast:
+		// Stay where the user left it.
+	case placeCenter:
+		moveWindowToCenter(hwnd)
+	default:
+		moveWindowToCursor(hwnd)
+	}
 	procSetForeground.Call(hwnd)
 	// SetForegroundWindow can be denied to a process that is not the current
 	// foreground process; the classic topmost flicker forces the window above
@@ -138,24 +147,57 @@ func activateExistingInstance(opts launchOptions) {
 	procSetWindowPos.Call(hwnd, hwndNotTopmost, 0, 0, 0, 0, uintptr(swpNoMove|swpNoSize))
 }
 
-// moveWindowToCursor moves another process's window around the pointer, in
-// the pixels of the display the window ends up on. The restored rectangle of
-// the placement is its size, even while it is minimized.
+// moveWindowToCursor moves another process's window around the pointer, kept
+// inside the work area of the display the pointer is on.
 func moveWindowToCursor(hwnd uintptr) {
+	width, height, ok := windowRestoredSize(hwnd)
+	if !ok {
+		return
+	}
+	cursor, work, ok := pointerPlace()
+	if !ok {
+		return
+	}
+	x, y := placeWindowAtCursor(width, height, cursor, work)
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, uintptr(swpNoSize|swpShowWindow))
+}
+
+// moveWindowToCenter moves another process's window to the middle of the work
+// area of the display the pointer is on.
+func moveWindowToCenter(hwnd uintptr) {
+	width, height, ok := windowRestoredSize(hwnd)
+	if !ok {
+		return
+	}
+	_, work, ok := pointerPlace()
+	if !ok {
+		return
+	}
+	x, y := placeWindowInCenter(width, height, work)
+	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, uintptr(swpNoSize|swpShowWindow))
+}
+
+// windowRestoredSize is the width and height of another process's window: the
+// restored rectangle of its placement, even while it is minimized.
+func windowRestoredSize(hwnd uintptr) (width, height int, ok bool) {
 	var placement winWindowPlacement
 	placement.Length = uint32(unsafe.Sizeof(placement))
-	if ok, _, _ := procGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&placement))); ok == 0 {
-		return
+	if ret, _, _ := procGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&placement))); ret == 0 {
+		return 0, 0, false
 	}
-	width := int(placement.NormalPosition.Right - placement.NormalPosition.Left)
-	height := int(placement.NormalPosition.Bottom - placement.NormalPosition.Top)
+	width = int(placement.NormalPosition.Right - placement.NormalPosition.Left)
+	height = int(placement.NormalPosition.Bottom - placement.NormalPosition.Top)
 	if width <= 0 || height <= 0 {
-		return
+		return 0, 0, false
 	}
+	return width, height, true
+}
 
+// pointerPlace returns the pointer and the work area of the display it is on.
+func pointerPlace() (mygo.Point, mygo.Rectangle, bool) {
 	var cursor winPoint
-	if ok, _, _ := procGetCursorPosSingleton.Call(uintptr(unsafe.Pointer(&cursor))); ok == 0 {
-		return
+	if ret, _, _ := procGetCursorPosSingleton.Call(uintptr(unsafe.Pointer(&cursor))); ret == 0 {
+		return mygo.Point{}, mygo.Rectangle{}, false
 	}
 	// MonitorFromPoint takes the point by value: two int32 packed little-endian.
 	packed := uintptr(uint32(cursor.X)) | uintptr(uint32(cursor.Y))<<32
@@ -165,13 +207,12 @@ func moveWindowToCursor(hwnd uintptr) {
 	if monitor != 0 {
 		procGetMonitorInfo.Call(monitor, uintptr(unsafe.Pointer(&info)))
 	}
-
-	x, y := int(cursor.X)-width/2, int(cursor.Y)-height/2
-	if info.Work.Right > info.Work.Left && info.Work.Bottom > info.Work.Top {
-		x = clampAxis(x, width, int(info.Work.Left), int(info.Work.Right-info.Work.Left))
-		y = clampAxis(y, height, int(info.Work.Top), int(info.Work.Bottom-info.Work.Top))
-	}
-	procSetWindowPos.Call(hwnd, 0, uintptr(x), uintptr(y), 0, 0, uintptr(swpNoSize|swpShowWindow))
+	return mygo.Point{X: int(cursor.X), Y: int(cursor.Y)}, mygo.Rectangle{
+		X:      int(info.Work.Left),
+		Y:      int(info.Work.Top),
+		Width:  int(info.Work.Right - info.Work.Left),
+		Height: int(info.Work.Bottom - info.Work.Top),
+	}, true
 }
 
 // findMainWindow returns the HWND of the running copy's main window for this

@@ -2,38 +2,70 @@ package main
 
 import "strings"
 
-// launchOptions are the flags a launch can carry on its command line.
+// launchOptions are what a launch can ask for on its command line.
 type launchOptions struct {
 	// silent starts the app without showing the main window.
 	silent bool
-	// atCursor shows the window centered on the pointer.
-	atCursor bool
+	// place is where this launch shows the window; empty follows the window
+	// position setting.
+	place windowPlace
 }
 
-// parseLaunchArgs reads the launcher's own flags; anything else is left to
-// the rest of the app. Silent wins when both ask for a window.
+const positionFlag = "--position"
+
+// parseLaunchArgs reads the launcher's own flags; unknown arguments are left
+// alone. Silent wins over a position.
 func parseLaunchArgs(args []string) launchOptions {
 	var opts launchOptions
-	for _, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch {
 		case strings.EqualFold(arg, "--silent"):
 			opts.silent = true
-		case strings.EqualFold(arg, "--at-cursor"):
-			opts.atCursor = true
+		case strings.EqualFold(arg, positionFlag):
+			// A flag after it is no place: the value is missing.
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				opts.setPlace(args[i+1])
+				i++
+			}
+		case hasPositionValue(arg):
+			opts.setPlace(arg[len(positionFlag)+1:])
 		}
 	}
 	if opts.silent {
-		opts.atCursor = false
+		opts.place = ""
 	}
 	return opts
 }
 
-// existingInstanceOpts are the flags a second launch applies to the copy that
-// is already running: it shows the window at the pointer by default, just like
-// --at-cursor, and only --silent leaves the existing windows alone.
+// hasPositionValue reports whether arg is --position=PLACE, ignoring case.
+func hasPositionValue(arg string) bool {
+	return len(arg) > len(positionFlag) && arg[len(positionFlag)] == '=' &&
+		strings.EqualFold(arg[:len(positionFlag)], positionFlag)
+}
+
+// setPlace reads PLACE into the options; a place the launcher does not know
+// leaves them as they were.
+func (opts *launchOptions) setPlace(value string) {
+	switch {
+	case strings.EqualFold(value, string(placeLast)):
+		opts.place = placeLast
+	case strings.EqualFold(value, string(placeCursor)):
+		opts.place = placeCursor
+	case strings.EqualFold(value, string(placeCenter)):
+		opts.place = placeCenter
+	}
+}
+
+// existingInstanceOpts are what a second launch applies to the copy that is
+// already running: the place --position names, the pointer otherwise, and
+// nothing at all for --silent.
 func existingInstanceOpts(opts launchOptions) launchOptions {
 	if opts.silent {
 		return launchOptions{}
 	}
-	return launchOptions{atCursor: true}
+	if opts.place == "" {
+		opts.place = placeCursor
+	}
+	return opts
 }

@@ -22,6 +22,7 @@ func (v *view) openSettings() {
 	if v.app.win == nil {
 		return
 	}
+	v.refreshOpenAtLogin()
 	if w := v.app.settingsWin; w != nil {
 		w.Show()
 		w.Focus()
@@ -337,29 +338,19 @@ func (v *view) settingsAppearance(c *ui.Context, m locales.Messages, group setti
 	})
 }
 
-// settingsBehavior is the page of the shortcut, the timer, the window's
-// behavior and where the launcher keeps running.
+// settingsBehavior is the page of starting and summoning the launcher, the
+// window it shows, using its items, and how it keeps running.
 func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group settingsGroup, row settingsRow) {
 	s := &v.app.store.Settings
-	group("", func() {
+	group(m.StartupAndWindow(), func() {
+		row(m.OpenAtLogin(), m.OpenAtLoginHint(), func() {
+			on := v.openAtLogin
+			if ui.Switch(c, &on).Label(m.ToggleOpenAtLogin()).Changed() {
+				v.changeOpenAtLogin(on)
+			}
+		})
 		row(m.GlobalShortcut(), "", func() {
 			v.shortcutControl(c)
-		})
-		row(m.AutoTiming(), m.AutoTimingHint(), func() {
-			if ui.Switch(c, &s.AutoTime).Label(m.ToggleAutoTiming()).Changed() {
-				if !s.AutoTime {
-					// Everything the timer did stops at once: its dialog,
-					// the tracked processes and the redraws that counted.
-					v.runtimeOpen = false
-					v.app.stopTiming()
-				}
-				v.app.save()
-			}
-		})
-		row(m.AutoHide(), "", func() {
-			if ui.Switch(c, &s.AutoHide).Label(m.ToggleAutoHide()).Changed() {
-				v.app.save()
-			}
 		})
 		row(m.WindowPosition(), m.WindowPositionHint(), func() {
 			places := []string{"last", "cursor", "center"}
@@ -379,11 +370,31 @@ func (v *view) settingsBehavior(c *ui.Context, m locales.Messages, group setting
 				v.app.setAlwaysOnTop(s.AlwaysOnTop)
 			}
 		})
+	})
+	group(m.Actions(), func() {
+		row(m.AutoHide(), "", func() {
+			if ui.Switch(c, &s.AutoHide).Label(m.ToggleAutoHide()).Changed() {
+				v.app.save()
+			}
+		})
 		row(m.WheelPages(), m.WheelPagesHint(), func() {
 			if ui.Switch(c, &v.prefs.WheelPages).Label(m.ToggleWheelPages()).Changed() {
 				v.setWheelPages(v.prefs.WheelPages)
 			}
 		})
+		row(m.AutoTiming(), m.AutoTimingHint(), func() {
+			if ui.Switch(c, &s.AutoTime).Label(m.ToggleAutoTiming()).Changed() {
+				if !s.AutoTime {
+					// Everything the timer did stops at once: its dialog,
+					// the tracked processes and the redraws that counted.
+					v.runtimeOpen = false
+					v.app.stopTiming()
+				}
+				v.app.save()
+			}
+		})
+	})
+	group(m.BackgroundAndPerformance(), func() {
 		row(m.GpuDrawing(), m.GpuDrawingHint(), func() {
 			if ui.Switch(c, &v.prefs.GPU).Label(m.ToggleGpuDrawing()).Changed() {
 				v.changedSettings()

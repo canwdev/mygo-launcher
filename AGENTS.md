@@ -220,22 +220,24 @@ GPU 约 86MB。窗口离屏（关到托盘、自动隐藏）时 `releaseMemory` 
   `openSettings` 返回，测试用 `ui.NewTester(v.settingsView, 780, 640)` + `openSettingsPage`。
 - `App.refresh` 同时刷新主窗口和设置窗口。页面：外观（第一张卡不设小标题：语言、主题、强调色、
   背景材质、窗口透明度、背景与背景透明度；第二张小标题「自定义」：图标大小、程序图标、窗口标题）、
-  行为（快捷键、计时器、启动后最小化、窗口位置、置顶、滚轮切页、GPU 绘制、关闭后在托盘运行、
-  不在任务栏显示）、数据（路径与数据两组）、关于（图标、版本、GitHub、更新、重启、退出）。
+  行为（启动与窗口：开机自启动、快捷键、窗口位置、置顶；操作：启动条目后最小化、滚轮切页、
+  计时器；后台与性能：GPU 绘制、关闭后在托盘运行、不在任务栏显示）、数据（路径与数据两组）、
+  关于（图标、版本、GitHub、更新、重启、退出）。
   GPU 改动后直接重启应用，不提示「重启后生效」。
 
 ## 启动参数与窗口位置
 
-- `src/launch_args.go` 解析 `--silent`（静默）和 `--at-cursor`（指针处显示），同时出现以
-  `--silent` 为准。
+- `src/launch_args.go` 解析 `--silent`（静默）和 `--position last|cursor|center`（本次启动的
+  位置，空格与 `=` 都行）；未知参数忽略，`--silent` 压过位置，不打印任何内容。
 - `ui-state.json` 的 `window_position`（`last` / `cursor` / `center`，默认 `cursor`）决定窗口
   每次被唤出时开在哪里：上次位置、指针中心，或**鼠标所在那块屏幕**的中央。启动、托盘点击与
-  托盘「打开」、全局快捷键都走 `showMainAtPreference`；`--at-cursor` 压过它。
+  托盘「打开」、全局快捷键都走 `showMainAtPreference`；`--position` 压过它。
 - 「上次位置」之外的两种先 `Hidden` 再在 `OnReadyToShow` 里 `showMainAt` 定位显示，避免在旧
   位置闪一下。定位是 `src/window_place.go` 的纯函数（`placeWindowAtCursor` /
   `placeWindowInCenter`），窗口比工作区大时贴左上角。
 - 第二次启动由 `src/singleton_windows.go` 按安装目录互斥认出，直接 `SetWindowPos` 把已有窗口
-  移到指针处并聚焦，不需要进程间通信；`--silent` 只退出。
+  摆到 `--position` 指定的位置（未指定为指针处，`last` 不动）并聚焦，不需要进程间通信；
+  `--silent` 与登录时的启动只退出。
 
 ## 全局快捷键
 
@@ -243,6 +245,19 @@ GPU 约 86MB。窗口离屏（关到托盘、自动隐藏）时 `releaseMemory` 
 失败则保留旧值并提示。录制用只读 `TextInput` + `OnTextKey`：普通键必须带 Ctrl/Alt/Super，
 F1–F12 可单独用。按下时主窗口可见且聚焦就隐藏，否则 `showMainAtPreference`。测试要把
 `registerShortcut` / `unregisterShortcut` 换成假函数——真注册需要 message loop。
+
+## 开机自启动
+
+设置 → 行为的开关调用 mygo 的 `App.SetOpenAtLogin`，Windows 上写用户的 Run 项，值名是
+`mygo.json` 的 identifier（`com.canwdev.golauncher`），命令带 `--mygo-opened-at-login`。
+开关状态不另存：打开设置窗口时用 `App.OpenAtLogin()` 读真实状态（任务管理器「启动」里的停用
+会如实反映），`src/open_at_login.go` 的 `setOpenAtLogin` / `openAtLogin` 在测试里替换。
+
+`--silent` 与登录启动都不显示窗口：`main` 用 `App.WasOpenedAtLogin()` 认出登录启动，窗口以
+`Hidden` 创建，**不能注册 `OnReadyToShow`**——MyGo 对 `Hidden` 窗口也会触发它，在回调里
+`showMainAt` 会把窗口弹出来。静默的二次启动（`--silent` 或登录）只退出，其他二次启动按
+`--position` / 指针摆放已有窗口，所以窗口藏在后台也能唤出。mygo 在包初始化时就把登录参数从
+`os.Args` 移除。卸载器只删除指向 `$INSTDIR` 的 Run 项，便携副本的注册项保留。
 
 ## 自动更新
 
